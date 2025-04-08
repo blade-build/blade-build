@@ -2,3 +2,4 @@
 *.bat   text eol=crlf
 *.cmd   text eol=crlf
 *.sh    text eol=lf
+/dist_blade    text eol=lf
