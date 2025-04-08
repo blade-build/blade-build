@@ -39,6 +39,26 @@ proto_library(
 
 The `cpp` target code is always generated.
 
+If you want to generate some cpp code with other suffix names, you can use `cpp_outs` attributes.
+The default value is `['.pb']`. For example, if you want to use grpc plugin to generate `rpc_meta_info.pb.cc/h` and `rpc_meta_info.grpc.pb.cc/h`, set `cpp_outs = [".pb', '.grpc.pb']`
+
+Besides, use `plugin_opts` to pass some options to plugins, like `plugin_opts={"plugin_name":["option1", "option2.."]},`.
+Blade will pass `--plugin_name_opt=option1 --plugin_name_opt=option2` to grpc plugin.
+
+```python
+proto_library(
+    name = 'rpc_meta_info_proto',
+    srcs = 'rpc_meta_info.proto',
+    deps = ':rpc_option_proto',
+    target_languages = ['java', 'python'],
+    plugins = ['grpc'],
+    cpp_outs = ['.pb', '.grpc.pb'],
+    plugin_opts = {
+        'grpc': ["option1", "option2"],
+    },
+)
+```
+
 ## thrift_library ##
 
 Can be used to generate thrift C++ library

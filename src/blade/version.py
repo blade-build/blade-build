@@ -150,7 +150,7 @@ class StrictVersion(Version):
     """
 
     version_re = re.compile(
-        r'^(\d+) \. (\d+) (\. (\d+))? ([ab](\d+))?$', re.VERBOSE | re.ASCII
+        r'^(\d+) \. (\d+) (\. (\d+))? ([ab](\d+))?$', re.VERBOSE
     )
 
     def parse(self, vstring):

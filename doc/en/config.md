@@ -394,6 +394,7 @@ proto_library_config(
     protoc='protoc', #protoc compiler path
     protobuf_libs='//thirdparty/protobuf:protobuf', #protobuf library path, Blade deps format
     protobuf_path='thirdparty', # import proto search path, relative to BLADE_ROOT
+    protobuf_cc_warning='', # enable warning(disable -w) or not when compiling pb.cc, yes or no
     protobuf_include_path = 'thirdparty', # extra -I path when compiling pb.cc
 )
 ```

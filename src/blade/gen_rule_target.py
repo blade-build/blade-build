@@ -74,6 +74,7 @@ class GenRuleTarget(Target):
         outs = [os.path.normpath(o) for o in outs]
 
         self.attr['outs'] = outs
+        self.attr['outputs'] = [self._target_file_path(o) for o in self.attr['outs']]
         self.attr['locations'] = []
         self.attr['cmd'] = LOCATION_RE.sub(self._process_location_reference, cmd)
         self.attr['cmd_name'] = cmd_name
@@ -167,7 +168,7 @@ class GenRuleTarget(Target):
         description = console.colored('%s %s' % (self.attr['cmd_name'], self.fullname), 'dimpurple')
         self._write_rule(_RULE_FORMAT % (rule, cmd, self.blade.get_root_dir(), description))
 
-        outputs = [self._target_file_path(o) for o in self.attr['outs']]
+        outputs = self.attr['outputs']
         inputs = self._expand_srcs()
         vars = {}
         if '${_in_1}' in cmd:

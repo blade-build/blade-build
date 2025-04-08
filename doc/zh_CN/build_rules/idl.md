@@ -39,6 +39,26 @@ proto_library(
 
 C++ 代码总是会生成。
 
+如果你想生成C++的其他后缀名代码，可以使用 `cpp_outs` 参数。
+默认值是 `['.pb']`。例如，如果你想使用grpc插件生成 `rpc_meta_info.pb.cc/h` 和 `rpc_meta_info.grpc.pb.cc/h`, 那么设置 `cpp_outs = [".pb', '.grpc.pb']`
+
+另外，使用 `plugin_opts` 传递给插件所需参数, 例如 `plugin_opts={"plugin_name":["option1", "option2.."]},`.
+Blade 会传递 `--plugin_name_opt=option1 --plugin_name_opt=option2` 给 grpc 插件.
+
+```python
+proto_library(
+    name = 'rpc_meta_info_proto',
+    srcs = 'rpc_meta_info.proto',
+    deps = ':rpc_option_proto',
+    target_languages = ['java', 'python'],
+    plugins = ['grpc'],
+    cpp_outs = ['.pb', '.grpc.pb'],
+    plugin_opts = {
+        'grpc': ["option1", "option2"],
+    },
+)
+```
+
 ## thrift_library ##
 
 用于定义thrift库目标

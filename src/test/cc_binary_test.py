@@ -33,8 +33,8 @@ class TestCcBinary(blade_test.TargetTest):
         self.assertCxxFlags(com_string_line)
 
         self.assertLinkFlags(string_main_depends_libs)
-        self.assertIn('liblowercase.a', string_main_depends_libs)
-        self.assertIn('libuppercase.a', string_main_depends_libs)
+        self.assertNotIn('liblowercase.a', string_main_depends_libs)
+        self.assertNotIn('libuppercase.a', string_main_depends_libs)
         self.assertTrue(self.findCommand(['Hello, world']))
 
 

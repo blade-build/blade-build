@@ -35,8 +35,8 @@ class TestCcPlugin(blade_test.TargetTest):
 
         self.assertDynamicLinkFlags(string_plugin_depends_libs)
         self.assertIn('-Wl,-Bsymbolic', string_plugin_depends_libs)
-        self.assertIn('liblowercase.a', string_plugin_depends_libs)
-        self.assertIn('libuppercase.a', string_plugin_depends_libs)
+        self.assertNotIn('liblowercase.a', string_plugin_depends_libs)
+        self.assertNotIn('libuppercase.a', string_plugin_depends_libs)
 
 
 if __name__ == '__main__':

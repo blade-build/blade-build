@@ -139,6 +139,7 @@ syn keyword bladeArg fbthrift_incs
 syn keyword bladeTarget proto_library_config
 syn keyword bladeArg protobuf_go_path
 syn keyword bladeArg protobuf_incs
+syn keyword bladeArg protobuf_cc_warning
 syn keyword bladeArg protobuf_java_incs
 syn keyword bladeArg protobuf_java_libs
 syn keyword bladeArg protobuf_libs

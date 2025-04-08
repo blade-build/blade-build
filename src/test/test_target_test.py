@@ -34,7 +34,7 @@ class TestTestRunner(blade_test.TargetTest):
         self.assertCxxFlags(com_string_line)
 
         self.assertLinkFlags(string_main_depends_libs)
-        self.assertIn('liblowercase.a', string_main_depends_libs)
+        self.assertNotIn('liblowercase.a', string_main_depends_libs)
 
 
 if __name__ == '__main__':

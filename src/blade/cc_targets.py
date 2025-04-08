@@ -677,9 +677,6 @@ class CcTarget(Target):
             'declared_incs': declared_incs,
             'declared_genhdrs': declared_genhdrs,
             'declared_genincs': declared_genincs,
-            'hdrs_deps': self._collect_hdrs_deps(direct_hdrs | generated_hdrs),
-            'private_hdrs_deps': self._collect_private_hdrs_deps(direct_hdrs),
-            'allowed_undeclared_hdrs': self._collect_allowed_undeclared_hdrs(direct_hdrs),
             'severity': config.get_item('cc_config', 'hdr_dep_missing_severity'),
             'suppress': verify_suppress.get(self.key, {}),
         }
@@ -695,6 +692,26 @@ class CcTarget(Target):
         self.debug('Inclusion information updated')
         with open(filename, 'wb') as f:
             f.write(content)
+
+        # Write volatile extra fields to a separate file to avoid unnecessary rebuild.
+        #
+        # This information is only available after the first build.
+        # Therefore, it is empty at the beginning, but is available before the second build.
+        # If it is written in the same file as the previous information, unnecessary repeated
+        # builds will be triggered.
+        # See https://github.com/chen3feng/blade-build/issues/1034
+        #
+        # This information is only a subset of the global file `inclusion_declaration.data` and is
+        # passed to the inclusion_check as an optimization to avoid reading the larger global file.
+        # So missing this information on the first check is not a problem.
+        direct_hdrs, generated_hdrs = self._collect_compiler_reported_hdrs(filename + '.details')
+        extra_target_check_info = {
+            'hdrs_deps': self._collect_hdrs_deps(direct_hdrs | generated_hdrs),
+            'private_hdrs_deps': self._collect_private_hdrs_deps(direct_hdrs),
+            'allowed_undeclared_hdrs': self._collect_allowed_undeclared_hdrs(direct_hdrs),
+        }
+        with open(filename + '.extra', 'wb') as f:
+            f.write(pickle.dumps(extra_target_check_info))
 
     def _incchk_is_valid(self, filename, content, info):
         """Check whether the existing incchk file is still valid."""

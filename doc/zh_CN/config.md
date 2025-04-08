@@ -378,6 +378,10 @@ Java 构建相关的配置：
 
   import 时的 proto 搜索路径，相对于 BLADE_ROOT。
 
+- `protobuf_cc_warning`: string = ''
+
+  编译pb.cc 时是否开启warnings, yes或者no
+
 - `protobuf_include_path` : string =
 
   编译 pb.cc 时额外的 -I 路径。
