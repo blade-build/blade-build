@@ -13,10 +13,10 @@ An easy-to-use, fast, and modern build system for trunk-based development in a l
 
 ## Build Status
 
-[![Build Status](https://travis-ci.org/chen3feng/blade-build.svg?branch=master)](https://travis-ci.org/chen3feng/blade-build)
-[![codebeat badge](https://codebeat.co/badges/e0d861b7-47cc-4023-9784-7d54246a3576)](https://codebeat.co/projects/github-com-chen3feng-blade-build-master)
-[![Coverage](https://coveralls.io/repos/chen3feng/blade-build/badge.svg?branch=master)](https://coveralls.io/github/chen3feng/blade-build)
-[![Downloads](https://img.shields.io/github/downloads/chen3feng/blade-build/total.svg)](https://github.com/chen3feng/blade-build/releases)
+[![Build Status](https://travis-ci.org/chen3feng/blade-build.svg?branch=master)](https://travis-ci.org/blade-build/blade-build)
+[![codebeat badge](https://codebeat.co/badges/e0d861b7-47cc-4023-9784-7d54246a3576)](https://codebeat.co/projects/github-com-blade-build-blade-build-master)
+[![Coverage](https://coveralls.io/repos/chen3feng/blade-build/badge.svg?branch=master)](https://coveralls.io/github/blade-build/blade-build)
+[![Downloads](https://img.shields.io/github/downloads/chen3feng/blade-build/total.svg)](https://github.com/blade-build/blade-build/releases)
 
 ## Demo
 
@@ -42,7 +42,7 @@ Please follow the [Upgrade Notes](doc/en/upgrade-to-v2.md) to upgrade.
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/chen3feng/blade-build.svg)](https://starchart.cc/chen3feng/blade-build)
+[![Stargazers over time](https://starchart.cc/blade-build/blade-build.svg)](https://starchart.cc/blade-build/blade-build)
       
 ## Brief
 
@@ -108,6 +108,12 @@ blade test -m32 -pdebug common...
 
 * Blade generates [Ninja](https://ninja-build.org/) script internally, so of course it depends on Ninja.
 * [Python](http://www.python.org) is a powerful and easy-to-used language, we like python.
-* Some libraries open-sourced by Google, such as [protobuf](https://github.com/protocolbuffers/protobuf),
+
+Some libraries open-sourced by Google, such as:
+
+* [glog](https://google.github.io/glog/stable/)
+* [protobuf](https://github.com/protocolbuffers/protobuf),
 * [gtest](https://github.com/google/googletest),
-* [gperftools](https://github.com/gperftools/gperftools) are handy and powerful; we have integrated these libraries.
+* [gperftools](https://github.com/gperftools/gperftools)
+
+They are handy and powerful; we have integrated these libraries.
