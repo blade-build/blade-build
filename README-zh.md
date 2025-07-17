@@ -15,10 +15,10 @@ Blade is an easy-to-use, fast and modern build system for trunk based developmen
 
 ## Build Status
 
-[![Build Status](https://travis-ci.org/chen3feng/blade-build.svg?branch=master)](https://travis-ci.org/chen3feng/blade-build)
-[![codebeat badge](https://codebeat.co/badges/e0d861b7-47cc-4023-9784-7d54246a3576)](https://codebeat.co/projects/github-com-chen3feng-blade-build-master)
-[![Coverage](https://coveralls.io/repos/chen3feng/blade-build/badge.svg?branch=master)](https://coveralls.io/github/chen3feng/blade-build)
-[![Downloads](https://img.shields.io/github/downloads/chen3feng/blade-build/total.svg)](https://github.com/chen3feng/blade-build/releases)
+[![Build Status](https://travis-ci.org/chen3feng/blade-build.svg?branch=master)](https://travis-ci.org/blade-build/blade-build)
+[![codebeat badge](https://codebeat.co/badges/e0d861b7-47cc-4023-9784-7d54246a3576)](https://codebeat.co/projects/github-com-blade-build-blade-build-master)
+[![Coverage](https://coveralls.io/repos/chen3feng/blade-build/badge.svg?branch=master)](https://coveralls.io/github/blade-build/blade-build)
+[![Downloads](https://img.shields.io/github/downloads/chen3feng/blade-build/total.svg)](https://github.com/blade-build/blade-build/releases)
 
 ## 演示
 
@@ -41,7 +41,7 @@ master 分支上的代码是开发版，应当视为 alpha 版。正式环境请
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/chen3feng/blade-build.svg)](https://starchart.cc/chen3feng/blade-build)
+[![Stargazers over time](https://starchart.cc/blade-build/blade-build.svg)](https://starchart.cc/blade-build/blade-build)
       
 ## 源起
 
@@ -50,7 +50,7 @@ Blade 是一个现代构建系统，期望的目标是强大而好用，把程�
 Blade主要定位于linux下的大型C++项目，密切配合研发流程，比如单元测试，持续集成，覆盖率统计等。
 但像unix下的文本过滤程序一样，保持相对的独立性，可以单独运行。目前重点支持i386/x86_64 Linux，未来可以考虑支持其他的类Unix系统。
 
-在[腾讯公司“台风”云计算平台](http://storage.it168.com/a2011/1203/1283/000001283196.shtml)开发过程中，为了解决 GNU Make，
+在[腾讯公司“台风”云计算平台](/doc/Hadoop-in-China-2011-Typhoon.mhtml)开发过程中，为了解决 GNU Make，
 Autotools 的难用和繁琐的问题，参考[Google工程博客上的一些文章](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html)，我们开发了这个全新的构建系统，整个系统基于多个声明式的构建脚本，在构建脚本里，
 只需要声明要构建什么目标，目标的源代码，以及其直接依赖的其它目标，不需要说明如何构建。大大降低了使用难度，提高了开发效率。
 
@@ -150,21 +150,22 @@ blade test -m32 -pdebug common...
 
 ## 贡献者
 
-[![Contributers](https://contrib.rocks/image?repo=chen3feng/blade-build)](https://github.com/chen3feng/blade-build/graphs/contributors)
+[![Contributers](https://contrib.rocks/image?repo=blade-build/blade-build)](https://github.com/blade-build/blade-build/graphs/contributors)
 
 ## 致谢
 
 * Blade 是受 Google 官方博客发表的这篇文章启发而开发的：
-  [云构建：构建系统是如何工作的](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html)。
+  [云构建：构建系统是如何工作的](http://google-engtools.blogspot.com/2011/08/build-in-cloud-how-build-system-works.html)。
   后来在 2015 年，他们把部分重写后系统的以 `bazel` 的新名字开源。
 * Blade 生成 [Ninja](https://ninja-build.org/) 脚本进行构建，因此 Blade 的运行还需要依赖 Ninja。
 * [Python](http://www.python.org) 是一种简单易用而又强大的语言，我们喜欢python。
-* Google 开放的一些库强大而好用，我们很喜欢，我们把对这些库的支持集成进了Blade中，既方便了库的使用，
-又增强了 Blade，这些库包括：
-  [glog](http://code.google.com/p/google-glog/),
-  [protobuf](http://code.google.com/p/protobuf/),
-  [gtest](http://code.google.com/p/googletest/),
-  [gperftools](http://code.google.com/p/gperftools/)。
+
+Google 开放的一些库强大而好用，我们很喜欢，我们把对这些库的支持集成进了Blade中，既方便了库的使用，又增强了 Blade，这些库包括：
+
+- [glog](https://google.github.io/glog/stable/)
+- [protobuf](https://github.com/protocolbuffers/protobuf)
+- [gtest](https://github.com/google/googletest)
+- [gperftools](https://github.com/gperftools/gperftools)
 
 我们的理念：解放程序员，提高生产力。用工具来解决非创造性的技术问题。
 
