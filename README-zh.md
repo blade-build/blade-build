@@ -9,16 +9,16 @@
 
 Blade是一个方便易用高性能的现代化代码构建系统，特别适合公司内的大规模代码库的敏捷构建，内置了对多种编程语言及单元测试框架的直接支持。
 
-Blade is an easy-to-use, fast and modern build system for trunk based development in large scale monorepo codebase. It supports building mulitiple programming languages.
+Blade is an easy-to-use, fast, and modern build system for trunk-based development in large-scale monorepo codebases. It supports building multiple programming languages.
 
 [English](README.md) | 简体中文
 
 ## Build Status
 
-[![Build Status](https://travis-ci.org/chen3feng/blade-build.svg?branch=master)](https://travis-ci.org/blade-build/blade-build)
-[![codebeat badge](https://codebeat.co/badges/e0d861b7-47cc-4023-9784-7d54246a3576)](https://codebeat.co/projects/github-com-blade-build-blade-build-master)
-[![Coverage](https://coveralls.io/repos/chen3feng/blade-build/badge.svg?branch=master)](https://coveralls.io/github/blade-build/blade-build)
-[![Downloads](https://img.shields.io/github/downloads/chen3feng/blade-build/total.svg)](https://github.com/blade-build/blade-build/releases)
+[![Build Status](https://travis-ci.org/chen3feng/blade-build.svg?branch=master)](https://travis-ci.org/chen3feng/blade-build)
+[![codebeat badge](https://codebeat.co/badges/e0d861b7-47cc-4023-9784-7d54246a3576)](https://codebeat.co/projects/github-com-chen3feng-blade-build-master)
+[![Coverage](https://coveralls.io/repos/chen3feng/blade-build/badge.svg?branch=master)](https://coveralls.io/github/chen3feng/blade-build)
+[![Downloads](https://img.shields.io/github/downloads/chen3feng/blade-build/total.svg)](https://github.com/chen3feng/blade-build/releases)
 
 ## 演示
 
