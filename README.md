@@ -26,15 +26,15 @@ First, let's see a cool demo:
 
 ## Releases
 
-The code on the master branch is development version and should be considered as alpha version. 
+The code on the master branch is the development version and should be considered as an alpha version. 
 Please prefer using the version on the tags in your formal environment.
 We will release the verified version on the large-scale internal code base to the tag from time to time.
 
 * Version 2.0 is in release candidate! It includes the following notable changes:
 
-  * minimal python version 2.7, support python 3
+  * minimal Python version 2.7, support Python 3
   * Support Java, scala building
-  * Full support to Python
+  * Full support for Python
   * Support custom extensions
   * Only use [ninja](doc/en/config.md#global_config) as backend build system, increases speed dramatically.
 
@@ -47,33 +47,33 @@ Please follow the [Upgrade Notes](doc/en/upgrade-to-v2.md) to upgrade.
 ## Brief
 
 Blade is designed to be a modern build system. It is powerful and easy to use. It supports building
-multiple languages, such as c/c++, java, python, scala, protobuf, etc. It analyzes the
-target dependency automatically and integrates compiling, linking, testing(includes incremental
-testing and parallel testing) and static code inspectiontogether.
+multiple languages, such as c/c++, Java, Python, Scala, protobuf, etc. It analyzes the
+target dependency automatically and integrates compiling, linking, testing(including incremental
+testing and parallel testing), and static code inspection together.
 It aims to improve the clarity and simplicity of the building rules for a project.
 
-With Blade, you can compile, link and test multiple targets by just inputting one simple command line.
+With Blade, you can compile, link, and test multiple targets by just inputting one simple command line.
 For example:
 
-Build and test all targets in common directory recursively.
+Build and test all targets in the  common directory recursively.
 
 ```bash
 blade test common...
 ```
 
-Build and test targets as 32 bit
+Build and test targets as 32-bit
 
 ```bash
 blade test -m32 common...
 ```
 
-Build and test targets as debug mode
+Build and test targets in debug mode
 
 ``` bash
 blade test -pdebug common...
 ```
 
-And you can combine the flags together:
+And you can combine the flags:
 
 ``` bash
 blade test -m32 -pdebug common...
@@ -104,10 +104,10 @@ blade test -m32 -pdebug common...
 * Blade is inspired by Google's public information about their build system. Here is a reference article from Google's official blog:
   [build in cloud: how build system works](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html).
 
-  Later in 2015, they released it with partial rewritten as `bazel` open-source build system.
+  Later in 2015, they released it with a partially rewritten version as the `bazel` open-source build system.
 
-* Blade generates [Ninja](https://ninja-build.org/) script internally, so of course it depends on ninja.
+* Blade generates [Ninja](https://ninja-build.org/) script internally, so of course it depends on Ninja.
 * [Python](http://www.python.org) is a powerful and easy-to-used language, we like python.
-* Some libraries open sourced by Google, such as [protobuf](http://code.google.com/p/protobuf/),
+* Some libraries open-sourced by Google, such as [protobuf](http://code.google.com/p/protobuf/),
 * [gtest](http://code.google.com/p/googletest/),
-* [gperftools](http://code.google.com/p/gperftools/) are handy and powerful, we have integrated these libraries.
+* [gperftools](https://github.com/gperftools/gperftools) are handy and powerful; we have integrated these libraries.
