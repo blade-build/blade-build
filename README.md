@@ -5,14 +5,7 @@
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)](doc/en/prerequisites.md)
 
-```
-██████╗ ██╗      █████╗ ██████╗ ███████╗
-██╔══██╗██║     ██╔══██╗██╔══██╗██╔════╝
-██████╔╝██║     ███████║██║  ██║█████╗
-██╔══██╗██║     ██╔══██║██║  ██║██╔══╝
-██████╔╝███████╗██║  ██║██████╔╝███████╗
-╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝
-```
+![Blade Build](/image/blade-200x400.png "Blade Build")
 
 English | [简体中文](README-zh.md)
 
