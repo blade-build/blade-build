@@ -9,7 +9,7 @@
 
 English | [简体中文](README-zh.md)
 
-An easy-to-use, fast and modern build system for trunk based development in large-scale monorepo codebase.
+An easy-to-use, fast, and modern build system for trunk-based development in a large-scale monorepo codebase.
 
 ## Build Status
 
@@ -102,12 +102,12 @@ blade test -m32 -pdebug common...
 ## Credits
 
 * Blade is inspired by Google's public information about their build system. Here is a reference article from Google's official blog:
-  [build in cloud: how build system works](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html).
+  [build in cloud: how build system works](http://google-engtools.blogspot.com/2011/08/build-in-cloud-how-build-system-works.html).
 
   Later in 2015, they released it with a partially rewritten version as the `bazel` open-source build system.
 
 * Blade generates [Ninja](https://ninja-build.org/) script internally, so of course it depends on Ninja.
 * [Python](http://www.python.org) is a powerful and easy-to-used language, we like python.
-* Some libraries open-sourced by Google, such as [protobuf](http://code.google.com/p/protobuf/),
-* [gtest](http://code.google.com/p/googletest/),
+* Some libraries open-sourced by Google, such as [protobuf](https://github.com/protocolbuffers/protobuf),
+* [gtest](https://github.com/google/googletest),
 * [gperftools](https://github.com/gperftools/gperftools) are handy and powerful; we have integrated these libraries.
