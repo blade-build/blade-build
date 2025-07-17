@@ -112,8 +112,8 @@ blade test -m32 -pdebug common...
 Some libraries open-sourced by Google, such as:
 
 * [glog](https://google.github.io/glog/stable/)
-* [protobuf](https://github.com/protocolbuffers/protobuf),
-* [gtest](https://github.com/google/googletest),
+* [protobuf](https://github.com/protocolbuffers/protobuf)
+* [gtest](https://github.com/google/googletest)
 * [gperftools](https://github.com/gperftools/gperftools)
 
 They are handy and powerful; we have integrated these libraries.
