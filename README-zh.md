@@ -5,14 +5,7 @@
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)](doc/zh_CN/prerequisites.md)
 
-```text
-██████╗ ██╗      █████╗ ██████╗ ███████╗
-██╔══██╗██║     ██╔══██╗██╔══██╗██╔════╝
-██████╔╝██║     ███████║██║  ██║█████╗
-██╔══██╗██║     ██╔══██║██║  ██║██╔══╝
-██████╔╝███████╗██║  ██║██████╔╝███████╗
-╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝
-```
+![Blade Build](/image/blade-200x400.png "Blade Build")
 
 Blade是一个方便易用高性能的现代化代码构建系统，特别适合公司内的大规模代码库的敏捷构建，内置了对多种编程语言及单元测试框架的直接支持。
 
