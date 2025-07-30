@@ -17,17 +17,27 @@ from __future__ import print_function
 
 import ast
 import errno
-import fcntl
 import hashlib
 import inspect
 import json
 import os
+import re
+import shutil
 import signal
 import string
 import subprocess
 import sys
 import zipfile
 
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 _IN_PY3 = sys.version_info[0] == 3
 
@@ -75,18 +85,26 @@ def lock_file(filename):
     """lock file."""
     try:
         fd = os.open(filename, os.O_CREAT | os.O_RDWR)
-        old_fd_flags = fcntl.fcntl(fd, fcntl.F_GETFD)
-        fcntl.fcntl(fd, fcntl.F_SETFD, old_fd_flags | fcntl.FD_CLOEXEC)
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if fcntl:
+            old_fd_flags = fcntl.fcntl(fd, fcntl.F_GETFD)
+            fcntl.fcntl(fd, fcntl.F_SETFD, old_fd_flags | fcntl.FD_CLOEXEC)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        elif msvcrt:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, os.stat(fd).st_size)
         return fd, 0
     except IOError as ex_value:
+        if msvcrt:  # msvcrt did't set errno correctly
+            return -1, errno.EAGAIN
         return -1, ex_value.errno
 
 
 def unlock_file(fd):
     """unlock file."""
     try:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        if fcntl:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        elif msvcrt:
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, os.stat(fd).st_size)
         os.close(fd)
     except IOError:
         pass
@@ -134,6 +152,8 @@ def get_cwd():
     So in practice we simply use system('pwd') to get current working directory.
 
     """
+    if os.name == 'nt':
+        return os.getcwd()
     p = subprocess.Popen(['pwd'], stdout=subprocess.PIPE, shell=True)
     return to_string(p.communicate()[0].strip())
 
@@ -149,9 +169,10 @@ def find_file_bottom_up(name, from_dir=None):
         path = os.path.join(finding_dir, name)
         if os.path.exists(path):
             return path
-        if finding_dir == '/':
+        new_finding_dir = os.path.dirname(finding_dir)
+        if new_finding_dir != finding_dir:
             break
-        finding_dir = os.path.dirname(finding_dir)
+        finding_dir = new_finding_dir
     return ''
 
 
@@ -161,6 +182,12 @@ def path_under_dir(path, dir):
     Both path and dir must be normalized, and they must be both relative or relative path.
     """
     return dir == '.' or path == dir or path.startswith(dir) and path[len(dir)] == os.path.sep
+
+
+def to_unix_path(path):
+    """Convert path to unix format
+    """
+    return path.replace('\\', '/')
 
 
 def mkdir_p(path):
@@ -254,15 +281,18 @@ def regular_variable_name(name):
     """convert some name to a valid identifier name"""
     return name.translate(_TRANS_TABLE)
 
+
 # Some python 2/3 compatibility helpers.
 if _IN_PY3:
     def iteritems(d):
         return d.items()
+
     def itervalues(d):
         return d.values()
 else:
     def iteritems(d):
         return d.iteritems()
+
     def itervalues(d):
         return d.itervalues()
 
@@ -356,7 +386,61 @@ def open_zip_file_for_write(filename, compression_level):
 
 
 def which(cmd):
-    returncode, stdout, _ = run_command("which %s" % cmd, shell=True)
+    """
+    Return the path to an executable which would be run if the given cmd was called.
+    If no cmd would be called, return None.
+    """
+    if _IN_PY3:
+        return shutil.which(cmd)
+    tester = 'where.exe' if os.name == 'nt' else 'which'
+    returncode, stdout, _ = run_command([tester, cmd])
     if returncode != 0:
         return None
     return stdout.strip()
+
+
+def override(method):
+    """
+    Check method override.
+    https://stackoverflow.com/a/14631397
+    """
+
+    stack = inspect.stack()
+    base_classes = _get_bass_classes(stack)
+
+    # TODO: check signature
+    # sig = inspect.signature(method)
+    error = "methid '%s' doesn't override any base class method" % method.__name__
+    assert (any(hasattr(cls, method.__name__) for cls in base_classes)), error
+    return method
+
+
+def _get_bass_classes(stack):
+    base_classes = re.search(r'class.+\((.+)\)\s*\:', stack[2][4][0]).group(1)
+
+    # handle multiple inheritance
+    base_classes = [s.strip() for s in base_classes.split(',')]
+    if not base_classes:
+        raise ValueError('override decorator: unable to determine base class')
+
+    # stack[0]=override, stack[1]=inside class def'n, stack[2]=outside class def'n
+    derived_class_locals = stack[2][0].f_locals
+
+    # replace each class name in base_classes with the actual class type
+    for i, base_class in enumerate(base_classes):
+
+        if '.' not in base_class:
+            base_classes[i] = derived_class_locals[base_class]
+        else:
+            components = base_class.split('.')
+
+            # obj is either a module or a class
+            obj = derived_class_locals[components[0]]
+
+            for c in components[1:]:
+                assert (inspect.ismodule(obj) or inspect.isclass(obj))
+                obj = getattr(obj, c)
+
+            base_classes[i] = obj
+
+    return base_classes
