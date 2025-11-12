@@ -116,7 +116,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
                 export_incs=[],
                 optimize=optimize,
                 linkflags=None,
-                extra_cppflags=[],
+                extra_cppflags=proto_config['extra_cppflags'],
                 extra_linkflags=[],
                 kwargs=kwargs)
 

@@ -243,6 +243,7 @@ class BladeConfig(object):
                 'protobuf_python_libs': [],
                 'protoc_direct_dependencies': False,
                 'well_known_protos': [],
+                'extra_cppflags': [],
             },
 
             'protoc_plugin_config': {
