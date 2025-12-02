@@ -11,6 +11,8 @@ Implement scala_library, scala_fat_library and scala_test.
 from __future__ import absolute_import
 from __future__ import print_function
 
+import os
+
 from blade import build_manager
 from blade import build_rules
 from blade import config
@@ -83,9 +85,18 @@ class ScalaTarget(Target, JavaTargetMixIn):
             flags.append(global_warnings)
         return flags
 
+    def _scala_full_path_srcs(self):
+        """Expand srcs to full path"""
+        srcs = []
+        for s in self.srcs:
+            sp = self._source_file_path(s)
+            # If it doesn't exist, consider it as a generated file in target dir
+            srcs.append(sp if os.path.exists(sp) else self._target_file_path(s))
+        return srcs
+
     def _generate_jar(self):
         self._generate_sources_dir_for_coverage()
-        srcs = [self._source_file_path(s) for s in self.srcs]
+        srcs = self._scala_full_path_srcs()
         resources = self._generate_resources()
         jar = self._target_file_path(self.name + '.jar')
         if srcs and resources:
