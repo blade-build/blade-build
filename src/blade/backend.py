@@ -146,6 +146,10 @@ class _NinjaFileHeaderGenerator(object):
         # Add -fno-omit-frame-pointer to optimize mode for easy debugging.
         cppflags += ['-pipe', '-fno-omit-frame-pointer']
 
+        if cc_config["fission"]:
+            cppflags += ['-gsplit-dwarf']
+            linkflags += ['-Wl,--gdb-index']
+
         # Debugging information setting
         debug_info_level = global_config['debug_info_level']
         debug_info_options = cc_config['debug_info_levels'][debug_info_level]
@@ -345,6 +349,12 @@ class _NinjaFileHeaderGenerator(object):
                            rspfile='${out}.rsp',
                            rspfile_content='${target_linkflags} ${in}',
                            description='LINK SHARED ${out}',
+                           pool=pool)
+        self.generate_rule(name='dwp',
+                           command=self._builtin_command('dwp'),
+                           rspfile='${out}.rsp',
+                           rspfile_content='${in}',
+                           description='DWP ${out}',
                            pool=pool)
 
     def _cc_compile_command_wrapper_template(self, inclusion_stack_file, cuda=False):

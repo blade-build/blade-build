@@ -100,6 +100,8 @@ class BladeConfig(object):
                     'mid': ['-g'],
                     'high': ['-g3'],
                 },
+                'fission': False,
+                'fission__help__': 'Whether to generate split dwarf debug info',
                 'hdr_dep_missing_severity': 'error',
                 'hdr_dep_missing_severity__help__': 'The severity of the missing dependency on the '
                     'library to which the header file belongs, can be %s' % constants.SEVERITIES,

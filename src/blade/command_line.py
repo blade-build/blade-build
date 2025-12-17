@@ -278,6 +278,13 @@ class CommandLineParser(object):
             action='store', type=str, nargs='?', const='',
             help='Add build options to support profile-use')
 
+    def __add_fission_arguments(self, parser):
+        """Add fission support to cc_binary."""
+        parser.add_argument(
+            '--fission', dest='fission',
+            action='store_true', default=False,
+            help='Add build options to support debuginfo fission')
+
     def _add_query_arguments(self, parser):
         """Add query arguments for parser."""
         self.__add_plat_profile_arguments(parser)
@@ -354,6 +361,7 @@ class CommandLineParser(object):
             self.__add_generate_arguments(parser)
             self.__add_coverage_arguments(parser)
             self.__add_pgo_arguments(parser)
+            self.__add_fission_arguments(parser)
 
     def _add_common_arguments(self, *parsers):
         for parser in parsers:

@@ -572,6 +572,25 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     os.chmod(pybin, 0o755)
 
 
+def generate_dwp(args):
+    """Generate dwp file for debugging."""
+    # Import from function to avoid affecting the performance of other tools.
+    from blade import dwp_wrapper  # pylint: disable=import-outside-toplevel
+
+    output_file = args[0]
+    input_files = args[1:]
+
+    _declare_outputs(output_file)
+
+    # Expand response files in inputs
+    expanded_inputs = dwp_wrapper.expand_response_files(input_files)
+
+    dwo_files = dwp_wrapper.collect_dwo_files(expanded_inputs)
+
+    # Run dwp tool
+    dwp_wrapper.run_dwp(output_file, dwo_files)
+
+
 _BUILTIN_TOOLS = {
     'scm': generate_scm,
     'package': generate_package,
@@ -588,6 +607,7 @@ _BUILTIN_TOOLS = {
     'shell_testdata': generate_shell_testdata,
     'python_library': generate_python_library,
     'python_binary': generate_python_binary,
+    'dwp': generate_dwp,
 }
 
 

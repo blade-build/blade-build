@@ -266,8 +266,7 @@ global_config(
 ```python
 cc_config(
     ...
-    append_cppflags = ['-gsplit-dwarf'],
-    append_linkflags = ['-fuse-ld=gold', '-Wl,--gdb-index'],
+    fission = True,
     ...
 )
 ```
