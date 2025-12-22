@@ -263,6 +263,8 @@ global_config(
 
 使用 GCC 的 [DebugFission](https://gcc.gnu.org/wiki/DebugFission) 功能：
 
+**方式一：配置文件**
+
 ```python
 cc_config(
     ...
@@ -271,7 +273,34 @@ cc_config(
 )
 ```
 
+**方式二：命令行参数**
+
+```bash
+blade build --fission ...
+```
+
 经实测，在中等调试符号级别下，能把一个被测可执行文件从 1.9GB 减小到 532MB。
+
+**在 package 中使用 dwp 文件**
+
+当开启 DebugFission 后，调试信息会被分离到单独的 `.dwo` 文件中，这些文件会被打包成 `.dwp` 文件。
+你可以通过 binary target 来引用 dwp 文件，将其包含在 package 中：
+
+```python
+package(
+    name = 'server_package',
+    ...,
+    srcs = [
+        # executable
+        ('$(location //server:server)', 'bin/server'),
+        # Include the dwp file for my_server binary
+        ('$(location //server:server dwp)', 'bin/server.dwp'),
+        ...,
+    ],
+)
+```
+
+`$(location :target dwp)` 语法允许你引用特定 binary target 生成的 dwp 文件。
 
 #### 压缩调试符号 ####
 
