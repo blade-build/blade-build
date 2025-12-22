@@ -282,7 +282,7 @@ class CommandLineParser(object):
         """Add fission support to cc_binary."""
         parser.add_argument(
             '--fission', dest='fission',
-            action='store_true', default=False,
+            action='store_true', default=None,
             help='Add build options to support debuginfo fission')
 
     def _add_query_arguments(self, parser):
