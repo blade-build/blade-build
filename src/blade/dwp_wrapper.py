@@ -187,7 +187,7 @@ def run_dwp(output_path, dwo_files, dwp_tool='dwp'):
             # Clean up response file
             try:
                 os.unlink(rsp_path)
-            except:
+            except:  # pylint: disable=bare-except
                 pass
     else:
         # Call dwp directly with all .dwo files
