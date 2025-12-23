@@ -351,7 +351,7 @@ class _NinjaFileHeaderGenerator(object):
                            description='LINK SHARED ${out}',
                            pool=pool)
         self.generate_rule(name='dwp',
-                           command=self._builtin_command('dwp'),
+                           command=self._builtin_command('dwp', '${out} @${out}.rsp'),
                            rspfile='${out}.rsp',
                            rspfile_content='${in}',
                            description='DWP ${out}',

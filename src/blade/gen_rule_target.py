@@ -49,6 +49,7 @@ class GenRuleTarget(Target):
                  export_incs,
                  cleans,
                  heavy,
+                 exclude_dep_labels,
                  kwargs):
         """Init method.
         Init the gen rule target.
@@ -79,6 +80,7 @@ class GenRuleTarget(Target):
         self.attr['cmd'] = LOCATION_RE.sub(self._process_location_reference, cmd)
         self.attr['cmd_name'] = cmd_name
         self.attr['heavy'] = heavy
+        self.attr['exclude_dep_labels'] = exclude_dep_labels
         self.cleans = var_to_list(cleans)
         for clean in self.cleans:
             self._remove_on_clean(self._target_file_path(clean))
@@ -144,7 +146,7 @@ class GenRuleTarget(Target):
         implicit_deps = []
         for dep in self.deps:
             # FIXME: incchk.result file should be ordered_only_deps
-            implicit_deps += targets[dep]._get_target_files()
+            implicit_deps += targets[dep]._get_target_files(exclude_labels=self.attr['exclude_dep_labels'])
         return implicit_deps
 
     def _expand_srcs(self):
@@ -199,6 +201,7 @@ def gen_rule(
         export_incs=[],
         cleans=[],
         heavy=False,
+        exclude_dep_labels=["dwp"],
         **kwargs):
     """General Build Rule
     Args:
@@ -216,6 +219,9 @@ def gen_rule(
             under the target dir, it's different with cc_library.export_incs.
         cleans: List(str), The paths to be removed in the clean command, relative to the output
             directory.
+        exclude_dep_labels: List(str), the dependency labels to be excluded.
+            Some labels in deps are not necessary for the gen_rule. For example,
+            the dwp of binary is not necessary if gen_rule use $(location :binary) as argument.
         heavy: bool, Whether this target is a heavy target, which means to build it will cost many
             cpu/memory.
     """
@@ -234,6 +240,7 @@ def gen_rule(
             export_incs=export_incs,
             cleans=cleans,
             heavy=heavy,
+            exclude_dep_labels=exclude_dep_labels,
             kwargs=kwargs)
     build_manager.instance.register_target(gen_rule_target)
 

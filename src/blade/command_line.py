@@ -285,6 +285,11 @@ class CommandLineParser(object):
             action='store_true', default=None,
             help='Add build options to support debuginfo fission')
 
+        parser.add_argument(
+            '--dwp', dest='dwp',
+            action='store_true', default=None,
+            help='Generate .dwp file. If not enabled, only dwo files will be generated')
+
     def _add_query_arguments(self, parser):
         """Add query arguments for parser."""
         self.__add_plat_profile_arguments(parser)

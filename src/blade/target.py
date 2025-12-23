@@ -661,7 +661,7 @@ class Target(object):
             return self.__targets.get(label, '')
         return self.__default_target
 
-    def _get_target_files(self):
+    def _get_target_files(self, exclude_labels=[]):
         """
         Returns
         -----------
@@ -669,7 +669,10 @@ class Target(object):
         """
         self.get_build_code()  # Ensure rules were generated
         results = set()
-        for _, v in iteritems(self.__targets):
+        for k, v in iteritems(self.__targets):
+            if k in exclude_labels:
+                continue
+            results.add(v)
             if isinstance(v, list):
                 results.update(v)
             else:

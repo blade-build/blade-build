@@ -149,6 +149,11 @@ def is_fission():
     return config.get_item('cc_config', 'fission')
 
 
+def need_dwp():
+    """Whether dwp is enabled in cc_config."""
+    return config.get_item('cc_config', 'dwp')
+
+
 class CcTarget(Target):
     """
     This class is derived from Target and it is the base class
@@ -1314,6 +1319,7 @@ class CcBinary(CcTarget):
         self.attr['vers_fullpath'] = self._fullpath_sources(var_to_list(version_scripts))
         self.attr['export_dynamic'] = export_dynamic
         self.attr['fission'] = is_fission()
+        self.attr['dwp'] = need_dwp()
         self._add_tags('lang:cc', 'type:binary')
 
         # add extra link library
@@ -1383,7 +1389,8 @@ class CcBinary(CcTarget):
                       order_only_deps=order_only_deps)
         self._add_default_target_file('bin', output)
         self._remove_on_clean(self._target_file_path(self.name + '.runfiles'))
-        self._generate_dwp(output, objs, implicit_deps, order_only_deps)
+        if self.attr.get("fission") and self.attr.get("dwp"):
+            self._generate_dwp(output, objs, implicit_deps, order_only_deps)
 
 
     def _generate_dwp(self, binary_path, objs, implicit_deps, order_only_deps):

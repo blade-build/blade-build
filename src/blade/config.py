@@ -101,6 +101,7 @@ class BladeConfig(object):
                     'high': ['-g3'],
                 },
                 'fission': False,
+                'dwp': False,
                 'fission__help__': 'Whether to generate split dwarf debug info',
                 'hdr_dep_missing_severity': 'error',
                 'hdr_dep_missing_severity__help__': 'The severity of the missing dependency on the '
