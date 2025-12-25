@@ -127,6 +127,8 @@ class JavaTargetMixIn(object):
                 dep = self.target_database[k]
                 if 'generate_java' in dep.attr:  # Has this attribute
                     dep.attr['generate_java'] = True
+                    if hasattr(dep, 'update_java_gen_info'):
+                        dep.update_java_gen_info()
                     queue.extend(dep.deps)
 
     def _get_maven_dep_ids(self):

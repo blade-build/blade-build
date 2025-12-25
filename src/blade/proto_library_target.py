@@ -170,6 +170,9 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             cpp_headers.extend(headers)
         self.attr['generated_hdrs'] = full_cpp_headers
         self._set_hdrs(cpp_headers)
+        self.src_java_info = {}
+        if self.attr['generate_java']:
+            self.update_java_gen_info()
 
     def _check_proto_srcs_name(self, srcs):
         """Checks whether the proto file's name ends with 'proto'."""
@@ -219,6 +222,17 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
     def _prepare_to_generate_rule(self):
         CcTarget._prepare_to_generate_rule(self)
         self._check_proto_deps()
+
+    def update_java_gen_info(self):
+        """Update java package name and source path for java target for fingerprint."""
+        if "generated_java_sources" in self.attr:
+            return
+        self.attr["generated_java_sources"] = []
+        for src in self.srcs:
+            input = self._source_file_path(src)
+            package_dir, java_name = self._proto_java_gen_file(src)
+            self.src_java_info[src] = (package_dir, java_name)
+            self.attr["generated_java_sources"].append("%s__%s__%s" % (input, package_dir, java_name))
 
     def _expand_deps_generation(self):
         if self.attr['generate_java']:
@@ -377,7 +391,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         java_sources = []
         for src in self.srcs:
             input = self._source_file_path(src)
-            package_dir, java_name = self._proto_java_gen_file(src)
+            package_dir, java_name = self.src_java_info[src]
             output = self._target_file_path(os.path.join(os.path.dirname(src), package_dir, java_name))
             self.generate_build('protojava', output, inputs=input,
                                 implicit_deps=implicit_deps, variables=vars)
