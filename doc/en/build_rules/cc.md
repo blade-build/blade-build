@@ -398,6 +398,31 @@ cc_binary(
   This attribute tells linker to put all symbols into its dynamic symbol table. make them visible
    for loaded shared libraries. for more details, see `--export-dynamic` in man ld(1).
 
+### Using dwp files
+
+When DebugFission is enabled (via [`cc_config.fission`](../config.md#cc_config)) and dwp packaging is enabled
+(via [`cc_config.dwp`](../config.md#cc_config)), the debug information is split into separate `.dwo` files,
+which are then packaged into a single `.dwp` file for each binary target.
+
+If you need to deploy the binary with debug information for debugging in production or other environments,
+you can include the dwp file in your package by referencing it through the binary target:
+
+```python
+package(
+    name = 'server_package',
+    ...,
+    srcs = [
+        # executable
+        ('$(location //server:server)', 'bin/server'),
+        # Include the dwp file for server binary
+        ('$(location //server:server dwp)', 'bin/server.dwp'),
+        ...,
+    ],
+)
+```
+
+The `$(location :target dwp)` syntax allows you to reference the dwp file generated for a specific binary target.
+
 ## cc_test
 
 cc_binary, with gtest gtest_main be linked automatically,

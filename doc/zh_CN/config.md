@@ -130,6 +130,25 @@ blade dump --config --to-file my.config
   优化专用选项，debug 模式下会被忽略，比如 `['-O2'，'-omit-frame-pointer'] 等。
   单独分出 optimize 选项是因为这些选项在 debug 模式下需要被忽略。
 
+- `fission` : bool = False
+
+  是否开启 GCC 的 [DebugFission](https://gcc.gnu.org/wiki/DebugFission) 功能。
+
+  开启后，调试信息会被分离到单独的 `.dwo` 文件中。
+  这能显著减小可执行文件的大小。经实测，在中等调试符号级别下，能把一个被测可执行文件从 1.9GB 减小到 532MB。
+
+  也可以通过命令行参数 `--fission` 来开启此功能。
+
+- `dwp`: bool = False
+
+  是否将 `.dwo` 文件打包成 `.dwp` 文件。
+
+  此选项需要在开启 `fission` 的基础上使用。开启后，构建过程中会自动将分散的 `.dwo` 调试信息文件
+  打包成单个 `.dwp` 文件，便于调试信息的管理和分发。关于如何在 package 中使用 dwp 文件，
+  请参见 [`cc_binary`](build_rules/cc.md#cc_binary) 文档。
+
+  也可以通过命令行参数 `--dwp` 来开启此功能。
+
 - `hdr_dep_missing_severity` : string = warning | ['info', 'warning', 'error'
 
   对头文件所属的库的依赖的缺失的严重性。

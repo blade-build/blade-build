@@ -271,46 +271,11 @@ The default value is `mid`.
 
 #### Enable DebugFission ####
 
-Use GCC's [DebugFission](https://gcc.gnu.org/wiki/DebugFission) function:
+For DebugFission configuration details, please refer to:
+- [`cc_config.fission`](config.md#cc_config) - Enable DebugFission feature
+- [`cc_config.dwp`](config.md#cc_config) - Package dwo files into dwp files
+- [Using dwp files in package](build_rules/cc.md#using-dwp-files) - How to include dwp files in deployment packages
 
-**Method 1: Configuration file**
-
-```python
-cc_config(
-     ...
-     fission = True,
-     ...
-)
-```
-
-**Method 2: Command line parameter**
-
-```bash
-blade build --fission ...
-```
-
-In our real test, with the middle debug information level, the size of an executable file has been reduced from 1.9GB to 532MB.
-
-**Using dwp files in package**
-
-When DebugFission is enabled, the debug information is split into separate `.dwo` files, which are then packaged into a `.dwp` file.
-You can include the dwp file in your package by referencing it through the binary target:
-
-```python
-package(
-    name = 'server_package',
-    ...,
-    srcs = [
-        # executable
-        ('$(location //server:server)', 'bin/server'),
-        # Include the dwp file for my_server binary
-        ('$(location //server:server dwp)', 'bin/server.dwp'),
-        ...,
-    ],
-)
-```
-
-The `$(location :target dwp)` syntax allows you to reference the dwp file generated for a specific binary target.
 
 #### Compress debug information ####
 

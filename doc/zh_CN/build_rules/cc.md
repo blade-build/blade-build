@@ -345,6 +345,31 @@ cc_binary(
 
   详情请参考 man ld(1) 中查找 --export-dynamic 的说明。
 
+### 使用 dwp 文件
+
+当开启 DebugFission（通过 [`cc_config.fission`](../config.md#cc_config) 配置）并开启 dwp 打包
+（通过 [`cc_config.dwp`](../config.md#cc_config) 配置）后，调试信息会被分离到单独的 `.dwo` 文件中，
+然后这些文件会被打包成单个 `.dwp` 文件（每个 binary target 对应一个）。
+
+如果你需要在生产环境或其他环境中部署带有调试信息的二进制文件以便调试，
+可以通过 binary target 来引用 dwp 文件，将其包含在 package 中：
+
+```python
+package(
+    name = 'server_package',
+    ...,
+    srcs = [
+        # executable
+        ('$(location //server:server)', 'bin/server'),
+        # Include the dwp file for server binary
+        ('$(location //server:server dwp)', 'bin/server.dwp'),
+        ...,
+    ],
+)
+```
+
+`$(location :target dwp)` 语法允许你引用特定 binary target 生成的 dwp 文件。
+
 ## cc_test
 
 相当于cc_binary，再加上自动链接gtest和gtest_main。

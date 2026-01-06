@@ -132,6 +132,26 @@ Common configuration of all c/c++ targets:
 
   Optimize options. It is separate from other compile flags because it is ignored in debug mode.
 
+- `fission` : bool = False
+
+  Whether to enable GCC's [DebugFission](https://gcc.gnu.org/wiki/DebugFission) feature.
+
+  When enabled, debug information is split into separate `.dwo` files.
+  This can significantly reduce the size of executable files. In our real test, with the middle debug information level,
+  the size of an executable file has been reduced from 1.9GB to 532MB.
+
+  You can also enable this feature via the command line parameter `--fission`.
+
+- `dwp`: bool = False
+
+  Whether to package `.dwo` files into a `.dwp` file.
+
+  This option requires `fission` to be enabled. When enabled, the build process will automatically package
+  the scattered `.dwo` debug information files into a single `.dwp` file, which makes it easier to manage
+  and distribute debug information. For how to use dwp files in packages, see the [`cc_binary`](build_rules/cc.md#cc_binary) documentation.
+
+  You can also enable this feature via the command line parameter `--dwp`.
+
 - `hdr_dep_missing_severity` : string = 'warning' | ['info', 'warning', 'error']
 
   The severity of the missing dependency on the library to which the header file belongs.

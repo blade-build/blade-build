@@ -47,22 +47,22 @@ def expand_response_files(args):
     """
     expanded = []
     for arg in args:
-        if arg.startswith('@'):
-            # This is a response file
-            rsp_path = arg[1:]
-            try:
-                with open(rsp_path, 'r') as f:
-                    # Read lines from response file
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            # Support multiple arguments per line
-                            expanded.extend(line.split())
-            except IOError as e:
-                console.fatal("Error: Failed to read response file %s: %s" %
-                      (rsp_path, e))
-        else:
+        if not arg.startswith('@'):
             expanded.append(arg)
+            continue
+        # This is a response file
+        rsp_path = arg[1:]
+        try:
+            with open(rsp_path, 'r') as f:
+                # Read lines from response file
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        # Support multiple arguments per line
+                        expanded.extend(line.split())
+        except IOError as e:
+            console.fatal("Error: Failed to read response file %s: %s" %
+                    (rsp_path, e))
     return expanded
 
 
@@ -84,7 +84,7 @@ def extract_objects_from_archive(archive_path):
         stdout = stdout.decode('utf-8')
 
     object_files = []
-    for line in stdout.strip().split('\n'):
+    for line in stdout.strip().splitlines():
         line = line.strip()
         if line and line.endswith('.o'):
             # ar t already outputs the full path, use it directly
