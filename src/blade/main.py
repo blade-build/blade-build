@@ -31,9 +31,8 @@ from blade import workspace
 def load_config(options, root_dir):
     """Load the configuration file and parse."""
     # Init global build attributes
-    build_attributes.initialize(options)
     config.load_files(root_dir, options.load_local_config)
-
+    build_attributes.initialize(options)
 
 def setup_console(options):
     if options.color != 'auto':
