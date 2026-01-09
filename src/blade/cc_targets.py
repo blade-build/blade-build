@@ -1318,7 +1318,7 @@ class CcBinary(CcTarget):
         self.attr['lds_fullpath'] = self._fullpath_sources(var_to_list(linker_scripts))
         self.attr['vers_fullpath'] = self._fullpath_sources(var_to_list(version_scripts))
         self.attr['export_dynamic'] = export_dynamic
-        self.attr['dwp'] = need_dwp()
+        self.attr['dwp'] = is_fission() and need_dwp()
         self._add_tags('lang:cc', 'type:binary')
 
         # add extra link library

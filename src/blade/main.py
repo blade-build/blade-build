@@ -114,6 +114,13 @@ def run_subcommand_profile(blade_path, command, options, ws, targets):
     return exit_code[0]
 
 
+def check_config(config):
+    """Check the configuration."""
+    if config.get_item('cc_config', 'dwp') and not config.get_item('cc_config', 'fission'):
+        console.warning('`cc_config.dwp` is enabled but `cc_config.fission` is not, '
+                        'dwp will not take effect without fission enabled')
+
+
 def _main(blade_path, argv):
     """The main entry of blade."""
     command, options, targets = command_line.parse(argv)
@@ -124,6 +131,9 @@ def _main(blade_path, argv):
     load_config(options, ws.root_dir())
 
     adjust_config_by_options(config, options)
+
+    check_config(config)
+
     if _check_error_log('config'):
         return 1
 
