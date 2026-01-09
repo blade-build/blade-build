@@ -529,8 +529,7 @@ class JavaTargetMixIn(object):
             return []
         inputs, outputs = [], []
         resources_dir = self._target_file_path(self.name + '.resources')
-        resources = self._process_regular_resources(resources)
-        for src, dst in resources:
+        for src, dst in self.attr['expended_resources']:
             inputs.append(src)
             outputs.append(os.path.join(resources_dir, dst))
         targets = self.blade.get_build_targets()
@@ -637,7 +636,10 @@ class JavaTarget(Target, JavaTargetMixIn):
                 visibility=visibility,
                 tags=tags,
                 kwargs=kwargs)
+        # If the resource is a directory, the change in resource content will not update the
+        # ninja.build cache. So we need to expand all resources in the directory ahead of time.
         self._process_resources(resources)
+        self.attr['expended_resources'] = self._process_regular_resources(self.attr['resources'])
         self.attr['source_encoding'] = source_encoding
         self._add_tags('lang:java')
 
