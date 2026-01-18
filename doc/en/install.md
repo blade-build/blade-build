@@ -2,15 +2,13 @@
 
 ## Auto Install
 
-Execute the following command in a terminal:
+By executing the following command in a terminal:
 
 ```console
 curl https://blade-build.github.io/install.sh | bash
 ```
 
-`~/.cache/blade-build`
-
-It also create a symbolic link at `~/bin/blade`, so you can run `blade` command.
+blade will be cloned to your `~/.cache/blade-build`. It also create a symbolic link at `~/bin/blade`, so you can run `blade` command in the terminal.
 
 ## Manual Install
 
