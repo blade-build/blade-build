@@ -42,7 +42,7 @@ master 分支上的代码是开发版，应当视为 alpha 版。正式环境请
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/blade-build/blade-build.svg)](https://starchart.cc/blade-build/blade-build)
-      
+
 ## 源起
 
 Blade 是一个现代构建系统，期望的目标是强大而好用，把程序员从构建的繁琐中解放出来。
@@ -170,5 +170,3 @@ Google 开放的一些库强大而好用，我们很喜欢，我们把对这些�
 我们的理念：解放程序员，提高生产力。用工具来解决非创造性的技术问题。
 
 欢迎使用以及帮助我们改进Blade，我们期待你的贡献。
-
-

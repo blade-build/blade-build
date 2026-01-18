@@ -1,4 +1,18 @@
-# Installation #
+# Installation
+
+## Auto Install
+
+Execute the following command in a terminal:
+
+```console
+curl https://blade-build.github.io/install.sh | bash
+```
+
+`~/.cache/blade-build`
+
+It also create a symbolic link at `~/bin/blade`, so you can run `blade` command.
+
+## Manual Install
 
 By executing the install script, blade can be installed under ~/bin.
 It is installed in a soft chain mode. After installation, the original directory that is checked out cannot be deleted.
