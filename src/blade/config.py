@@ -142,6 +142,31 @@ class BladeConfig(object):
                 'pprof_path': '',
             },
 
+            'windows_config': {
+                '__help__': 'Windows-specific Configuration',
+                'msvc_version': 'auto',
+                'msvc_version__help__': 'MSVC compiler version to use (auto, 2019, 2022)',
+                'windows_sdk': 'auto',
+                'windows_sdk__help__': 'Windows SDK version (auto, 10.0, etc.)',
+                'visual_studio': 'auto',
+                'visual_studio__help__': 'Visual Studio edition (auto, Community, Professional, Enterprise)',
+                'cppflags': ['/MD', '/EHsc'],
+                'cflags': [],
+                'cxxflags': [],
+                'linkflags': ['/SUBSYSTEM:CONSOLE'],
+                'warnings': ['/W3'],
+                'optimize': {
+                    'debug': ['/Od'],
+                    'release': ['/O2'],
+                },
+                'debug_info_levels': {
+                    'no': [],
+                    'low': ['/Zi'],
+                    'mid': ['/Zi', '/DEBUG'],
+                    'high': ['/Zi', '/DEBUG', '/RTC1'],
+                },
+            },
+
             'link_config': {
                 '__help__': 'Linking Configuration',
                 'link_jobs': 0,
@@ -629,3 +654,9 @@ def thrift_library_config(append=None, **kwargs):
 def fbthrift_library_config(append=None, **kwargs):
     """fbthrift config."""
     _blade_config.update_config('fbthrift_config', append, kwargs)
+
+
+@config_rule
+def windows_config(append=None, **kwargs):
+    """windows_config section."""
+    _blade_config.update_config('windows_config', append, kwargs)

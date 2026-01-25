@@ -601,6 +601,28 @@ class CcTarget(Target):
         self._add_target_file('incchk.result', check_result_file)
         return check_result_file
 
+    def _windows_static_cc_library(self, objs, inclusion_check_result):
+        """Generate Windows static library (.lib)."""
+        output = self._target_file_path('%s.lib' % self.name)
+        self.generate_build('ar', output, inputs=objs,
+                            order_only_deps=inclusion_check_result)
+        self._add_default_target_file('a', output)
+
+    def _windows_dynamic_cc_library(self, objs, inclusion_check_result):
+        """Generate Windows dynamic library (.dll) with import library (.lib)."""
+        output = self._target_file_path('%s.dll' % self.name)
+        lib_output = self._target_file_path('%s.lib' % self.name)
+        target_linkflags = self._generate_link_flags()
+        sys_libs, usr_libs, incchk_deps = self._dynamic_dependencies()
+        if inclusion_check_result:
+            incchk_deps.append(inclusion_check_result)
+        
+        # Generate DLL and import library
+        self._cc_link(output, 'solink', objs=objs, deps=usr_libs, sys_libs=sys_libs,
+                      order_only_deps=incchk_deps, target_linkflags=target_linkflags)
+        self._add_target_file('so', output)
+        self._add_target_file('implib', lib_output)
+
     def _static_cc_library(self, objs, inclusion_check_result):
         output = self._target_file_path('lib%s.a' % self.name)
         self.generate_build('ar', output, inputs=objs,
@@ -629,9 +651,14 @@ class CcTarget(Target):
         return None
 
     def _cc_library(self, objs, inclusion_check_result=None):
-        self._static_cc_library(objs, inclusion_check_result)
-        if self.attr.get('generate_dynamic'):
-            self._dynamic_cc_library(objs, inclusion_check_result)
+        if os.name == 'nt':  # Windows
+            self._windows_static_cc_library(objs, inclusion_check_result)
+            if self.attr.get('generate_dynamic'):
+                self._windows_dynamic_cc_library(objs, inclusion_check_result)
+        else:
+            self._static_cc_library(objs, inclusion_check_result)
+            if self.attr.get('generate_dynamic'):
+                self._dynamic_cc_library(objs, inclusion_check_result)
 
     def _cc_link(self, output, rule, objs, deps, sys_libs, linker_scripts=None, version_scripts=None,
                  target_linkflags=None, implicit_deps=None,

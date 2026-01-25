@@ -215,15 +215,19 @@ class _NinjaFileHeaderGenerator(object):
         return filtered_cppflags, filtered_cxxflags, filtered_cflags, cuflags
 
     def generate_cc_rules(self):
-        cc, cxx, ld = self.build_accelerator.get_cc_commands()
-        cppflags, linkflags = self._get_intrinsic_cc_flags()
-        self._generate_cc_compile_rules(cc, cxx, cppflags)
-        self._generate_cc_inclusion_check_rule()
-        self._generate_cc_ar_rules()
-        self._generate_cc_link_rules(ld, linkflags)
-        self.generate_rule(name='strip',
-                           command='strip --strip-unneeded -o ${out} ${in}',
-                           description='STRIP ${out}')
+        if os.name == 'nt':  # Windows
+            self._generate_windows_cc_compile_rules()
+            self._generate_windows_link_rules()
+        else:
+            cc, cxx, ld = self.build_accelerator.get_cc_commands()
+            cppflags, linkflags = self._get_intrinsic_cc_flags()
+            self._generate_cc_compile_rules(cc, cxx, cppflags)
+            self._generate_cc_inclusion_check_rule()
+            self._generate_cc_ar_rules()
+            self._generate_cc_link_rules(ld, linkflags)
+            self.generate_rule(name='strip',
+                               command='strip --strip-unneeded -o ${out} ${in}',
+                               description='STRIP ${out}')
 
     def _generate_cc_vars(self):
         warnings, cxx_warnings, c_warnings, cu_warnings = self._get_warning_flags()
@@ -311,6 +315,79 @@ class _NinjaFileHeaderGenerator(object):
         self.generate_rule(name='ccincchk',
                            command=self._builtin_command('cc_inclusion_check'),
                            description='CC INCLUSION CHECK ${in}')
+
+    def _generate_windows_cc_vars(self):
+        """Generate Windows-specific CC variables."""
+        warnings, cxx_warnings, c_warnings, cu_warnings = self._get_warning_flags()
+        c_warnings += warnings
+        cxx_warnings += warnings
+        cu_warnings += ['-Xcompiler %s' % warning for warning in cxx_warnings]
+        
+        # Windows-specific optimize flags
+        windows_config = config.get_section('windows_config')
+        optimize_flags = windows_config['optimize']
+        optimize = '$optimize_flags' if self.options.profile == 'release' else ''
+        
+        self._add_line(textwrap.dedent('''\
+                c_warnings = %s
+                cxx_warnings = %s
+                cu_warnings = %s
+                optimize_flags = %s
+                optimize = %s
+                ''') % (' '.join(c_warnings), ' '.join(cxx_warnings),
+                        ' '.join(cu_warnings),
+                        ' '.join(optimize_flags), optimize))
+
+    def _generate_windows_cc_compile_rules(self):
+        """Generate Windows CC compilation rules."""
+        cc, cxx, ld = self.build_accelerator.get_cc_commands()
+        
+        self._generate_windows_cc_vars()
+        
+        windows_config = config.get_section('windows_config')
+        cppflags = windows_config['cppflags']
+        cflags, cxxflags = windows_config['cflags'], windows_config['cxxflags']
+        
+        # Include directories
+        includes = config.get_item('cc_config', 'extra_incs')
+        includes = includes + ['.', self.build_dir]
+        include_flags = [' /I' + inc for inc in includes]
+        
+        # C compilation
+        cc_command = ('%s /nologo /c %s %s /Fo${out} %s ${in}' % (
+            cc, ' '.join(cppflags), ' '.join(include_flags), '${c_warnings}'))
+        self.generate_rule(name='cc',
+                           command=cc_command,
+                           description='CC ${in}')
+        
+        # C++ compilation  
+        cxx_command = ('%s /nologo /c %s %s /Fo${out} %s ${in}' % (
+            cxx, ' '.join(cppflags), ' '.join(include_flags), '${cxx_warnings}'))
+        self.generate_rule(name='cxx',
+                           command=cxx_command,
+                           description='CXX ${in}')
+
+    def _generate_windows_link_rules(self):
+        """Generate Windows linking rules."""
+        windows_config = config.get_section('windows_config')
+        linkflags = windows_config['linkflags']
+        
+        # Static library
+        self.generate_rule(name='ar',
+                           command='lib /nologo /out:${out} ${in}',
+                           description='LIB ${out}')
+        
+        # Dynamic library
+        self.generate_rule(name='solink',
+                           command='link /nologo /DLL /out:${out} %s ${in} ${linkflags}' % 
+                           ' '.join(linkflags),
+                           description='LINK DLL ${out}')
+        
+        # Executable
+        self.generate_rule(name='link',
+                           command='link /nologo /out:${out} %s ${in} ${linkflags}' % 
+                           ' '.join(linkflags),
+                           description='LINK EXE ${out}')
 
     def _generate_cc_ar_rules(self):
         arflags = ''.join(config.get_item('cc_library_config', 'arflags'))
