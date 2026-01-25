@@ -6,14 +6,19 @@
 
 """Integration tests for Windows support."""
 
-import unittest
-import tempfile
 import os
+import sys
+import tempfile
+
+# Add src directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+import blade_test
 from blade import config
 from blade.toolchain import WindowsToolChain
 
 
-class WindowsIntegrationTest(unittest.TestCase):
+class WindowsIntegrationTest(blade_test.TargetTest):
     
     def setUp(self):
         if os.name != 'nt':

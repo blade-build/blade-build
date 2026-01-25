@@ -6,12 +6,17 @@
 
 """Tests for Windows toolchain."""
 
-import unittest
 import os
+import sys
+
+# Add src directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from blade.toolchain import WindowsToolChain, BuildArchitecture
+import blade_test
 
 
-class WindowsToolChainTest(unittest.TestCase):
+class WindowsToolChainTest(blade_test.TargetTest):
     
     def setUp(self):
         if os.name != 'nt':
