@@ -36,7 +36,7 @@ def _signal_map():
         if not name.startswith('SIG') or name.startswith('SIG_'):
             continue
         # SIGIOT and SIGABRT has the same value under linux and mac, but SIGABRT is more common.
-        if signal.SIGABRT == signal.SIGIOT and name == 'SIGIOT':
+        if name == 'SIGIOT' and signal.SIGABRT == signal.SIGIOT:
             continue
         result[-getattr(signal, name)] = name
 

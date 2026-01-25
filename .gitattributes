@@ -1,7 +1,5 @@
-# Set line endings for batch files to CRLF (DOS format)
-*.bat text eol=crlf
-
-# Set line endings for shell scripts to LF (UNIX format)
-*.sh text eol=lf
-/blade eof=lf
-/dist_blade eof=lf
+*       text=auto
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.sh    text eol=lf
+/dist_blade    text eol=lf
