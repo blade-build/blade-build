@@ -728,15 +728,21 @@ class _NinjaFileHeaderGenerator(object):
             deps='gcc',
         )
 
-        link_args = '-o ${out} ${includes} ${cppflags} ${target_linkflags} ${extra_linkflags} ${in}'
+        # CUDA linking might have a lot of input files exceeding maximal length of a bash command line.
+        # Using response file (nvcc --options-file) can resolve this problem.
+        link_args = '-o ${out} ${includes} ${cppflags} --options-file ${out}.rsp ${extra_linkflags}'
         self.generate_rule(
             name='cudalink',
             command=nvcc_cmd + ' ' + link_args,
+            rspfile='${out}.rsp',
+            rspfile_content='${target_linkflags} ${in}',
             description='CUDA LINK BINARY ${out}')
 
         self.generate_rule(
             name='cudasolink',
             command=nvcc_cmd + ' -shared ' + link_args,
+            rspfile='${out}.rsp',
+            rspfile_content='${target_linkflags} ${in}',
             description='CUDA LINK SHARED ${out}')
 
     def _builtin_command(self, builder, args=''):
