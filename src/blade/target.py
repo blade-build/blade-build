@@ -90,7 +90,7 @@ def _parse_target(dep):
         result = ('', '', msgs)
     else:
         if path:
-            path = os.path.normpath(path)
+            path = os.path.normpath(path).replace('\\', '/') # windows
         result = (path, name, None)
     _parse_target.cache[dep] = result
     return result
@@ -463,7 +463,6 @@ class Target(object):
             else:
                 # Depend on library in current directory
                 path = self.path
-
         return '%s:%s' % (path, name)
 
     def _init_target_deps(self, deps):

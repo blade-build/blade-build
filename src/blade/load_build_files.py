@@ -367,7 +367,10 @@ def _check_under_skipped_dir(dirname):
         if os.path.exists(filepath):
             cache[dirname] = filepath
             return filepath
-    result = _check_under_skipped_dir(os.path.dirname(dirname))
+    parent = os.path.dirname(dirname)
+    if parent == dirname:
+        return ''
+    result = _check_under_skipped_dir(parent)
     cache[dirname] = result
     return result
 
@@ -418,7 +421,6 @@ def load_targets(target_ids, excluded_targets, blade):
     # starting dirs mentioned in command line
     direct_targets, starting_dirs = _expand_target_patterns(blade, target_ids, excluded_trees)
     starting_dirs -= excluded_dirs
-
     # to prevent duplicated loading of BUILD files
     processed_dirs = {}
 

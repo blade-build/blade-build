@@ -24,8 +24,8 @@ from blade import console
 from blade import maven
 from blade import ninja_runner
 from blade import target_pattern
+from blade import toolchain
 from blade.binary_runner import BinaryRunner
-from blade.toolchain import ToolChain
 from blade.build_accelerator import BuildAccelerator
 from blade.dependency_analyzer import analyze_deps
 from blade.load_build_files import load_targets
@@ -101,8 +101,8 @@ class Blade(object):
         # Indicate whether the deps list is expanded by expander or not
         self.__targets_expanded = False
 
-        self.__build_toolchain = ToolChain()
-        self.build_accelerator = BuildAccelerator(self.__build_toolchain)
+        self.__cc_toolchain = toolchain.default(options.m)
+        self.build_accelerator = BuildAccelerator(self.__cc_toolchain)
         self.__build_jobs_num = 0
 
         self.__build_script = os.path.join(self.__build_dir, 'build.ninja')
@@ -252,7 +252,12 @@ class Blade(object):
     def _remove_paths(paths):
         # The rm command can delete a large number of files at once, which is much faster than
         # using python's own remove functions (only supports deleting a single path at a time).
-        subprocess.call(['rm', '-fr'] + paths)
+        if os.name == 'posix':
+            subprocess.call(['rm', '-fr'] + paths)
+            return
+        import shutil
+        for path in paths:
+            shutil.rmtree(path, ignore_errors=True)
 
     def clean(self):
         """Clean specific generated target files or directories"""
@@ -556,9 +561,9 @@ class Blade(object):
         # code.append('default %s\n' % (_ALL_COMMAND_TARGETS))
         return code
 
-    def get_build_toolchain(self):
-        """Return build toolchain instance."""
-        return self.__build_toolchain
+    def get_cc_toolchain(self):
+        """Return cc build toolchain instance."""
+        return self.__cc_toolchain
 
     def get_sources_keyword_list(self):
         """This keywords list is used to check the source files path.
