@@ -1,12 +1,12 @@
-# 构建Java目标 #
+# 构建 Java 目标
 
 Blade 早期的开发主要是针对 C/C++/Protobuf 相关的后台服务项目，作为通用的构建系统，也逐步扩展了支持
 Java/Python 等的规则。第一版 Java 规则的实现（java_jar_target.py）比较简单，后由于项目需要，参考
 Maven/Buck/Bazel 的实现和 Java 语言项目构建习惯和运行场景，重写了新的 Java 构建规则（java_targets.py）
 
-## java_library ##
+## java_library
 
-把java源代码编译为库（jar 包）。
+把 java 源代码编译为库（jar 包）。
 
 ```python
 java_library(
@@ -22,7 +22,7 @@ java_library(
         'resources/services.xml'
     ],
     deps = [
-        '//common/rpc:rpc_error_code_proto'         # 可以依赖proto_library生成的java文件一起编译打包
+        '//common/rpc:rpc_error_code_proto',        # 可以依赖proto_library生成的java文件一起编译打包
         '//common/rpc:rpc_options_proto',
         '//poppy:poppy_client',                     # 可以依赖swig_library生成的java文件一起编译打包
         '//common/net/http/java:http_utilities',    # 可以依赖别的 java_library 目标
@@ -62,7 +62,7 @@ java_library(
 - coverage 属性
   bool 类型，是否为本库生成测试覆盖率数据。某些情况，比如 srcs 是生成的代码，可以考虑设置为 False。
 
-### 多种依赖方式 ###
+### 多种依赖方式
 
 为了适应 java 项目的需要，除了原有的 deps 依赖，新增了 exported_deps/provided_deps 依赖，这里首先
 需要强调的是 java_library 进行编译生成 class（jar 包）的时候**依赖不传递**，即如下 BUILD 文件中的
@@ -77,10 +77,10 @@ java_library(name = 'C', srcs = 'C.java')
 
 - exported_deps 属性
 
-和C++不同，Java（以及scala等JVM上的语言）的构建规则中，deps里描述的库只提供给编译当前库的源代码时使用，不会自动透传给库的使用者。
-如果库所依赖的类型出现在类的公有方法时，如果被依赖的库只出现在deps中，由于不会被透传给其使用者，就会因找不到符号而导致编译失败，需要使用exported_deps属性。
+和 C++不同，Java（以及 scala 等 JVM 上的语言）的构建规则中，deps 里描述的库只提供给编译当前库的源代码时使用，不会自动透传给库的使用者。
+如果库所依赖的类型出现在类的公有方法时，如果被依赖的库只出现在 deps 中，由于不会被透传给其使用者，就会因找不到符号而导致编译失败，需要使用 exported_deps 属性。
 
-出现在exported_deps属性中的库，编译阶段会被透传给其使用者。
+出现在 exported_deps 属性中的库，编译阶段会被透传给其使用者。
 
 比如上述例子中的 B.java，如果在其某个方法的参数中引入了 C.java 定义的符号，会导致依赖 B 的
 java_library 也不得不依赖 C，否则编译报错，这个时候可以将 C 作为 B 的导出依赖（exported_deps），
@@ -96,7 +96,7 @@ provided_deps 用于表示那些运行环境提供的依赖，类似 maven scope
 java_library 的编译，但是当这个 java_library 直接或者间接被 java_fat_library 依赖时，provided deps
 不会被打包到 fatjar 中，应用场景比如集群环境的依赖（hadoop，spark 等），可以有效减小 fatjar 的文件大小，并减少和运行环境已经提供的库冲突的风险。
 
-## maven_jar ##
+## maven_jar
 
 从 maven 仓库获取第三方发布包（release/snapshot），这里的第三方是相对的概念，泛指本项目（java_library）的外部依赖。
 
@@ -118,7 +118,7 @@ maven_jar (
 
 为了避免对同一个 id 的制品重复描述以及避免潜在的版本冲突，建议对 maven_jar 进行[集中管理](../config.md#java_config)。
 
-## java_fat_library ##
+## java_fat_library
 
 聚合所有依赖的 java_library/maven_jar，生成一个 fatjar 用于部署，类似 maven 的 jar-with-dependencies 功能。
 
@@ -167,15 +167,15 @@ java_fat_library(
 指定需要排除的 maven 依赖，形式为 maven id（group:artifact:version），支持通配符形式，
 如 com.google.protobuf:protobuf:\* 和 com.google.protobuf:\*:\*。
 
-## java_binary ##
+## java_binary
 
-把java源代码编译为可执行文件
+把 java 源代码编译为可执行文件
 
 ```python
 java_binary(
     name = 'poppy_java_example',
     srcs = [
-        glob('src/com/soso/poppy/tool/*.Java)'
+        glob('src/com/soso/poppy/tool/*.java')
     ],
     deps = [
         '//poppy:poppy_java_client',
@@ -184,17 +184,17 @@ java_binary(
 )
 ```
 
-编译结果包括一个启动用的shell脚本文件和一个已经包含了相关依赖的fat-jar。
+编译结果包括一个启动用的 shell 脚本文件和一个已经包含了相关依赖的 fat-jar。
 
-## java_test ##
+## java_test
 
-编译和运行java测试代码。
+编译和运行 java 测试代码。
 
 ```python
 java_test(
     name = 'poppy_java_test',
     srcs = [
-        glob('test/com/soso/poppy/**/*Test.Java)'
+        glob('test/com/soso/poppy/**/*Test.java')
     ],
     deps = [
         '//poppy:poppy_java',

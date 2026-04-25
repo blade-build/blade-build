@@ -2,7 +2,7 @@
 
 There are 3 phrases in the C/C++ building: preprocessing, compiling, linking. with different flags.
 
-The common CC attributes are：
+The common CC attributes are:
 
 - `warning`: str = ['yes', 'no'], Whether suppress all warnings
 
@@ -29,7 +29,7 @@ The common CC attributes are：
 
 - `extra_cppflags`:list(str) = [], Extra C/C++ compile flags.
 
-  Example: `extra_cppflags = ['-Wno-format-literal']`. many useful flags, such as `-g`，`-fPIC` are builtin. so it should be rarely used.
+  Example: `extra_cppflags = ['-Wno-format-literal']`. many useful flags, such as `-g`,`-fPIC` are builtin. so it should be rarely used.
 
 - `extra_linkflags`:list(str) = [], Extra link flags
 
@@ -145,8 +145,8 @@ Attributes:
 - `always_optimize`: bool = False
 
   True: Always optimize.
-  False: Don't optimize in debug mode。
-  The default value is False。It only apply to cc_library.
+  False: Don't optimize in debug mode.
+  The default value is False.It only apply to cc_library.
 
 - `prebuilt`: bool = False
 
@@ -161,7 +161,7 @@ Attributes:
   There is no dependency code in the generated cc_library, both static and dynamic. But for the
   dynamic library, it contains the paths of dependencies.
 
-  These libraries can just be used locally (such as run tests)，not fit for the production environment.
+  These libraries can just be used locally (such as run tests),not fit for the production environment.
   If you want to build a shared library can be use in the environment, you should use `cc_plugin`,
   which will include the code from it dependencies.
 
@@ -283,13 +283,13 @@ gen_rule(
     name = 'zlib_build',
     srcs = ['zlib-1.2.11.tar.gz'],
     outs = ['lib/libz.a', 'include/zlib.h', 'include/zconf.h'],
-    cmd = '...',  # tar xf，configure, make, make install...
+    cmd = '...',  # tar xf, configure, make, make install...
 )
 
 # Describe the installed library of zlib
 
 foreign_cc_library(
-    name = 'z',  # The name of the library is `libz.a`，under the `lib` subdirectory
+    name = 'z',  # The name of the library is `libz.a`, under the `lib` subdirectory
     install_dir = '', # The installation directory is `build64_release/thirdparty/libz`
     # lib_dir= 'lib', # The dafault os OK and can be omitted.
     deps = [':zlib_build'],
@@ -315,7 +315,7 @@ use_openssl.cc:
 // because `thirdparty/zlib/include` has been exported in the `foreign_cc_library` defaultly
 ```
 
-### 示例 2，openssl
+### Example 2, openssl
 
 Strictly speaking, openssl is not built with autotools, but it is generally compatible with autotools.
 Its autotools-like configure file is `Config`, and the directory layout after installation is compatible.
@@ -330,7 +330,7 @@ gen_rule(
     name = 'openssl_build',
     srcs = ['openssl-1.1.0.tar.gz'],
     outs = ['lib/libcrypto.a', 'lib/libss.a'],
-    cmd = '...',  # tar xf，Config, make, make install...
+    cmd = '...',  # tar xf, Config, make, make install...
     export_incs = 'include', # Let the compiler find the `openssl` subdirectory under `include`
 )
 
@@ -382,10 +382,10 @@ cc_binary(
 - `dynamic_link`:bool = False
 
   cc_binary is static linked defaultly for easy deploying, include libstdc++.
-  For some [technology limitation](https://stackoverflow.com/questions/8140439/why-would-it-be-impossible-to-fully-statically-link-an-application)，
+  For some [technology limitation](https://stackoverflow.com/questions/8140439/why-would-it-be-impossible-to-fully-statically-link-an-application),
   glibc is not static linked. we can link it statically, but there are still some problems.
 
-  If you want to generate a dynamic linked executable, you can set it to True，all dependency
+  If you want to generate a dynamic linked executable, you can set it to True,all dependency
   libraries will be linked statically, except prebuilt libraries if they has no dynamic version.
   This may reduce disk usage, but program will startup slower. Usually it can be use for local
   testing, but it didn't fit for deploy.
@@ -500,7 +500,7 @@ set `prefix=''`, then it becomes `file.so`.
 
 To control the external visibility of symbols in the linking result, you can use [GCC extended attributes in the source code or command line options](https://gcc.gnu.org/wiki/Visibility).
 
-With the linker version file, it is possible to control or override the visibility settings in the source code when linking，eg:
+With the linker version file, it is possible to control or override the visibility settings in the source code when linking,eg:
 
 ```ld
 {
@@ -547,7 +547,7 @@ Compile static data file to be resource, which can be accessed in the program di
 
 When we deploy a program, it often requires many other files to be deployed together. it's often boring.
 Blade support `resource_library`, make it quite easy to put resource files into the executable easily.
-For example, put there static pages into a library：
+For example, put there static pages into a library:
 
 ```python
 resource_library(
@@ -564,10 +564,10 @@ resource_library(
 )
 ```
 
-It will generate a library `libstatic_resource.a`，and a header file `static_resource.h`(with full include path)。
+It will generate a library `libstatic_resource.a`,and a header file `static_resource.h`(with full include path).
 
 When you need tp use it, you need to include `static_resource.h`(with full path from workspace root)
-and also "common/base/static_resource.h"，
+and also "common/base/static_resource.h",
 
 Use STATIC_RESOURCE macro to simplify access to the data (defined in "common/base/static_resource.h"):
 
@@ -594,7 +594,7 @@ The attributes `cuda_path` and `extra_cuflags` are added.
 `extra_cuflags` support some flags which only work for cuda.
 
 
-Environment variable `NVCC` is pointed to the path of `nvcc binary`，such as `NVCC=/usr/local/cuda/bin/nvcc blade build`.  
+Environment variable `NVCC` is pointed to the path of `nvcc binary`,such as `NVCC=/usr/local/cuda/bin/nvcc blade build`.  
 Environment variable `CUDA_PATH` is pointed to the installed path of cuda, with which `{CUDA_PATH}/include` and `{CUDA_PATH}/samples/common/inc` will be added to include search path.
 
 Priority:  `cuda_path` > `NVCC`/`CUDA_PATH`.

@@ -1,8 +1,8 @@
-# Build Functions #
+# Build Functions
 
 Some Functions can be called in BUILD files.
 
-## glob ##
+## glob
 
 ```python
 glob(include, exclude=[], allow_empty=False)

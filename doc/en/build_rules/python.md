@@ -1,6 +1,6 @@
-# Build Python Targets #
+# Build Python Targets
 
-## py_library ##
+## py_library
 
 Build a python library from source code
 
@@ -42,7 +42,7 @@ python_library(
 
 `srcs` is the file name of the python package, there can only be one file, and it supports both `whl` and `egg` formats.
 
-## py_binary ##
+## py_binary
 
 Compile the py source code into an executable file.
 
@@ -76,7 +76,7 @@ Attributes:
   exclusions = ['google/protobuf/*'],
   ```
 
-## py_test ##
+## py_test
 
 Compile and run the python test code.
 
@@ -95,7 +95,7 @@ py_test(
 
 We usually use the `unittest` library for python unit testing.
 
-## Using Protobuf ##
+## Using Protobuf
 
 The proto file needs to be described by [proto_library](idl.md#proto_library), which is introduced in the deps of py_*.
 The corresponding python protobuf encoding and decoding code will be automatically generated during blade build.

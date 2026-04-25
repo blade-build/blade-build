@@ -1,4 +1,4 @@
-# Shell Test Rule #
+# Shell Test Rule
 
 Run shell script based tests. you can run multiple processes in the script, it is useful for writing complex tests.
 

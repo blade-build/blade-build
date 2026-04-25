@@ -1,9 +1,9 @@
-# External Software Dependencies #
+# External Software Dependencies
 
 Blade requires the following dependencies:
 
 * Linux or Mac operating system
-* Python v2.7+
+* Python v2.7+ or Python v3.6+
 * Ninja v1.8+
 
 Blade can also work with the following software:

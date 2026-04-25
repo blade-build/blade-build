@@ -1,8 +1,8 @@
-# Build Java Targets #
+# Build Java Targets
 
-## java_library ##
+## java_library
 
-Build a jar from java source file。
+Build a jar from java source file.
 
 ```python
 java_library(
@@ -30,7 +30,7 @@ java_library(
 
 - resources attribute
 
-resource file to be packed into this jar，you can also use glob function.
+resource file to be packed into this jar,you can also use glob function.
 Blade respect the [Maven Standard Directory Layout](https://maven.apache.org/guides/introduction/introduction-to-the-standard-directory-layout.html),
 treats the `resources` dir as the root of resource files to be packed into the generated jar.
 So there are some mapping rules, for examples:
@@ -57,9 +57,9 @@ java_library(
 - coverage attribute
   bool, Whether generate test coverage data for this library. It is useful to be False in some cases such as srcs are generated.
 
-### Mutiple kinds of dependancy ###
+### Mutiple kinds of dependancy
 
-For java targets，except the normal `deps`, they also support `exported_deps`，`provided_deps`.
+For java targets,except the normal `deps`, they also support `exported_deps`,`provided_deps`.
 There is a notable difference from C++ targets: for java_library, the dependancies are not **transtive** at the compile phrase.
 For example, in this BUILD file:
 
@@ -83,7 +83,7 @@ they should depends one your dependency, use this attribute will be a help.
 
 When a dependency appears in the `exported_deps`, it will be passed to the source file at the compile phrase.
 
-For the above example, if in B.java, some method used the type defined in C.java，the user of `B`,
+For the above example, if in B.java, some method used the type defined in C.java,the user of `B`,
 `A` also have to depends on `C`, or there will be a compile error. if you put `C` int the
 `exported_deps` of `B`, `A` will get `C` as as it compile dependency.
 
@@ -94,11 +94,11 @@ java_library(name = 'B', srcs = 'B.java', exported_deps = ':C')
 - provided_deps attribute
 
 `provided_deps` is used to describe some libraries which will be provied by the runtime environment,
-same as the `provided` in maven scope，there dependencies will be used to compile，but they will
+same as the `provided` in maven scope,there dependencies will be used to compile,but they will
 not be packed into the final `fatjar`. The scenaio is hadoop or spark. this attribute can reduce
 the size of fatjar, and also reduces the conflict with the environment provided libraries.
 
-## maven_jar ##
+## maven_jar
 
 Use this rule to describe a jar in the maven repository.
 
@@ -113,7 +113,7 @@ Besides `name` and `id`, maven_jar also provides the following attributes to fit
 
 - classifier attribute
   Specify `classifier`, for the same maven id(group:artifact:version), you can use classifier to locate different jar file.
-  Such as hadoop-common-2.2.0.jar and hadoop-common-2.2.0-tests.jar。
+  Such as hadoop-common-2.2.0.jar and hadoop-common-2.2.0-tests.jar.
 
 - transitive attribute
   Whether use transitive maven dependency, the default value is True, blade will download jar and its
@@ -122,7 +122,7 @@ Besides `name` and `id`, maven_jar also provides the following attributes to fit
 In order to avoid duplicated descriptions of artificts with the same id and avoid potential version conflicts,
 it is recommended to [centralized management](../config.md#java_config) for `maven_jar`s.
 
-## java_fat_library ##
+## java_fat_library
 
 Merge all java_library/maven_jar, generate a fatjar, can be used for deploy, same as `jar-with-dependencies` in maven.
 
@@ -170,7 +170,7 @@ Specify maven dependencies to be excludes. The syntax is a list of maven ids
 (group:artifact:version), also support wildcard, such as:
 `com.google.protobuf:protobuf:\*` and `com.google.protobuf:\*:\*`, but only the tail parts can be wildcard.
 
-## java_binary ##
+## java_binary
 
 Build executable from java source files.
 
@@ -189,7 +189,7 @@ java_binary(
 
 The results include a fat jar with a wrapper shell script.
 
-## java_test ##
+## java_test
 
 Build and run tests.
 

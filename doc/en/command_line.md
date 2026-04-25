@@ -41,7 +41,7 @@ Blade will search `BUILD` files recursively for the `...` target pattern, if som
 excluded from searching, you can put an empty `.bladeskip` under it.
 
 If you have [ohmyzsh](https://ohmyz.sh/) installed, the bare `...` will be automatically
-[expanded to `... \...`](https://github.com/ohmyzsh/ohmyzsh/wiki/Cheatsheet#directory), which needs to be written as `. /...`.
+[expanded to `..\..`](https://github.com/ohmyzsh/ohmyzsh/wiki/Cheatsheet#directory), which needs to be written as `./...`.
 
 ## Filter by Target Tags
 
@@ -111,6 +111,7 @@ Here are some common command line options
 - `--generate-dynamic` Forces the generation of dynamic libraries
 - `--generate-java` generates java files for proto_library and swig_library
 - `--generate-php` generates php files for proto_library and swig_library
+- `--generate-go` generates go files for proto_library
 - `--gprof` supports GNU gprof
 - `--coverage` supports generation of coverage and currently supports GNU gcov and Java jacoco
 
@@ -140,7 +141,7 @@ blade test base:string_test
 
 ## Command Line Completion
 
-There is a simple command line completion after executing the [install](misc.md#inshall) command.
+There is a simple command line completion after executing the [install](misc.md#install) command.
 After installing [argcomplete](https://pypi.org/project/argcomplete/), you will get a complete command line completion.
 
 ### Install

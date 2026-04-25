@@ -4,23 +4,23 @@
 
 ### install
 
-blade命令的符号链接会被安装下面的命令到~/bin 下。
+将 blade 命令的符号链接安装到 ~/bin 目录下。
 
 ### lsrc
 
-列出当前目录下指定的源文件，以blade的srcs列表格式输出。
+列出当前目录下指定的源文件，以 blade 的 srcs 列表格式输出。
 
 ### genlibbuild
 
-自动生成以目录名为库名的cc_library，以测试文件的名为名的cc_test，proto的BUILD文件，并假设这些测试都依赖这个库
+自动生成以目录名为库名的 cc_library，以测试文件的名为名的 cc_test，proto 的 BUILD 文件，并假设这些测试都依赖这个库
 
 ### alt
 
 在源代码目录和相应的构建结果目录之间来回跳转
 
-## vim集成
+## vim 集成
 
-我们编写了vim的blade语法文件，高亮显示blade关键字，install后就会自动生效。
+我们编写了 vim 的 blade 语法文件，高亮显示 blade 关键字，install 后就会自动生效。
 
 我们编写了 Build 命令，使得可以在 vim 中直接执行 blade，并快速跳转到出错行（得益于 vim 的
 [QuickFix](http://easwy.com/blog/archives/advanced-vim-skills-quickfix-mode/) 特性）。

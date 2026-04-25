@@ -24,7 +24,7 @@
 全局的 Blade API 模块，通过 `blade.` 来访问，包括：
 
 - `current_source_dir()` 函数：当前 BUILD 文件所在的目录（相对于 workspace 的根目录）
-- `current_target_dir()` 函数：当前 BUILD 文件所在的目录对应于（相对于 workspace 的根目录）
+- `current_target_dir()` 函数：当前 BUILD 文件所对应的构建输出目录（相对于 workspace 的根目录）
 - `config` 子模块：读取 blade 的配置信息
 - `console` 子模块：输出诊断信息
 - `re` 子模块：正则表达式
@@ -35,14 +35,14 @@
 访问配置信息，包括：
 
 - `get_section()` 函数：获得一个配置节的内容，比如 `cc_config`，可以通过 `get` 方法读取其中的配置项
-- `get_item()` 函数：获得一个具体的配置项，比如 `blade.config.get_item('cc_config'、'cppflags')`
+- `get_item()` 函数：获得一个具体的配置项，比如 `blade.config.get_item('cc_config', 'cppflags')`
 
 ### `blade.console` 模块
 
 输出诊断信息，包括：
 
 - `debug()` 函数：输出调试信息，默认不显示，用 `--verbose` 选项后才输出到屏幕
-- `info()` 函数：输出信息信息
+- `info()` 函数：输出提示信息
 - `notice()` 函数：输出一些重要信息
 - `warning()` 函数：输出警告信息
 - `error()` 函数：输出错误信息，会导致构建失败

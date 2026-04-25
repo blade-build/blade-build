@@ -15,7 +15,7 @@ blade will be cloned to your `~/.cache/blade-build`. It also create a symbolic l
 By executing the install script, blade can be installed under ~/bin.
 It is installed in a soft chain mode. After installation, the original directory that is checked out cannot be deleted.
 Blade uses ninja as the backend, you need to install ninja.
-Blade supports both Python 2.7.x and Python 3，and Python 2.7 support will be deprecated in the future.
+Blade supports both Python 2.7.x and Python 3.6+ (Python 3.x has been tested on 3.6 and 3.9), and Python 2.7 support will be deprecated in the future.
 
 Install makes it possible to execute directly in any directory
 

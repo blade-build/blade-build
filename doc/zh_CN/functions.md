@@ -1,8 +1,8 @@
-# 构建函数 #
+# 构建函数
 
 一些 BUILD 文件中可以调用的函数
 
-## glob ##
+## glob
 
 ```python
 glob(include, exclude=[], allow_empty=False)

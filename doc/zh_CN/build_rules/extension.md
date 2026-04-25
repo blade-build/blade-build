@@ -37,7 +37,7 @@ GTEST_LIBS = ["//thirdparty/gtest:gtest"]
 
 ## 使用扩展
 
-Blade 支持 2 种方式使用扩展，分别是 `load` 和 `include`，无论那种方式，都支持相对当前目录的子目录路径和 `//`
+Blade 支持 2 种方式使用扩展，分别是 `load` 和 `include`，无论哪种方式，都支持相对当前目录的子目录路径和 `//`
 开头的相对 workspace 的路径，并且导入的符号**仅对当前 `BUILD` 文件有效**。
 
 ### load 函数

@@ -34,11 +34,11 @@ blade dump --config --to-file my.config
 
 - `backend_builder` : string = 'ninja'
 
-  Blade所用的后端构建系统，只支持 `ninja`。
+  Blade 所用的后端构建系统，只支持 `ninja`。
 
-  Blade 一开始依赖 scons 作为后端，但是后来由于优化的需要，发现 ninja 更合适。
+  Blade 一开始依赖 SCons 作为后端，但是后来由于优化的需要，发现 ninja 更合适。
   [ninja](https://ninja-build.org/)是一个专注构建速度的底层构建系统，经实测在构建大型项目时，
-  用 ninja 速度比 scons 快很多，因此我们淘汰了对 scons 的支持。
+  用 ninja 速度比 SCons 快很多，因此我们淘汰了对 SCons 的支持。
 
 - `duplicated_source_action` : string = 'warning' | ['warning', 'error']
 
@@ -52,11 +52,11 @@ blade dump --config --to-file my.config
 
   生成的构建结果中调试符号的级别，支持四种级别，越高越详细，可执行文件也越大。
 
-- `build_jobs` : int = 0 | 0~CPU核数
+- `build_jobs` : int = 0 | 0~CPU 核数
 
   并行构建的最大进程数量，默认会根据机器配置自动计算。
 
-- `test_jobs` : int = 0 | 0~CPU核数/2
+- `test_jobs` : int = 0 | 0~CPU 核数/2
 
   并行测试的最大进程数量，默认会根据机器配置自动计算。
 
@@ -67,7 +67,8 @@ blade dump --config --to-file my.config
 
 - `run_unrepaired_tests` : bool = False
 
-  增量测试时，是否运行未修复的（先前已经失败且未修改的）测试。
+  增量测试时，是否运行未修复（指之前失败且源代码仍未修改）的测试。
+  也可以通过命令行选项 `--run-unrepaired-tests` 开启。
 
 - `legacy_public_targets` : list = []
 
@@ -90,7 +91,7 @@ blade dump --config --to-file my.config
 
 ### cc_config
 
-所有c/c++目标的公共配置：
+所有 c/c++目标的公共配置：
 
 - `extra_incs` : list = []
 
@@ -123,11 +124,11 @@ blade dump --config --to-file my.config
 
 - `cxx_warnings` : list = 内置
 
-  编译C++代码时的专用警告。
+  编译 C++代码时的专用警告。
 
 - `optimize` : list = 内置
 
-  优化专用选项，debug 模式下会被忽略，比如 `['-O2'，'-omit-frame-pointer'] 等。
+  优化专用选项，debug 模式下会被忽略，比如 `['-O2', '-omit-frame-pointer']` 等。
   单独分出 optimize 选项是因为这些选项在 debug 模式下需要被忽略。
 
 - `fission` : bool = False
@@ -149,7 +150,7 @@ blade dump --config --to-file my.config
 
   也可以通过命令行参数 `--dwp` 来开启此功能。
 
-- `hdr_dep_missing_severity` : string = warning | ['info', 'warning', 'error'
+- `hdr_dep_missing_severity` : string = 'warning' | ['info', 'warning', 'error']
 
   对头文件所属的库的依赖的缺失的严重性。
   和 `hdr_dep_missing_suppress` 一起控制头文件依赖缺失检查的行为，参见 [`cc_library.hdrs`](build_rules/cc.md#cc_library)。
@@ -179,7 +180,7 @@ blade dump --config --to-file my.config
   path/to/collect-inclusion-errors.py --missing > hdr_dep_missing_suppress.conf
   ```
 
-  因此你可以在把这个文件复制到某处，然后在 `BLADE_ROOT` 中加载:
+  因此你可以在把这个文件复制到某处，然后在 `BLADE_ROOT` 中加载：
 
   ```python
   cc_config(
@@ -246,7 +247,7 @@ C/C++ 库的配置：
 
   ```python
   cc_library_config(
-      hdrs_missing_suppress = load_value('blade_hdr_missing_spppress'),
+      hdrs_missing_suppress = load_value('hdrs_missing_suppress.conf'),
   )
   ```
 
@@ -266,9 +267,9 @@ C/C++ 库的配置：
 
 - `gperftools_libs` : list = ['#tcmalloc']
 
-  tcmclloc 库，blade deps 格式。
+  tcmalloc 库，blade deps 格式。
 
-- `gperftools_debug_`libs | list     | ['#tcmalloc_debug']
+- `gperftools_debug_libs` : list = ['#tcmalloc_debug']
 
   tcmalloc_debug 库，blade deps 格式。
 
@@ -276,23 +277,23 @@ C/C++ 库的配置：
 
   gtest 的库，blade deps 格式。
 
-- `gtest_main_libs` : list = [‘#gtest_main’]
+- `gtest_main_libs` : list = ['#gtest_main']
 
   gtest_main 的库路径，blade deps 格式。
 
-注意:
+注意：
 
-- gtest 1.6 开始，去掉了 make install，但是可以绕过，参见[gtest1.6.0安装方法](http://blog.csdn.net/chengwenyao18/article/details/7181514)。
+- gtest 1.6 开始，去掉了 make install，但是可以绕过，参见[gtest1.6.0 安装方法](http://blog.csdn.net/chengwenyao18/article/details/7181514)。
 - gtest 库还依赖 pthread，因此 gtest_libs 需要写成 `['#gtest', '#pthread']`
-- 或者把源码纳入你的源码树，比如thirdparty下，就可以写成 `gtest_libs='//thirdparty/gtest:gtest'`。
+- 或者把源码纳入你的源码树，比如 thirdparty 下，就可以写成 `gtest_libs='//thirdparty/gtest:gtest'`。
 
 ### cuda_config
 
-所有cuda目标的公共配置：
+所有 cuda 目标的公共配置：
 
 - `cuda_path` : string = ''
 
-  CUDA 库所在路径, 为空或者 "//" 开头的工作区绝对路径
+  CUDA 库所在路径， 为空或者 "//" 开头的工作区绝对路径
 
 - `cu_warnings` : list = 内置
 
@@ -308,9 +309,9 @@ Java 构建相关的配置：
 
 - `java_home` : string = 读取 '$JAVA_HOME' 环境变量
 
-  设置JAVA_HOME。
+  设置 JAVA_HOME。
 
-- `version` : string = '' | ['8' '1.8'] 等
+- `version` : string = '' | ['8', '1.8'] 等
 
   JDK 兼容性版本号。默认为空，由编译器决定。
 
@@ -342,7 +343,7 @@ Java 构建相关的配置：
 
   maven 仓库的 URL。
 
-- `maven_jar_allowed_dirs` : list = ''
+- `maven_jar_allowed_dirs` : list = []
 
   允许调用 `maven_jar` 的目录列表（及其子目录）。
 
@@ -367,7 +368,7 @@ Java 构建相关的配置：
 
   maven 仓库的 SNAPSHOT 版本的更新策略。
 
-  语义遵守[Maven文档](https://maven.apache.org/ref/3.6.3/maven-settings/settings.html)。
+  语义遵守[Maven 文档](https://maven.apache.org/ref/3.6.3/maven-settings/settings.html)。
 
 - `maven_snapshot_update_interval` : int = 24 * 60
 
@@ -379,7 +380,7 @@ Java 构建相关的配置：
 
   设置大于 1 的值可以提高下载速度，但是由于[maven 本地仓库缓存默认不是并发安全的](https://issues.apache.org/jira/browse/MNG-2802),
   你可以尝试安装[takari](http://takari.io/book/30-team-maven.html#concurrent-safe-local-repository)
-  来确保安全, 注意这个插件其实有多个可用的版本，文档示例里的不是最新的。
+  来确保安全， 注意这个插件其实有多个可用的版本，文档示例里的不是最新的。
 
 ### proto_library_config
 
@@ -387,11 +388,11 @@ Java 构建相关的配置：
 
 - `protoc` : string = 'protoc'
 
-  protoc编译器的路径。
+  protoc 编译器的路径。
 
 - `protobuf_libs` : list =
 
-  protobuf库的路径，Blade deps 格式。
+  protobuf 库的路径，Blade deps 格式。
 
 - `protobuf_path` : string =
 
@@ -399,7 +400,7 @@ Java 构建相关的配置：
 
 - `protobuf_cc_warning`: string = ''
 
-  编译pb.cc 时是否开启warnings, yes或者no
+  编译 pb.cc 时是否开启 warnings, yes 或者 no
 
 - `protobuf_include_path` : string =
 
@@ -407,7 +408,7 @@ Java 构建相关的配置：
 
 ### thrift_library_config
 
-编译thrift需要的配置：
+编译 thrift 需要的配置：
 
 - `thrift` : string = 'thrift'
 
@@ -471,7 +472,7 @@ cc_config(
 
 ## 环境变量
 
-Blade还支持以下环境变量：
+Blade 还支持以下环境变量：
 
 - `TOOLCHAIN_DIR`，默认为空
 - `CPP`，默认为 `cpp`
