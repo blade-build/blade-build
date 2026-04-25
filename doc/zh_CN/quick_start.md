@@ -1,8 +1,10 @@
 # 快速上手
 
-让我们从一个 `hello-world` 开始，练习使用 Blade 吧。
+本教程通过一个「Hello World」示例，带你上手 Blade 构建系统。
 
-## 创建工作空间
+## 建立工作空间
+
+新建一个工作空间目录：
 
 ```console
 $ mkdir quick-start
@@ -10,19 +12,23 @@ $ cd quick-start
 $ touch BLADE_ROOT
 ```
 
-## 定义实现 say 库
+## 创建 `say` 库
 
-创建头文件 `say.h`：
+### 头文件定义
+
+创建 `say.h`，内容如下：
 
 ```cpp
 #pragma once
 #include <string>
 
-// Say a message
+// 向标准输出输出一条消息
 void Say(const std::string& msg);
 ```
 
-创建实现文件 `say.cpp`：
+### 实现文件
+
+创建 `say.cpp`：
 
 ```cpp
 #include "say.h"
@@ -33,7 +39,9 @@ void Say(const std::string& msg) {
 }
 ```
 
-创建 `BUILD` 文件，把上述文件描述为一个 `say` 库：
+### BUILD 文件配置
+
+在 `BUILD` 文件中声明该库：
 
 ```python
 cc_library(
@@ -43,22 +51,29 @@ cc_library(
 )
 ```
 
-`cc_library` 表示这是一个 C/C++ 库，`hdrs` 里表示这个库的对外公开的接口头文件，`srcs` 里的则是其实现文件，
-如果有私有头文件，也要放在 `srcs` 里。
+**核心概念：**
 
-## 定义实现 hello 库
+- `cc_library`：声明一个 C/C++ 库目标
+- `hdrs`：对外暴露的头文件
+- `srcs`：实现源文件（含私有头文件）
 
-创建头文件 `hello.h`：
+## 创建 `hello` 库
+
+### 头文件定义
+
+创建 `hello.h`：
 
 ```cpp
 #pragma once
 #include <string>
 
-// Say hello to `to`
+// 生成一条问候消息
 void Hello(const std::string& to);
 ```
 
-创建实现文件 `hello.cpp`：
+### 实现文件
+
+创建 `hello.cpp`：
 
 ```cpp
 #include "say.h"
@@ -68,7 +83,9 @@ void Hello(const std::string& to) {
 }
 ```
 
-创建 `BUILD` 文件，把上述文件描述为一个 `hello` 库：
+### BUILD 文件配置
+
+在 `BUILD` 文件中追加 `hello` 库：
 
 ```python
 cc_library(
@@ -79,11 +96,17 @@ cc_library(
 )
 ```
 
-看起来和 say 库类似，但是多了一个 `deps` 参数，表示依赖 `say` 库。`:` 前缀表示目标在同一个 `BUILD` 文件里。
+**依赖管理：**
 
-## 实现 hello-world 程序
+- `deps`：声明库依赖
+- `:` 前缀：表示同一 BUILD 文件内的目标
+- 传递依赖：Blade 会自动向上传播依赖关系
 
-创建 `hello-world.cpp` 文件：
+## 创建 `hello-world` 可执行程序
+
+### 源文件
+
+创建 `hello-world.c`：
 
 ```c
 #include "hello.h"
@@ -94,20 +117,27 @@ int main() {
 }
 ```
 
-在 BUILD 文件中增加编译 `hello-world` 的规则调用：
+### 扩展 BUILD 文件
+
+在 `BUILD` 文件中追加可执行目标：
 
 ```python
 cc_binary(
     name = 'hello-world',
-    srcs = ['hello-world.cpp'],
+    srcs = ['hello-world.c'],
     deps = [':hello'],
 )
 ```
 
-注意规则名是 `cc_binary` 了，`deps` 里需要加入对 `hello` 库的依赖，但是不需要加入对 `say` 库的依赖，因为这是
-`hello` 的实现细节，`hello-world` 目标不需要了解，编译和链接时，Blade 会正确处理依赖关系的传递。
+**依赖声明策略：**
 
-构建 `hello-world` 程序：
+- `cc_binary`：创建一个可执行目标
+- 只声明直接依赖：无需列出传递依赖
+- Blade 会自动处理间接依赖
+
+## 构建与运行
+
+### 构建流程
 
 ```console
 $ blade build :hello-world
@@ -115,14 +145,26 @@ Blade(info): Building...
 Blade(info): Build success.
 ```
 
-运行 `hello-world` 程序：
+### 执行程序
 
 ```console
 $ blade run :hello-world
 Blade(info): Building...
 Blade(info): Build success.
-Blade(info): Run '['/data1/code/blade-build/example/quick-start/build64_release/hello-world']'
+Blade(info): Run['/data1/code/blade-build/example/quick-start/build64_release/hello-world']
 Hello, World!
 ```
 
-完整的例子见 [example](../../example) 下的 [quick-start](../../example/quick-start)。
+## 完整示例参考
+
+完整可运行的示例请参考：
+
+- [quick-start](../../example/quick-start) 目录
+- [example](../../example) 目录结构
+
+**学习收获：**
+
+- 理解 Blade 的声明式构建配置
+- 掌握依赖管理的基本原则
+- 学会增量构建的优化思路
+- 获得 C/C++ 项目组织的实战经验

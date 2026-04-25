@@ -7,9 +7,7 @@
 
 ![Blade Build](/image/blade-200x400.png "Blade Build")
 
-Blade是一个方便易用高性能的现代化代码构建系统，特别适合公司内的大规模代码库的敏捷构建，内置了对多种编程语言及单元测试框架的直接支持。
-
-Blade is an easy-to-use, fast, and modern build system for trunk-based development in large-scale monorepo codebases. It supports building multiple programming languages.
+Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based development）的现代化、高性能构建系统。
 
 [English](README.md) | 简体中文
 
@@ -22,22 +20,23 @@ Blade is an easy-to-use, fast, and modern build system for trunk-based developme
 
 ## 演示
 
-我们先来看一个漂亮的演示：
+我们先来看一个简洁的演示：
 
 [![asciicast](https://asciinema.org/a/o9uQ2uia4OVqghXUid7XSNjv1.svg)](https://asciinema.org/a/o9uQ2uia4OVqghXUid7XSNjv1)
 
-## 发布
+## 版本发布
 
-master 分支上的代码是开发版，应当视为 alpha 版。正式环境请优先考虑使用 tag 上的版本。我们会不定期地把内部大规模代码库上验证过的版本发布到 tag 上。
+`master` 分支上的代码为开发版本，应视为 alpha 版。生产环境请优先使用 tag 上的版本。我们会不定期地将在大规模内部代码库中经过验证的版本发布到 tag。
 
-* Blade 发布2.0，包含以下特性：
-  * python 最低版本要求2.7，并支持 python 3
-  * 对 Java，scala 构建的完善支持
-  * 全面支持Python构建
-  * 支持自定义扩展
-  * 后端只支持[ninja](doc/zh_CN/config.md#global_config)构建系统，大幅度提高构建性能
+* Blade 2.0 现已发布，带来以下重要增强：
 
-具体请查看[升级说明](doc/zh_CN/upgrade-to-v2.md)。
+  * 最低 Python 版本要求提升至 2.7，同时全面支持 Python 3
+  * 完善的 Java 与 Scala 构建支持
+  * 全面的 Python 语言构建支持
+  * 自定义扩展机制
+  * 后端独家采用 [Ninja](doc/zh_CN/config.md#global_config) 构建系统，构建性能显著提升
+
+升级细节请参考[升级说明](doc/zh_CN/upgrade-to-v2.md)。
 
 ## Stargazers over time
 
@@ -45,25 +44,51 @@ master 分支上的代码是开发版，应当视为 alpha 版。正式环境请
 
 ## 源起
 
-Blade 是一个现代构建系统，期望的目标是强大而好用，把程序员从构建的繁琐中解放出来。
+Blade 是一款现代化的高性能构建系统，既追求强大的能力，也追求良好的使用体验，目标是把程序员从繁琐的构建工作中解放出来。它原生支持 C/C++、Java、Python、Scala、Protocol Buffers 等多种语言，自动分析目标间的依赖，并将编译、链接、测试（支持增量测试与并行测试）以及静态代码分析无缝整合在一起。
 
-Blade主要定位于linux下的大型C++项目，密切配合研发流程，比如单元测试，持续集成，覆盖率统计等。
-但像unix下的文本过滤程序一样，保持相对的独立性，可以单独运行。目前重点支持i386/x86_64 Linux，未来可以考虑支持其他的类Unix系统。
+在设计上，Blade 在简化构建配置的同时，也为复杂项目提供足够的健壮性。
 
-在[腾讯公司“台风”云计算平台](/doc/Hadoop-in-China-2011-Typhoon.mhtml)开发过程中，为了解决 GNU Make，
-Autotools 的难用和繁琐的问题，参考[Google工程博客上的一些文章](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html)，我们开发了这个全新的构建系统，整个系统基于多个声明式的构建脚本，在构建脚本里，
-只需要声明要构建什么目标，目标的源代码，以及其直接依赖的其它目标，不需要说明如何构建。大大降低了使用难度，提高了开发效率。
+Blade 主要面向 Linux 下的大型 C++ 项目，与研发流程（单元测试、持续集成、覆盖率统计等）紧密配合；同时，像 Unix 文本处理工具一样保持相对独立，可以单独运行。目前重点支持 i386 / x86_64 Linux，未来可能扩展到更多的类 Unix 系统。
 
-2012年，Blade对外开源，成为腾讯公司最早的开源项目。目前已经广泛应用于腾讯广告系统、微信后台服务、腾讯游戏后台服务、腾讯基础架构，以及小米，百度，爱奇艺等其他公司，也收到了来自公司内外的多个Pull Requests。
+在腾讯[「台风」云计算平台](/doc/Hadoop-in-China-2011-Typhoon.mhtml)的研发过程中，我们深刻体会到 GNU Make、Autotools 在大规模环境下的不足。受 [Google 工程博客上一系列文章](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html) 的启发，我们将 Blade 设计为一款声明式构建系统。
 
-代码开源后，托管到googlecode上，因后来googlecode关闭，迁移到chen3feng个人git仓库继续维护。
+整个系统基于若干声明式的构建脚本。在这些脚本中，开发者只需声明「构建什么」（目标、源文件、直接依赖），而不必描述「如何构建」。这种思路大幅降低了配置复杂度，也显著提升了开发效率与可维护性。
+
+2012 年，Blade 对外开源，成为腾讯公司最早的开源项目之一。此后，Blade 在腾讯技术栈中获得了广泛应用，覆盖广告平台、微信后台服务、游戏服务端、基础架构等核心场景；在腾讯之外，小米、百度、爱奇艺等多家公司也在使用 Blade。
+
+Blade 由此形成了活跃的贡献者社区，收到来自公司内外的众多 Pull Request。项目最初托管在 Google Code 上，在 Google Code 停止服务后，迁移到 chen3feng 的个人仓库继续维护与演进。
+
+借助 Blade，只需一行命令即可完成多个目标的编译、链接与测试。例如：
+
+递归构建并测试 `common` 目录下的所有目标：
+
+```bash
+blade test common...
+```
+
+以 32 位模式构建与测试：
+
+```bash
+blade test -m32 common...
+```
+
+以 debug 模式构建与测试：
+
+```bash
+blade test -pdebug common...
+```
+
+当然，这些选项也可以组合使用：
+
+```bash
+blade test -m32 -pdebug common...
+```
 
 ## 为何而生
 
-首先，Blade解决了依赖问题。
-当你在构建某些目标时，头文件有变化，会自动重新构建。
-最方便的是，Blade也能追踪库文件的依赖关系。比如
-库 foo 依赖库 common，那么在库 foo 的 BUILD 文件中列入依赖：
+首先，Blade 解决了依赖问题。在构建目标时，如果头文件发生变化，Blade 会自动重新构建受影响的代码。
+
+更方便的是，Blade 还能追踪库之间的依赖关系。例如，库 `foo` 依赖库 `common`，只需在 `foo` 的 BUILD 文件中声明这层依赖：
 
 ```python
 cc_library(
@@ -74,7 +99,7 @@ cc_library(
 )
 ```
 
-那么对于使用foo的程序，如果没有直接用到common，那么就只需要列出foo，并不需要列出common。
+此时，使用 `foo` 的程序即便没有直接使用 `common`，也只需列出 `foo` 作为依赖，而无需显式声明 `common`：
 
 ```python
 cc_binary(
@@ -84,69 +109,44 @@ cc_binary(
 )
 ```
 
-这样当你的库实现发生变化，增加或者减少库时，并不需要通知库的用户一起改动，Blade自动维护这层间接的依赖关系。当构建my_app时，也会自动检查foo和common是否也需要更新。
+这样一来，当库的实现发生变化、或新增、删除依赖时，库的使用方无需同步修改。Blade 会自动维护这层间接依赖；在构建 `my_app` 时，也会自动检查 `foo` 与 `common` 是否需要更新。
 
-说到易用性，除了依赖关系的自动维护，Blade还可以做到，用户只需要敲一行命令，就能把整个目录树的编译链接和单元测试全部搞定。例如：
-
-递归构建和测试common目录下所有的目标
-
-```bash
-blade test common...
-```
-
-以32位模式构建和测试
-
-```bash
-blade test -m32 common...
-```
-
-以调试模式构建和测试
-
-```bash
-blade test -pdebug common...
-```
-
-显然，你可以组合这些标志
-
-```bash
-blade test -m32 -pdebug common...
-```
+除了自动维护依赖关系外，Blade 在易用性上的另一大亮点是：用户只需一行命令，就能完成整个目录树的编译、链接与单元测试。
 
 ## 特点
 
-* 自动分析头文件依赖关系，构建受影响的代码。
-* 增量编译和链接，只构建因变更受影响而需要重新构建的代码。
-* 自动计算库的间接依赖，库的作者只需要写出直接依赖，构建时自动检查所依赖的库是否需要重新构建。
-* 在任意代码树的任意子目录下都能构建。
-* 支持一次递归构建多个目录下的所有目标，也支持只构建任意的特定的目标。
-* 无论构建什么目标，这些目标所依赖的目标也会被自动连坐更新。
-* 内置 debug/release 两种构建类型。
-* 彩色高亮构建过程中的错误信息。
-* 支持 ccache
-* 支持 distcc
-* 支持基于构建多平台目标
-* 支持构建时选择编译器（不同版本的gcc，clang等）
-* 支持编译 protobuf，lex, yacc, swig
-* 支持自定义规则
-* 支持测试，在命令行跑多个测试
-* 支持并行测试（多个测试进程并发运行）
-* 支持增量测试（无需重新运行的测试程序自动跳过）
-* 集成 gperftools，自动检测测试程序的内存泄露
-* 构建脚本 vim 语法高亮
-* svn 式的子命令命令行接口。
-* 支持 bash 命令行补全
-* 用 python 编写，无需编译，直接安装使用。
+* 自动分析头文件依赖关系，重新构建受影响的代码。
+* 增量编译与链接，只重建真正需要重建的部分。
+* 自动计算库的间接依赖；库作者只需声明直接依赖，构建时自动检查间接依赖是否需要重建。
+* 可从代码树任意子目录启动构建。
+* 支持一次递归构建多个目录下的所有目标，也支持只构建指定目标。
+* 无论构建什么目标，其依赖都会被自动跟随更新。
+* 内置 debug / release 两种构建类型。
+* 彩色高亮展示构建过程中的错误信息。
+* 支持 ccache。
+* 支持 distcc。
+* 支持多平台目标构建。
+* 支持构建时选择编译器（不同版本的 GCC、Clang 等）。
+* 支持 protobuf、lex、yacc、SWIG 的构建。
+* 支持自定义构建规则。
+* 支持在命令行一次运行多个测试。
+* 支持并行测试（多个测试进程并发运行）。
+* 支持增量测试（无需重新运行的测试自动跳过）。
+* 集成 gperftools，自动检测测试程序中的内存泄漏。
+* 为构建脚本提供 Vim 语法高亮。
+* 采用 SVN 风格的子命令式命令行接口。
+* 支持 Bash 命令行补全。
+* 使用 Python 编写，无需编译，直接安装使用。
 
 彻底避免以下问题：
 
-* 头文件更新，受影响的模块没有重新构建。
-* 被依赖的库需要更新，而构建时没有被更新，比如某子目录依
+* 头文件已更新，但受影响的模块未能重新构建。
+* 所依赖的库需要更新，但在构建时未被同步更新（例如某子目录的依赖被遗漏）。
 
 ## 文档
 
-看到这里，你应该觉得Blade是个不错的工具，那么，阅读[完整文档](doc/zh_CN/README.md)，开始使用吧。
-
-如果遇到有问题，可以试试先查一下[FAQ](doc/zh_CN/FAQ.md)，也许有你需要的信息。
+* [完整文档](doc/zh_CN/README.md)
+* [FAQ](doc/zh_CN/FAQ.md)
 
 ## 贡献者
 
@@ -154,19 +154,20 @@ blade test -m32 -pdebug common...
 
 ## 致谢
 
-* Blade 是受 Google 官方博客发表的这篇文章启发而开发的：
-  [云构建：构建系统是如何工作的](http://google-engtools.blogspot.com/2011/08/build-in-cloud-how-build-system-works.html)。
-  后来在 2015 年，他们把部分重写后系统的以 `bazel` 的新名字开源。
-* Blade 生成 [Ninja](https://ninja-build.org/) 脚本进行构建，因此 Blade 的运行还需要依赖 Ninja。
-* [Python](http://www.python.org) 是一种简单易用而又强大的语言，我们喜欢python。
+* Blade 的设计受到了 Google 公开分享的构建系统经验启发，特别是他们工程博客上的这篇文章：
+  [Build in the Cloud: How the Build System Works](http://google-engtools.blogspot.com/2011/08/build-in-cloud-how-build-system-works.html)。
+  2015 年，Google 将经过部分重写的版本以新的名字 `bazel` 对外开源。
 
-Google 开放的一些库强大而好用，我们很喜欢，我们把对这些库的支持集成进了Blade中，既方便了库的使用，又增强了 Blade，这些库包括：
+* Blade 在内部生成 [Ninja](https://ninja-build.org/) 脚本来驱动构建，因此运行时依赖 Ninja。
+* [Python](http://www.python.org) 是一门简单易用而又强大的语言，我们非常喜欢。
+
+Google 开源的一些库好用又强大，我们将对这些库的支持集成进了 Blade 中，既方便了库的使用，也增强了 Blade：
 
 - [glog](https://google.github.io/glog/stable/)
 - [protobuf](https://github.com/protocolbuffers/protobuf)
 - [gtest](https://github.com/google/googletest)
 - [gperftools](https://github.com/gperftools/gperftools)
 
-我们的理念：解放程序员，提高生产力。用工具来解决非创造性的技术问题。
+我们的理念：解放程序员，提升生产力，用工具解决非创造性的技术问题。
 
-欢迎使用以及帮助我们改进Blade，我们期待你的贡献。
+欢迎使用 Blade，也欢迎你参与改进，我们期待你的贡献。
