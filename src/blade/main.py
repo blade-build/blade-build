@@ -174,9 +174,9 @@ def format_timedelta(seconds):
 def main(blade_path, argv):
     exit_code = 0
     try:
-        start_time = time.time()
+        start_time = time.monotonic()
         exit_code = _main(blade_path, argv)
-        cost_time = time.time() - start_time
+        cost_time = time.monotonic() - start_time
         console.info('Cost time %s' % format_timedelta(cost_time))
     except SystemExit as e:
         # pylint misreport e.code as classobj

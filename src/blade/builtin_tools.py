@@ -147,9 +147,8 @@ def generate_tar_package(path, sources, destinations, mode):
     tar = tarfile.open(path, mode, dereference=True)
     manifest = archive_package_sources(tar.add, sources, destinations)
     manifest_path = '%s.MANIFEST' % path
-    m = open(manifest_path, 'w')
-    m.write('\n'.join(manifest) + '\n\n')
-    m.close()
+    with open(manifest_path, 'w') as m:
+        m.write('\n'.join(manifest) + '\n\n')
     tar.add(manifest_path, _PACKAGE_MANIFEST)
     tar.close()
 
