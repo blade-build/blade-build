@@ -69,7 +69,7 @@ class ThriftLibrary(CcTarget):
 
         # For each thrift file initialize a ThriftHelper, which will be used
         # to get the source files generated from thrift file.
-        sources, headers = [], []
+        headers = []
         self.thrift_helpers = {}
         for src in self.srcs:
             self.thrift_helpers[src] = ThriftHelper(self.path, src)
