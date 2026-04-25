@@ -3,152 +3,155 @@
 ## 基本命令行语法
 
 ```bash
-blade <子命令> [选项]... [目标模式]...
+blade <subcommand> [options]... [target patterns]...
 ```
 
 ## 子命令
 
-subcommand 是一个子命令，目前有：
+Blade 支持以下子命令：
 
-- `build` 构建指定的目标
-- `test`  构建并且运行指定的测试
-- `clean` 清除指定目标的构建结果
-- `dump`  输出一些内部信息
-- `query` 查询目标的依赖项与被依赖项
-- `run`   构建并运行单个可执行的目标
+- `build` —— 构建指定目标
+- `test` —— 构建并执行测试
+- `clean` —— 清理指定目标
+- `dump` —— 导出有用的信息
+- `query` —— 查询目标依赖关系
+- `run` —— 构建并执行单个可执行目标
 
-## 目标模式
+## 目标模式语法
 
-每个 `BUILD` 文件中的 `name` 属性描述了一个构建目标，在命令行，一些配置项和 BUILD 的某些属性都支持目标模式。
+目标模式（target pattern）是以空格分隔的一组模式表达式，用于指定构建目标。它在命令行、配置项以及目标属性中均可使用。
 
-目标模式是一个空格分开的列表，支持的格式：
+### 支持的模式格式
 
-- `path:name` 表示 path 中的某个 target，这种形式称为直接目标。
-- `path:*` 表示 path 中所有目标，但不包含其子目录
-- `path` 是 `path:*` 的简写形式
-- `path/...` 表示 path 中所有目标，并递归包括所有子目录
-- `:name` 表示当前目录下的某个目标
+- `path:name` —— 指定路径下的具体目标
+- `path:*` —— 指定路径下的所有目标
+- `path` —— 等价于 `path:*`
+- `path/...` —— 递归匹配指定路径及其所有子目录下的全部目标
+- `:name` —— 当前目录下的目标
 
-如果 `path` 以 `//` 开始，则表示从[工作空间](workspace.md)的根目录开始。name 部分不是通配符的称为“直接目标”。
+### 路径解析规则
 
-如果没有指定目标模式，则默认为当前目录下的所有目标（不包含子目录），如果当前目录下没有 BUILD 文件，就会失败。
-当指定 `...` 作为结尾目标时，如果其路径存在，即使展开为空，也总不会失败。
+- **绝对路径：** 以 `//` 开头的路径从工作空间根目录解析
+- **直接目标：** 名字部分不含通配符的模式视为直接目标
+- **默认行为：** 未指定目标时，Blade 构建当前目录下的所有目标（不包含子目录）
+- **空展开：** `...` 作为路径终结符时，即便展开结果为空也不会报错，只要路径存在即可
 
-对于 `...` 目标模式，Blade 会递归搜索 `BUILD` 文件，如果需要排除某些目录，在其中放一个空的 `.bladeskip` 文件即可。
+### 目录搜索行为
 
-如果你安装了 [ohmyzsh](https://ohmyz.sh/)，裸的 `...` 会被其[自动展开为 `..\..`](https://github.com/ohmyzsh/ohmyzsh/wiki/Cheatsheet#directory)，需要写成 `./...`。
+- **递归搜索：** Blade 会对 `...` 模式递归搜索 `BUILD` 文件
+- **排除机制：** 在目录中放置空的 `.bladeskip` 文件即可将其排除
+- **shell 兼容性：** 安装 [ohmyzsh](https://ohmyz.sh/) 后，裸写 `...` 会被展开为 `..\..`，此时请使用 `./...`
 
-## 按目标标签过滤
+## 基于标签的目标过滤
 
-在 Blade 中，每个目标还支持[标签（tag）](build_file.md#tags)属性。
+Blade 支持通过 `--tags-filter` 选项基于标签表达式过滤构建目标。每个目标都支持 [tags 属性](build_file.md#tags)。
 
-还可以通过 `--tags-filter` 选项用标签过滤表达式对构建目标进行过滤。
+### 过滤表达式语法
 
-过滤表达式由标签全名，运算符和括号组成。
+- **标签名：** 使用完整标签名，如 `lang:cc`、`type:test`
+- **逻辑运算符：** `not`、`and`、`or`
+- **组选择：** `group:name1,name2` 用于选择同组的多个标签，等价于 `(group:name1 or group:name2)`
+- **复合表达式：** 含空格的表达式请使用引号包裹
 
-- 标签全名：比如 `lang:cc`, `type:test`
-- 运算符：支持 `not`，`and`，`or`
-- 圆括号控制优先级
+### 过滤示例
 
-同时选择同一个组内的多个标签，可以用 `group:name1,name2` 的语法，等效于 `(group:name1 or group:name2)`。
+- `--tags-filter='lang:cc'` —— 仅保留 `cc_*` 目标
+- `--tags-filter='lang:cc,java'` —— 保留 `cc_*` 与 `java_*` 目标
+- `--tags-filter='lang:cc and type:test'` —— 仅保留 `cc_test` 目标
+- `--tags-filter='lang:cc and not type:test'` —— 保留 `cc_*` 目标但排除 `cc_test`
 
-复杂的表达式往往避免不了空格，此时需要用引号。
+### 过滤作用范围
 
-示例：
+标签过滤只对通过通配符展开的目标生效；直接目标及其依赖不会被过滤。任何被未过滤目标所依赖的目标都会保留在构建列表中，无论其标签是否匹配。
 
-- `--tags-filter='lang:cc'` 过滤出 `cc_*` 目标
-- `--tags-filter='lang:cc,java'` 过滤出 `cc_*` 和 `java_*` 目标
-- `--tags-filter='lang:cc and type:test'` 过滤出 `cc_test` 目标
-- `--tags-filter='lang:cc and not type:test'` 过滤出 `cc_test` 外的 `cc_*` 目标
+### 查询可用标签
 
-过滤只作用于在命令行中通过目标模式展开的目标列表，对直接目标和被依赖的其他目标都不起作用。
-任何被未被过滤掉的目标所依赖的目标，无论是否匹配被滤掉的条件，也都不会被过滤掉。
-
-要查询待筛选目标有那些标签可以用，可以用 `blade dump --all-tags` 命令：
+查询当前可用的标签列表：
 
 ```console
 $ blade dump --all-tags ...
 [
-  "lang:cc",
-  "lang:java",
-  "lang:lexyacc",
-  "lang:proto",
-  "lang:py",
-  "type:binary",
-  "type:foreign",
-  "type:gen_rule",
-  "type:library",
-  "type:maven",
-  "type:prebuilt",
-  "type:system",
-  "type:test",
-  "xxx:xxx"
+   "lang:cc",
+   "lang:java",
+   "lang:lexyacc",
+   "lang:proto",
+   "lang:py",
+   "type:binary",
+   "type:foreign",
+   "type:gen_rule",
+   "type:library",
+   "type:maven",
+   "type:prebuilt",
+   "type:system",
+   "type:test",
+   "xxx:xxx"
 ]
 ```
 
 ## 子命令选项
 
-不同子命令支持的选项不一样，具体请执行 `blade <subcommand> --help` 查看
+不同子命令支持不同选项，运行 `blade <subcommand> --help` 可查看完整选项列表。
 
-下面是一些常用的命令行选项：
+### 常用命令行选项
 
-- -m32,-m64            指定构建目标位数，默认为自动检测
-- -p PROFILE           指定 debug/release，默认 release
-- -k, --keep-going     构建过程中遇到错误继续执行（如果是致命错误不能继续）
-- -j N,--jobs=N        N 路并行构建（Blade 默认开启并行构建，自己计算合适的值）
-- -t N,--test-jobs=N   N 路并行测试，多 CPU 机器上适用
-- --verbose            完整输出所运行的每条命令行
-- –h, --help           显示帮助
-- --color=yes/no/auto  是否开启彩色
-- --exclude-targets    以逗号分割的加载时要排除的目标模式
-- --generate-dynamic   强制生成动态库
-- --generate-java      为 proto_library 和 swig_library 生成 java 文件
-- --generate-php       为 proto_library 和 swig_library 生成 php 文件
-- --generate-go        为 proto_library 生成 go 文件
-- --gprof              支持 GNU gprof
-- --coverage           支持生成覆盖率，目前支持 GNU gcov 和 Java jacoco
+- `-m32`、`-m64` —— 目标架构（32 位 / 64 位），默认自动探测
+- `-p PROFILE` —— 构建模式（`debug` / `release`），默认为 `release`
+- `-k`、`--keep-going` —— 遇到非致命错误时继续执行
+- `-j N`、`--jobs=N` —— 并行构建任务数（默认自动并行）
+- `-t N`、`--test-jobs=N` —— 并行测试任务数，适用于多 CPU 机器
+- `--verbose` —— 显示每条命令的完整命令行
+- `-h`、`--help` —— 显示帮助信息
+- `--color=yes/no/auto` —— 启用或禁用彩色输出
+- `--exclude-targets` —— 加载阶段排除的目标模式（逗号分隔）
+- `--generate-dynamic` —— 强制生成动态库
+- `--generate-java` —— 为 `proto_library` 和 `swig_library` 生成 Java 文件
+- `--generate-php` —— 为 `proto_library` 和 `swig_library` 生成 PHP 文件
+- `--generate-go` —— 为 `proto_library` 生成 Go 文件
+- `--gprof` —— 启用 GNU gprof 性能分析
+- `--coverage` —— 生成代码覆盖率报告（支持 GNU gcov 与 Java jacoco）
 
-## 示例
+## 使用示例
 
 ```bash
-
-# 构建当前目录下的所有目标，不包含子目录
+# 构建当前目录下的所有目标（不包含子目录）
 blade build
 
-# 构建当前目录以及子目录下所有的目标
+# 构建当前目录及其所有子目录下的目标
 blade build ...
 
-# 构建当前目录下名为`urllib`的目标
+# 构建当前目录下名为 'urllib' 的特定目标
 blade build :urllib
 
-# 构建 app 目录下所有目标，但排除其 sub 子目录
+# 构建 'app' 目录下的所有目标，但排除 'sub' 子目录
 blade build app... --exclude-targets=app/sub...
 
-# 构建和测试从 WORKPACE 根出发，common 及其所有子目录下的所有目标
+# 从工作空间根目录和 common 子目录构建并测试所有目标
 blade test //common/...
-
 blade test base/...
 
-# 构建和测试base子目录下名为`string_test`的目标
+# 构建并运行 base 子目录下的特定测试目标
 blade test base:string_test
 ```
 
 ## 命令行补全
 
-执行[安装](misc.md)命令后有简单的命令行补全。
-安装 [autocomplete](https://pypi.org/project/argcomplete/) 后会得到完整的命令行补全。
+Blade 在安装后自带基础的命令行补全能力。如需更强大的补全功能，请安装 [argcomplete](https://pypi.org/project/argcomplete/)。
 
-### 安装 argcomplete
+### 安装
 
 ```console
 pip install argcomplete
 ```
 
-非 root 安装，加上 `--user` 参数即可。
+对于非 root 用户，可加 `--user`：
 
-### 启用
+```console
+pip install --user argcomplete
+```
 
-修改 `~/.bashrc`:
+### 配置
+
+在 `~/.bashrc` 中加入以下一行：
 
 ```bash
 eval "$(register-python-argcomplete blade)"

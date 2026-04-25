@@ -1,23 +1,45 @@
-# 安装
+# 安装指南
 
 ## 自动安装
 
-在终端中执行如下命令：
+在终端中执行以下命令即可自动安装 Blade：
 
 ```console
 curl https://blade-build.github.io/install.sh | bash
 ```
 
-Blade 就会被下载到 `~/.cache/blade-build` 目录下。它还会创建一个 `~/bin/blade` 符号连接，这样就可以直接使用 `blade` 命令。
+**安装流程：**
+
+- **源码下载：** Blade 会被克隆到 `~/.cache/blade-build`
+- **创建符号链接：** 在 `~/bin/blade` 创建符号链接
+- **命令生效：** 系统范围内即可使用 `blade` 命令
 
 ## 手动安装
 
-下载代码仓库后，执行 `install` 脚本即可安装到 `~/bin` 下，install 后不能删除 checkout 出来的原始目录。
+### 安装方式
 
-Blade 用 ninja 做后端，还需要安装 ninja。
-Blade 支持 Python 2.7.x 和 Python 3.6+（其中 Python 3.x 在 3.6 和 3.9 上测试通过），将来会逐步停止对 Python 2.7 的支持。
+执行安装脚本，将 Blade 安装到 `~/bin` 下：
 
-install 使得可以在任何目录下直接执行：
+**安装特点：**
+
+- **符号链接方式：** 采用符号链接以便灵活更新
+- **保留源目录：** 原始 checkout 目录必须保留，不能删除
+- **构建后端依赖：** 需要 [Ninja](https://ninja-build.org/) 作为构建后端
+
+### 支持的 Python 版本
+
+**支持的版本：**
+
+- **Python 2.7.x：** 保留支持（计划逐步停止）
+- **Python 3.6+：** 主要支持版本（在 3.6、3.9 及更新版本上测试）
+
+**迁移建议：** 尽快切换到 Python 3.x，以获得长期兼容性
+
+## 安装后验证
+
+### 命令执行测试
+
+不带参数运行 Blade，以验证安装是否成功：
 
 ```bash
 $ blade
@@ -26,11 +48,41 @@ blade: error: too few arguments
 Blade(error): Failure
 ```
 
-命令。
-如果不行，确保~/bin 在你的 PATH 环境变量里，否则修改 ~/.profile，加入
+### PATH 配置
+
+如果提示命令找不到，请确认 `~/bin` 已加入 `PATH` 环境变量。
+
+在 `~/.profile` 中加入下面一行：
 
 ```bash
 export PATH=~/bin:$PATH
 ```
 
-然后重新登录即可。
+**生效方式：** 重新登录或重启终端会话
+
+## 系统需求
+
+### 必需依赖
+
+- **Ninja：** 用作构建后端
+- **Python 解释器：** Python 2.7.x 或 Python 3.6+
+- **开发工具链：** 标准 C/C++ 工具链（GCC 或 Clang）
+
+### 可选依赖
+
+- **ccache：** 通过缓存加速构建
+- **argcomplete：** 提供增强的命令行补全
+
+## 故障排查
+
+### 常见问题
+
+- **命令未找到：** 检查 `PATH` 配置与符号链接是否创建成功
+- **权限错误：** 确认 `~/bin` 目录拥有合适的权限
+- **Python 版本冲突：** 确认系统中存在兼容的 Python 版本
+
+### 支持资源
+
+- **文档：** 参考 Blade 文档中的详细排错章节
+- **社区支持：** 在 GitHub Issues 中寻求社区帮助
+- **版本兼容性：** 在安装前核对特定版本的前置要求

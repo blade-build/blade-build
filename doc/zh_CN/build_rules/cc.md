@@ -1,36 +1,57 @@
-# C/C++ 规则
+# C/C++ 构建规则
 
-C/C++ 程序的构建分为预处理，编译（把预处理后的源文件转化为 `.o` 文件）和链接（把 `.o`, `.a` 链接成可执行文件或者动态库）三个阶段，不同阶段用不同的编译参数。
+C/C++ 的编译过程分为三个阶段：预处理、编译（将预处理后的源文件转换为 `.o` 文件）、链接（将 `.o`、`.a` 链接为可执行文件或动态库）。各阶段使用各自的编译器选项。
 
-CC 目标均支持的属性为：
+## C/C++ 通用属性
 
-- `warning` 是否屏蔽 warning
+### `warning`：string = ['yes', 'no']
 
-  `warning='no'` 表示屏蔽，默认不屏蔽（等价于 `warning='yes'`，一般不用写，已经默认开启）。
+控制是否屏蔽全部编译警告。
 
-- `defs` 用户定义的宏
+**示例：** `warning='no'`
+**默认值：** `'yes'`（通常无需显式书写）
 
-  `defs = ['_MT']`，如果要带值，用等号：`A=1`。只对当前目标生效，不会透传给依赖它的目标。
+### `defs`：string[] = []
 
-- `incs` 增加编译源文件时的头文件查找路径
+用户自定义的预处理宏。
 
-  `incs = ['poppy/myinc']`。一般用于第三方库，用户代码建议使用全路径 include，不要使用该属性。
+**示例：** `defs=['_MT']`；带值的宏可写作 `defs=['A=1']`。
+**说明：** 仅对当前目标生效，不会透传给依赖该目标的其他目标。
 
-- `optimize` 目标的优化选项
+### `incs`：string[] = []
 
-  默认为 `optimize = ['-O2']`，之所以需要单独提出来，是因为 debug 模式下需要忽略，optimize 影响代码的可调试性。
-  如果某些目标，例如性能相关又一般无需调试的库，比如 hash，压缩，加解密之类的，可以加上`always_optimize = True`让它们总是开启优化。
+头文件搜索路径。
 
-- `extra_cppflags` 额外的 C/C++ 编译 flags
+**示例：** `incs=['poppy/myinc']`
+**最佳实践：** 建议在源代码中使用完整的 include 路径，而非依赖额外的搜索路径。`incs` 一般只用于集成第三方库。
 
-  例如：`extra_cppflags = ['-Wno-format-literal']`。常用 flags 比如 `-g`，`-fPIC` 等都已经内置，一般无需指定。
+### `optimize`：string[] = []
 
-- `extra_linkflags` 额外的链接 flags
-  例如：`extra_linkflags = ['-fopenmp']`。常用 flags 比如 `-g` 等都已经内置，一般无需指定。
+编译器优化选项。
 
-- `linkflags`: list = None，覆盖全局配置里的 [linkflags](../config.md#cc_config)
+**示例：** `optimize=['-O3']`（默认为 `['-O2']`）
+**设计原因：** `optimize` 之所以从 `extra_cppflags` 中单独拆出，是因为它在 debug 模式下需要被禁用，以保留可调试性。对于性能敏感、一般无需调试的成熟库（例如 hash、压缩、加解密等），可通过 `always_optimize = True` 使其始终开启优化。
 
-  例如：`linkflags = ['-fopenmp']`。常用 flags 比如 `-g` 等都已经内置，一般无需指定。由于会覆盖全局选项，除非你非常理解 `gcc` 和 `ld` 的各种链接选项，不要轻易用这个参数。
+### `extra_cppflags`：string[] = []
+
+额外的 C/C++ 编译选项。
+
+**示例：** `extra_cppflags = ['-Wno-format-literal']`
+**说明：** 常用选项（如 `-g`、`-fPIC` 等）Blade 已内置，该参数应尽量少用。
+
+### `extra_linkflags`：string[] = []
+
+额外的链接选项。
+
+**示例：** `extra_linkflags = ['-fopenmp']`
+**说明：** 常用选项（如 `-g`）已默认包含，该参数应尽量少用。
+
+### `linkflags`：string[] = None
+
+覆盖全局 [`linkflags`](../config.md#cc_config) 配置。
+
+**示例：** `linkflags = ['-fopenmp']`
+**注意：** 该参数会整体覆盖全局设置。除非你非常了解 GCC 和链接器的相关选项，否则不建议使用。
 
 ## cc_library
 

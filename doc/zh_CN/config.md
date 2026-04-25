@@ -1,16 +1,17 @@
-# 配置
+# 配置系统
 
-## 配置文件
+## 配置文件层级
 
-Blade 只有一种配置文件格式，但是支持多重配置文件，按以下顺序依次查找和加载，后加载的配置文件里存在的配置项会覆盖
-前面已经加载过的配置项：
+Blade 采用多层级配置体系，按以下优先级顺序加载配置文件，后加载的配置会覆盖前面的同名配置项：
 
-- `blade.conf` 在安装目录下，这是全局配置。
-- `~/.bladerc` 在用户 `HOME` 目录下，这是用户级的配置。
-- `BLADE_ROOT` 其实也是个配置文件，写在这里的是项目级配置。
-- `BLADE_ROOT.local` 开发者自己的本地配置文件，用于临时调整参数等用途
+- **全局配置：** Blade 安装目录下的 `blade.conf`
+- **用户配置：** 用户 HOME 目录下的 `~/.bladerc`
+- **项目配置：** `BLADE_ROOT` 文件（它本身也是一个配置文件）
+- **本地配置：** `BLADE_ROOT.local`，面向开发者本人的临时调整
 
-配置的语法和构建规则一样，也是函数调用，例如：
+## 配置语法
+
+配置文件采用与 BUILD 文件一致的函数调用式语法：
 
 ```python
 global_config(
@@ -18,418 +19,465 @@ global_config(
 )
 ```
 
-配置项之间没有顺序要求。绝大多数配置项都有合适的默认值，如果不需要覆盖就无需设置。
+### 关键特性
 
-你可以用 `blade dump` 命令来输出当前的配置，并根据需要修改使用：
+- 配置项之间没有顺序要求
+- 绝大多数参数都有合理的默认值，通常无需修改
+- 只有确实需要定制时再覆盖
+
+## 查看当前配置
+
+查看当前实际生效的配置：
 
 ```bash
+# 将配置导出到文件
 blade dump --config --to-file my.config
-```
 
-不加 `--to-file` 选项，则输出到标准输出。
+# 将配置打印到标准输出
+blade dump --config
+```
 
 ### global_config
 
-全局配置：
+构建系统的全局配置项：
 
-- `backend_builder` : string = 'ninja'
+#### `backend_builder`：string = "ninja"
 
-  Blade 所用的后端构建系统，只支持 `ninja`。
+**后端构建系统**
 
-  Blade 一开始依赖 SCons 作为后端，但是后来由于优化的需要，发现 ninja 更合适。
-  [ninja](https://ninja-build.org/)是一个专注构建速度的底层构建系统，经实测在构建大型项目时，
-  用 ninja 速度比 SCons 快很多，因此我们淘汰了对 SCons 的支持。
+目前仅支持 `ninja` 作为后端构建系统。
 
-- `duplicated_source_action` : string = 'warning' | ['warning', 'error']
+**技术背景：** Blade 最初依赖 SCons，后来由于优化的需要切换到了 [Ninja](https://ninja-build.org/)。Ninja 是一个专注于构建速度的底层构建系统，在大型项目中速度显著优于 SCons，因此 Blade 已经完全采用 Ninja 作为唯一后端。
 
-  发现同一个源文件属于多个目标时的行为，默认为`warning`，建议设置为`error`。
+#### `duplicated_source_action`：string = "warning"
 
-- `test_timeout` : int = 600
+**重复源文件的处理策略**
 
-  运行每个测试的超时时间，单位秒，超过超时值依然未结束，视为测试失败。
+**合法取值：** `["warning", "error"]`
+**行为：** 当同一个源文件归属于多个目标时，决定是发出警告还是直接报错。建议设置为 `"error"`。
 
-- `debug_info_level` : string = 'mid' | ['no', 'low', 'mid', 'high']
+#### `test_timeout`：int = 600
 
-  生成的构建结果中调试符号的级别，支持四种级别，越高越详细，可执行文件也越大。
+**测试超时时间**
 
-- `build_jobs` : int = 0 | 0~CPU 核数
+**单位：** 秒
+**用途：** 超过该时间仍未结束的测试会被标记为失败。
 
-  并行构建的最大进程数量，默认会根据机器配置自动计算。
+#### `debug_info_level`：string = "mid"
 
-- `test_jobs` : int = 0 | 0~CPU 核数/2
+**调试信息级别**
 
-  并行测试的最大进程数量，默认会根据机器配置自动计算。
+**合法取值：** `["no", "low", "mid", "high"]`
+**权衡：** 级别越高，调试信息越详细，但磁盘占用也越大。
 
-- `test_related_envs` : list = []
+#### `build_jobs`：int = 0
 
-  是否影响增量测试的环境变量名。
-  支持字符串或正则表达式。
+**并行构建任务数**
 
-- `run_unrepaired_tests` : bool = False
+**取值范围：** 0 到 CPU 核数
+**默认行为：** 设为 0 时，由 Blade 根据机器配置自动决定。
 
-  增量测试时，是否运行未修复（指之前失败且源代码仍未修改）的测试。
-  也可以通过命令行选项 `--run-unrepaired-tests` 开启。
+#### `test_jobs`：int = 0
 
-- `legacy_public_targets` : list = []
+**并行测试任务数**
 
-  对于未显式设置可见性（`visibility`）的目标，默认设置可见性为 `PUBLIC` 的目标列表。
+**取值范围：** 0 到 CPU 核数 / 2
+**默认行为：** 设为 0 时，由 Blade 自动决定并发度。
 
-  对于现存的项目，我们提供了 [`tool/collect-missing-visibilty.py`](../../tool) 工具，可以用来生成这个列表。
+#### `test_related_envs`：list = []
 
-  可以把这个工具的输出保存到文件中，然后通过 `load_value()` 加载：
+**与测试相关的环境变量**
 
-  ```python
-  global_config(
-      legacy_public_targets = load_value('legacy_public_targets.conf')
-  )
-  ```
+**格式：** 字符串或正则表达式
+**用途：** 指定哪些环境变量会影响增量测试的结果判定。
 
-- `default_visibility` : list = [] | ['PUBLIC']
+#### `run_unrepaired_tests`：bool = False
 
-  对于未显式设置可见性（`visibility`）的目标，默认设置的可见性属性。只能设置为空（`[]`）或 `['PUBLIC']`。
-  如果设置为 `['PUBLIC']`，就和 Blade 1 保持一致。
+**是否重跑「未修复」的测试**
+
+**行为：** 控制在增量测试中是否重新运行「之前失败、代码仍未修改」的测试。也可通过命令行选项 `--run-unrepaired-tests` 开启。
+
+#### `legacy_public_targets`：list = []
+
+**目标可见性的向后兼容配置**
+
+**用途：** 对于未显式设置 `visibility` 的目标，该列表中列出的目标默认可见性为 `PUBLIC`。
+
+**迁移工具：** 对于存量项目，可使用 [`tool/collect-missing-visibility.py`](../../tool) 生成该列表：
+
+```python
+global_config(
+    legacy_public_targets = load_value('legacy_public_targets.conf')
+)
+```
+
+#### `default_visibility`：list = []
+
+**默认的目标可见性**
+
+**合法取值：** `[]`（私有）或 `['PUBLIC']`
+**历史背景：** 设置为 `['PUBLIC']` 可保持与 Blade 1.x 的行为一致。
 
 ### cc_config
 
-所有 c/c++目标的公共配置：
+所有 C/C++ 构建目标的公共配置：
 
-- `extra_incs` : list = []
+#### `extra_incs`：list = []
 
-  额外的头文件搜索路径，比如['thirdparty']
+**额外的头文件搜索路径**
 
-- `cppflags` : list = []
+**用途：** 为编译器指定额外的头文件查找目录，例如 `['thirdparty']`。
 
-  C/C++ 公用编译选项，默认值已经够用，通常不需要设置。
+#### `cppflags`：list = []
 
-- `cflags` : list = []
+**C/C++ 公共编译选项**
 
-  C 专用编译选项。
+**用途：** 同时作用于 C 与 C++ 的编译选项。
 
-- `cxxflags` : list = []
+#### `cflags`：list = []
 
-  C++ 专用编译选项。
+**C 专用编译选项**
 
-- `linkflags` : list = []
+**用途：** 只在编译 C 代码时生效的选项。
 
-  构建库和可执行文件以及测试时公用的链接选项，比如库搜索路径等。
+#### `cxxflags`：list = []
 
-- `warnings` : list = 内置
+**C++ 专用编译选项**
 
-  C/C++公用警告。一般是 `-W` 开头，比如 `['-Wall', '-Wextra']` 等。内置的警告选项均经过精心挑选，建议保持。
-  有些编译器警告仅用于 C 或 C++，应当分别通过下面的两个选项来设置，不要到这里。
+**用途：** 只在编译 C++ 代码时生效的选项。
 
-- `c_warnings` : list = 内置
+#### `linkflags`：list = []
 
-  编译 C 代码时的专用警告。
+**链接选项**
 
-- `cxx_warnings` : list = 内置
+**用途：** 可执行文件与库的链接阶段所使用的附加选项，例如库搜索路径。
 
-  编译 C++代码时的专用警告。
+#### `warnings`：list = 内置
 
-- `optimize` : list = 内置
+**C/C++ 公共警告选项**
 
-  优化专用选项，debug 模式下会被忽略，比如 `['-O2', '-omit-frame-pointer']` 等。
-  单独分出 optimize 选项是因为这些选项在 debug 模式下需要被忽略。
+**默认值：** `['-Wall', '-Wextra']`
+**建议：** 默认的警告配置经过精心挑选，适用于绝大多数开发场景，建议保持默认。
 
-- `fission` : bool = False
+#### `c_warnings`：list = 内置
 
-  是否开启 GCC 的 [DebugFission](https://gcc.gnu.org/wiki/DebugFission) 功能。
+**C 专用警告选项**
 
-  开启后，调试信息会被分离到单独的 `.dwo` 文件中。
-  这能显著减小可执行文件的大小。经实测，在中等调试符号级别下，能把一个被测可执行文件从 1.9GB 减小到 532MB。
+**用途：** 只在编译 C 代码时生效的警告。
 
-  也可以通过命令行参数 `--fission` 来开启此功能。
+#### `cxx_warnings`：list = 内置
 
-- `dwp`: bool = False
+**C++ 专用警告选项**
 
-  是否将 `.dwo` 文件打包成 `.dwp` 文件。
+**用途：** 只在编译 C++ 代码时生效的警告。
 
-  此选项需要在开启 `fission` 的基础上使用。开启后，构建过程中会自动将分散的 `.dwo` 调试信息文件
-  打包成单个 `.dwp` 文件，便于调试信息的管理和分发。关于如何在 package 中使用 dwp 文件，
-  请参见 [`cc_binary`](build_rules/cc.md#cc_binary) 文档。
+#### `optimize`：list = ['-O2']
 
-  也可以通过命令行参数 `--dwp` 来开启此功能。
+**优化选项**
 
-- `hdr_dep_missing_severity` : string = 'warning' | ['info', 'warning', 'error']
+**默认值：** `['-O2']`
+**特殊行为：** 该选项在 debug 模式下会被忽略，以保留可调试性。
 
-  对头文件所属的库的依赖的缺失的严重性。
-  和 `hdr_dep_missing_suppress` 一起控制头文件依赖缺失检查的行为，参见 [`cc_library.hdrs`](build_rules/cc.md#cc_library)。
+#### `fission`：bool = False
 
-- `hdr_dep_missing_suppress` : dict = {}
+**调试信息分离（DebugFission）**
 
-  对头文件所属的库的依赖的缺失检查的抑制列表。
+**功能：** 启用 GCC 的 [DebugFission](https://gcc.gnu.org/wiki/DebugFission) 能力。
 
-  格式是一个字典，样子是 `{ 目标 : {源文件名 : [头文件列表] }`，例如：
+**行为：** 开启后，调试信息会被分离到独立的 `.dwo` 文件，可显著减小可执行文件体积。
 
-  ```python
-  {
-      'common:rpc' : {'rpc_server.cc':['common/base64.h', 'common/list.h']},
-  }
-  ```
+**实测效果：** 在中等调试信息级别下，某被测可执行文件体积从 1.9 GB 减小到 532 MB。
 
-  表示对于 `common:rpc`, 在 `rpc_server.cc` 中，如果声明了头文件 `common/base64.h` 和 `common/list.h`
-  的库没有出现在其 `deps` 中，这个错误也会被抑制。
+**命令行等效：** 可使用 `--fission` 参数开启。
 
-  对于生成的头文件，路径没有构建目录前缀（比如 `build64_release`），这样可以适用于不同的构建类型。
+#### `dwp`：bool = False
 
-  这个功能是为了帮助升级未正确声明和遵守头文件依赖的旧项目。为了让升级更容易，我们还提供了一个[工具](../../tool)，
-  可以在构建后方便地生成这样格式的文件。
+**打包调试信息**
 
-  ```python
-  blade build ...
-  path/to/collect-inclusion-errors.py --missing > hdr_dep_missing_suppress.conf
-  ```
+**前置条件：** 需要同时启用 `fission = True`
 
-  因此你可以在把这个文件复制到某处，然后在 `BLADE_ROOT` 中加载：
+**功能：** 将分散的 `.dwo` 文件打包为单个 `.dwp` 文件，便于调试信息的管理与分发。
 
-  ```python
-  cc_config(
-      hdr_dep_missing_suppress = load_value('hdr_dep_missing_suppress.conf'),
-  )
-  ```
+**使用参考：** 关于如何在 package 中使用 `.dwp` 文件，请参见 [`cc_binary`](build_rules/cc.md#cc_binary) 文档。
 
-  这样，现存的头文件依赖缺失错误都会被屏蔽掉，但是新增的则会正常报告出来。
+**命令行等效：** 可使用 `--dwp` 参数开启。
 
-- `allowed_undeclared_hdrs` : list = []
+#### `hdr_dep_missing_severity`：string = 'warning'
 
-  允许的未声明的头文件的列表。
+**头文件所属库依赖缺失的严重性**
 
-  由于 Blade 2 中头文件也被纳入了依赖管理，所有的头文件都必须显式地声明。但是对于历史遗留代码库，会有大量的未声明的头文件，
-  短期内难以一下子补全。这个选项允许在检查时忽略这些头文件。
+**合法取值：** `['info', 'warning', 'error']`
+**说明：** 与 `hdr_dep_missing_ignore` 一起控制「引用头文件但未声明其所属库依赖」的检查行为，详见 [`cc_library.hdrs`](build_rules/cc.md#cc_library)。
 
-  可以在构建后，运行 `tool/collect-inclusion-errors.py` 来生成现存的未声明的头文件的列表文件：
+#### `hdr_dep_missing_ignore`：dict = {}
 
-  ```python
-  blade build ...
-  path/to/collect-inclusion-errors.py --undeclared > allowed_undeclared_hdrs.conf
-  ```
+**头文件依赖缺失的忽略列表**
 
-  然后加载使用：
+格式为字典：`{ 目标 : { 源文件 : [头文件列表] } }`。例如：
 
-  ```python
-  cc_config(
-      allowed_undeclared_hdrs = load_value('allowed_undeclared_hdrs.conf'),
-  )
-  ```
+```python
+{
+    'common:rpc' : {'rpc_server.cc':['common/base64.h', 'common/list.h']},
+}
+```
 
-  从代码库的长期健康考虑，最终还是应当修正这些问题。
+表示对于 `common:rpc`，若在 `rpc_server.cc` 中引用了 `common/base64.h` 和 `common/list.h`，即便其所属库未在 `deps` 中声明，也不会报错。
+
+对于构建过程中生成的头文件，路径无需带构建目录前缀（例如 `build64_release`），最好也不要带，以便在不同构建类型下通用。
+
+该功能用于帮助升级未正确声明和遵守头文件依赖的存量项目。为简化升级过程，我们还提供了[辅助工具](../../tool)，可在构建后自动生成此类信息：
+
+```bash
+blade build ...
+path/to/collect-inclusion-errors.py --missing > hdr_dep_missing_suppress.conf
+```
+
+然后在 `BLADE_ROOT` 中加载：
+
+```python
+cc_config(
+    hdr_dep_missing_ignore = load_value('hdr_dep_missing_suppress.conf'),
+)
+```
+
+这样，存量的头文件依赖缺失错误会被抑制，但新增的依然会正常报告。
+
+#### `allowed_undeclared_hdrs`：list = []
+
+**允许的未声明头文件列表**
+
+在 Blade 2 中，头文件也被纳入依赖管理，所有头文件都必须显式声明。对于存量代码库，未声明的头文件数量庞大，短期难以彻底清理。该选项允许在检查时忽略这些头文件。
+
+构建完成后，可使用 `tool/collect-inclusion-errors.py` 生成未声明头文件列表：
+
+```bash
+blade build ...
+path/to/collect-inclusion-errors.py --undeclared > allowed_undeclared_hdrs.conf
+```
+
+然后加载：
+
+```python
+cc_config(
+    allowed_undeclared_hdrs = load_value('allowed_undeclared_hdrs.conf'),
+)
+```
+
+从代码库长期健康的角度，最终还是应当把这些问题彻底修正。
+
+示例：
+
+```python
+cc_config(
+    extra_incs = ['thirdparty'],         # 额外的 -I，比如 thirdparty
+    warnings = ['-Wall', '-Wextra'...],  # C/C++ 公共警告
+    c_warnings = ['-Wall', '-Wextra'...],# C 专用警告
+    cxx_warnings = ['-Wall', '-Wextra'...], # C++ 专用警告
+    optimize = ['-O2'],                  # 优化级别
+)
+```
 
 ### cc_library_config
 
 C/C++ 库的配置：
 
-- `prebuilt_libpath_pattern` : string = 'lib${bits}'
+#### `prebuilt_libpath_pattern`：string = 'lib${bits}'
 
-  预构建的库所在的子目录名的模式。
+**预编译库子目录模式**
 
-  Blade 支持生成多个目标平台的目标，比如在 x64 环境下，支持通过命令行参数的 -m 参数编译 32 位和 64 位 目标。
-  因此 prebuilt_libpath_pattern 是一个模式，其中包含可替换的变量：
+Blade 支持构建多目标平台的产物，例如在 x64 Linux 下，可以通过 `-m` 选项同时构建 32 位和 64 位目标。
 
-  - ${bits} 目标执行位数，比如 32，64。
-  - ${arch} CPU 架构名，比如 i386, x86_64 等。
-  - ${profile} 构建模式，`debug` 或者 `release`。
+该模式支持以下占位符：
 
-  这样就可以在不同的子目录中同时存放多个目标平台的库文件而不冲突。本属性也可以为空，表示没有子目录
-  （库文件就放在当前 BUILD 文件所在的目录）。如果只构建一个平台的目标，可以只有一个目录甚至根本不用子目录。
+- `${bits}`：目标执行位数，如 32、64
+- `${arch}`：CPU 架构名，如 i386、x86_64
+- `${profile}`：构建模式，`debug` 或 `release`
 
-- `hdrs_missing_severity` : string = 'error' | ['debug', 'info', 'warning', 'error']
+通过这种方式，多种目标平台的预编译库可以放置在不同子目录中而互不冲突。该属性也可以设置为空字符串，表示不使用子目录。
 
-  缺少 `cc_library.hdrs` 的严重性。
+如果只关心一个目标平台，完全可以只有一个子目录，甚至根本不用子目录。
 
-- `hdrs_missing_suppress` : list = []
+#### `hdrs_missing_severity`：string = 'error'
 
-  需要抑制缺少 [`cc_library.hdrs`](build_rules/cc.md#cc_library) 问题的目标列表（不要带 `//` 前缀），
-  用于抑制现存代码中 hdrs 属性缺少的问题。
+**缺失 `cc_library.hdrs` 时的严重性**
 
-  我们还提供了一个辅助工具 [`collect-hdrs-missing.py`](../../tool)方便地生成这个列表。
+**合法取值：** `['debug', 'info', 'warning', 'error']`
 
-  如果条目数量太多，建议放在单独的文件中加载：
+#### `hdrs_missing_suppress`：list = []
 
-  ```python
-  cc_library_config(
-      hdrs_missing_suppress = load_value('hdrs_missing_suppress.conf'),
-  )
-  ```
+**`hdrs` 缺失检查的抑制列表**
+
+格式为目标列表（不带 `//` 前缀），用于抑制存量代码中的 `hdrs` 属性缺失问题。
+
+我们提供了辅助工具 [`collect-hdrs-missing.py`](../../tool) 用于生成该列表。条目过多时建议独立保存、集中加载：
+
+```python
+cc_library_config(
+    hdrs_missing_suppress = load_value('blade_hdr_missing_spppress'),
+)
+```
 
 ### cc_test_config
 
 构建和运行测试所需的配置：
 
-- `dynamic_link` : bool = False
-
-  测试程序是否默认动态链接，可以减少磁盘开销。
-
-- `heap_check` : string = ''
-
-  开启 gperftools 的 HEAPCHECK，空表示不开启。
-
-  详情参考 [gperftools](https://gperftools.github.io/gperftools/heap_checker.html)的文档。
-
-- `gperftools_libs` : list = ['#tcmalloc']
-
-  tcmalloc 库，blade deps 格式。
-
-- `gperftools_debug_libs` : list = ['#tcmalloc_debug']
-
-  tcmalloc_debug 库，blade deps 格式。
-
-- `gtest_libs` : list = ['#gtest']
-
-  gtest 的库，blade deps 格式。
-
-- `gtest_main_libs` : list = ['#gtest_main']
-
-  gtest_main 的库路径，blade deps 格式。
+```python
+cc_test_config(
+    dynamic_link = True,  # 测试程序默认动态链接，可减少磁盘占用，默认值为 False
+    heap_check = 'strict', # 开启 gperftools 的 HEAPCHECK，详见 gperftools 文档
+    gperftools_libs = '//thirdparty/perftools:tcmalloc',           # tcmalloc 库，Blade deps 格式
+    gperftools_debug_libs = '//thirdparty/perftools:tcmalloc_debug', # tcmalloc_debug 库
+    gtest_libs = '//thirdparty/gtest:gtest',       # gtest 库
+    gtest_main_libs = '//thirdparty/gtest:gtest_main' # gtest_main 库
+)
+```
 
 注意：
 
-- gtest 1.6 开始，去掉了 make install，但是可以绕过，参见[gtest1.6.0 安装方法](http://blog.csdn.net/chengwenyao18/article/details/7181514)。
-- gtest 库还依赖 pthread，因此 gtest_libs 需要写成 `['#gtest', '#pthread']`
-- 或者把源码纳入你的源码树，比如 thirdparty 下，就可以写成 `gtest_libs='//thirdparty/gtest:gtest'`。
+- 从 gtest 1.6 起移除了 `make install`，但可以绕过，参见 [gtest 1.6.0 安装方法](http://blog.csdn.net/chengwenyao18/article/details/7181514)。
+- gtest 库还依赖 pthread，因此 `gtest_libs` 可以写成 `['#gtest', '#pthread']`。
+- 也可以将源码纳入自己的源码树（如 `thirdparty` 目录），然后写作 `gtest_libs='//thirdparty/gtest:gtest'`。
 
 ### cuda_config
 
-所有 cuda 目标的公共配置：
+所有 CUDA 目标的公共配置：
 
-- `cuda_path` : string = ''
+#### `cuda_path`：string = ''
 
-  CUDA 库所在路径， 为空或者 "//" 开头的工作区绝对路径
+**CUDA 安装路径**
 
-- `cu_warnings` : list = 内置
+可以为空，或以 `//` 开头（表示工作区内的绝对路径）。
 
-  编译 CUDA 代码时的专用警告。
+#### `cu_warnings`：list = 内置
 
-- `cuflags` : list = []
+**CUDA 专用警告选项**
 
-  CUDA 公用编译选项。
+#### `cuflags`：list = []
+
+**CUDA 公共编译选项**
 
 ### java_config
 
 Java 构建相关的配置：
 
-- `java_home` : string = 读取 '$JAVA_HOME' 环境变量
+#### `java_home`：string = ''
 
-  设置 JAVA_HOME。
+**JAVA_HOME 路径**
 
-- `version` : string = '' | ['8', '1.8'] 等
+默认从 `$JAVA_HOME` 环境变量读取。
 
-  JDK 兼容性版本号。默认为空，由编译器决定。
+#### `version`：string = ''
 
-- `source_version` : string = ''
+**JDK 兼容性版本**
 
-  提供与指定发行版的源代码版本兼容性。默认取 `version` 的值。
+例如 `"8"`、`"1.8"` 等。
 
-- `target_version` : string = ''
+#### `source_version`：string = ''
 
-  生成特定 VM 版本的类文件。默认取 `version` 的值。
+**源码兼容性版本**
 
-- `warnings` : list = ['-Werror', '-Xlint:all']
+默认取 `version` 的值。
 
-  警告设置。
+#### `target_version`：string = ''
 
-- `source_encoding` : string = None
+**目标 VM 版本**
 
-  设置源代码的默认编码。
+生成特定 VM 版本的 class 文件，默认取 `version` 的值。
 
-- `fat_jar_conflict_severity` : string = 'warning' | ['debug', 'info', 'warning', 'error']
+#### `source_encoding`：string = None
 
-  打包 fat jar 时发生冲突的严重性。
+**源文件编码**
 
-- `maven` : string = 'mvn'
+指定源文件所使用的字符编码。
 
-  调用 `mvn` 命令需要的路径。
+#### `warnings`：list = ['-Werror', '-Xlint:all']
 
-- `maven_central` : string = ''
+**Java 警告选项**
 
-  maven 仓库的 URL。
+#### `fat_jar_conflict_severity`：string = 'warning'
 
-- `maven_jar_allowed_dirs` : list = []
+**fat jar 冲突的严重性**
 
-  允许调用 `maven_jar` 的目录列表（及其子目录）。
+**合法取值：** `["debug", "info", "warning", "error"]`
 
-  为了避免代码库中对同一个 id 的 maven 制品重复描述以及产生版本冗余和冲突，建议通过设置 `maven_jar_allowed_dirs`
-  禁止在这些目录及其子目录外调用 `maven_jar`。
+#### `maven`：string = 'mvn'
 
-  对于现存的已经散落在期望的目录列表之外的 `maven_jar` 目标，可以通过 `maven_jar_allowed_dirs_exempts` 配置项来豁免。
-  我们还提供了一个辅助工具 [`collect-disallowed-maven-jars.py`](../../tool)方便地生成这个列表，如果条目数量太多，
-  建议放在单独的文件中加载：
+**Maven 命令**
 
-  ```python
-  java_config(
-      maven_jar_allowed_dirs_exempts = load_value('exempted_maven_jars.conf'),
-  )
-  ```
+调用 `mvn` 时使用的命令名或路径。
 
-- `maven_jar_allowed_dirs_exempts` : list = 空
+#### `maven_central`：string = ''
 
-  豁免 maven_jar_allowed_dirs 检查的目标列表。
+**Maven 仓库 URL**
 
-- `maven_snapshot_update_policy` : string = 'daily' | ['always', 'daily', 'interval',  'never']
+#### `maven_jar_allowed_dirs`：list = []
 
-  maven 仓库的 SNAPSHOT 版本的更新策略。
+**允许调用 `maven_jar` 的目录（及其子目录）**
 
-  语义遵守[Maven 文档](https://maven.apache.org/ref/3.6.3/maven-settings/settings.html)。
+为避免代码库中重复描述同一 id 的 Maven 制品、以及由此引发的版本冗余与冲突，建议通过 `maven_jar_allowed_dirs` 限制 `maven_jar` 只能在这些目录及其子目录中调用。
 
-- `maven_snapshot_update_interval` : int = 24 * 60
+对于已经散落在允许目录之外的存量 `maven_jar` 目标，可通过 `maven_jar_allowed_dirs_exempts` 豁免。
+我们还提供了辅助工具 [`collect-disallowed-maven-jars.py`](../../tool) 用于生成此列表：
 
-  maven 仓库的 SNAPSHOT 版本的更新间隔。单位为分钟，默认为一天。
+```python
+java_config(
+    maven_jar_allowed_dirs_exempts = load_value('exempted_maven_jars.conf'),
+)
+```
 
-- `maven_download_concurrency` : int = 0
+#### `maven_jar_allowed_dirs_exempts`：list = []
 
-  并发下载 maven_jar 的进程数。
+**豁免 `maven_jar_allowed_dirs` 检查的目标列表**
 
-  设置大于 1 的值可以提高下载速度，但是由于[maven 本地仓库缓存默认不是并发安全的](https://issues.apache.org/jira/browse/MNG-2802),
-  你可以尝试安装[takari](http://takari.io/book/30-team-maven.html#concurrent-safe-local-repository)
-  来确保安全， 注意这个插件其实有多个可用的版本，文档示例里的不是最新的。
+#### `maven_snapshot_update_policy`：string = 'daily'
+
+**Maven 仓库 SNAPSHOT 更新策略**
+
+**合法取值：** `"always"`、`"daily"`（默认）、`"interval"`、`"never"`
+详见 [Maven 文档](https://maven.apache.org/ref/3.6.3/maven-settings/settings.html)。
+
+#### `maven_snapshot_update_interval`：int = 86400
+
+**SNAPSHOT 更新间隔**
+
+**单位：** 分钟
+
+#### `maven_download_concurrency`：int = 0
+
+**Maven 制品下载的并发数**
+
+设置大于 1 可加速下载，但由于 [Maven 本地仓库默认并非并发安全](https://issues.apache.org/jira/browse/MNG-2802)，建议安装 [takari](http://takari.io/book/30-team-maven.html#concurrent-safe-local-repository) 来保证安全。注意该插件有多个版本，文档示例中的并非最新版。
 
 ### proto_library_config
 
-编译 protobuf 需要的配置：
+编译 protobuf 所需的配置：
 
-- `protoc` : string = 'protoc'
-
-  protoc 编译器的路径。
-
-- `protobuf_libs` : list =
-
-  protobuf 库的路径，Blade deps 格式。
-
-- `protobuf_path` : string =
-
-  import 时的 proto 搜索路径，相对于 BLADE_ROOT。
-
-- `protobuf_cc_warning`: string = ''
-
-  编译 pb.cc 时是否开启 warnings, yes 或者 no
-
-- `protobuf_include_path` : string =
-
-  编译 pb.cc 时额外的 -I 路径。
+```python
+proto_library_config(
+    protoc = 'protoc',                                   # protoc 编译器路径
+    protobuf_libs = '//thirdparty/protobuf:protobuf',    # protobuf 库，Blade deps 格式
+    protobuf_path = 'thirdparty',                        # import 时的 proto 搜索路径，相对 BLADE_ROOT
+    protobuf_cc_warning = '',                            # 编译 pb.cc 时是否开启 warning，yes 或 no
+    protobuf_include_path = 'thirdparty',                # 编译 pb.cc 时额外的 -I 路径
+)
+```
 
 ### thrift_library_config
 
-编译 thrift 需要的配置：
+编译 thrift 所需的配置：
 
-- `thrift` : string = 'thrift'
+```python
+thrift_library_config(
+    thrift = 'thrift',                              # thrift 编译器路径
+    thrift_libs = '//thirdparty/thrift:thrift',     # thrift 库，Blade deps 格式
+    thrift_path = 'thrift',                         # thrift 文件的搜索路径，相对 BLADE_ROOT
+    thrift_incs = 'thirdparty',                     # 编译 thrift 生成的 .cpp 时额外的 -I 路径
+)
+```
 
-  thrift 编译器的路径。
+### 追加配置项的值
 
-- `thrift_libs` : list =
-
-  thrift 库的路径，Blade deps 格式。
-
-- `thrift_incs` : list =
-
-  编译 thrift 生成的 C++ 时额外的头文件搜索路径。
-
-- `thrift_gen_params` : string = 'cpp:include_prefix,pure_enums'
-
-  thrift 的编译参数。
-
-### 追加配置项值
-
-所有 `list` 和 `set` 类型的配置项都支持追加，其中 `list` 还支持在前面添加，用法是在配置项名前
-加上 `append_` 或 `prepend_` 前缀：
+所有 `list` 和 `set` 类型的配置项都支持追加，其中 `list` 还支持在前面插入。用法是在配置项名前加 `append_` 或 `prepend_` 前缀：
 
 ```python
 cc_config(
@@ -438,7 +486,7 @@ cc_config(
 )
 ```
 
-同一个配置项不能同时赋值和追加：
+同一个配置项不能同时直接赋值和追加：
 
 ```python
 # 错误！
@@ -448,7 +496,7 @@ cc_config(
 )
 ```
 
-还有一种旧的 `append` 的方法，因为语法繁琐且不支持在前面添加，已废弃：
+此外还有一种旧的 `append` 写法，已废弃：
 
 ```python
 cc_config(
@@ -460,7 +508,7 @@ cc_config(
 
 ### load_value 函数
 
-load_value 函数可以用于从指定文件中安全地加载一个值：
+`load_value` 函数可以从文件中加载一个表达式并作为值使用：
 
 ```python
 cc_config(
@@ -468,33 +516,32 @@ cc_config(
 )
 ```
 
-值必须符合 Python 字面量规范，不能包含执行语句。
+加载的值必须符合 Python 字面量规范，不能包含可执行语句。
 
 ## 环境变量
 
 Blade 还支持以下环境变量：
 
-- `TOOLCHAIN_DIR`，默认为空
-- `CPP`，默认为 `cpp`
-- `CXX`，默认为 `g++`
-- `CC`，默认为 `gcc`
-- `LD`，默认为 `g++`
+- `TOOLCHAIN_DIR`：默认为空
+- `CPP`：默认为 `cpp`
+- `CXX`：默认为 `g++`
+- `CC`：默认为 `gcc`
+- `LD`：默认为 `g++`
 
-`TOOLCHAIN_DIR` 和 `CPP` 等组合起来，构成调用工具的完整路径，例如：
+`TOOLCHAIN_DIR` 和 `CPP` 等组合起来，构成调用工具的完整路径。例如：
 
-调用 `/usr/bin` 下的 `gcc`（开发机上的原版 `gcc`）
+调用 `/usr/bin` 下的 `gcc`（开发机上的原版 `gcc`）：
 
 ```bash
 TOOLCHAIN_DIR=/usr/bin blade
 ```
 
-使用 `clang`
+使用 `clang`：
 
 ```bash
 CPP='clang -E' CC=clang CXX=clang++ LD=clang++ blade
 ```
 
-如同所有的环境变量设置规则，放在命令行前的环境变量，只对这一次调用起作用，如果要后续起作用，用 `export`，要持久生效，
-放入 `~/.profile` 中。
+与所有环境变量的规则一致：放在命令行前的环境变量只在本次调用生效；如需持续生效，请使用 `export`，并放入 `~/.profile`。
 
-环境变量的支持将来考虑淘汰，改为配置编译器版本的方式，因此建议仅用于临时测试不同的编译器。
+环境变量支持将来计划逐步淘汰，取而代之的是通过配置显式指定编译器版本，因此建议只在临时测试不同编译器时使用。
