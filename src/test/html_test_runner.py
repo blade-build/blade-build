@@ -466,7 +466,7 @@ class _TestResult(TestResult):
     # It lacks the output and reporting ability compares to unittest._TextTestResult.
 
     def __init__(self, verbosity=1):
-        super(_TextTestResult, self).__init__()
+        super(_TestResult, self).__init__()
         self.stdout0 = None
         self.stderr0 = None
         self.success_count = 0
