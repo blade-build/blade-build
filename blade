@@ -66,27 +66,37 @@ function _full_real_path() {
 }
 
 # Check the python version at first, exit blade when python
-# version is under 2.7
+# version is under 2.7 (for python2) or under 3.6 (for python3).
 function _check_python() {
-    local python
-    if command -v python &> /dev/null; then
+    local python=""
+    if command -v python3 &> /dev/null; then
+        python="python3"
+    elif command -v python &> /dev/null; then
         python="python"
-    elif command -v python3 &> /dev/null; then
-        echo "python3"
-        return
-    elif command -v python3 &> /dev/null; then
-        python="python"
-        echo "python3"
+    elif command -v python2 &> /dev/null; then
+        python="python2"
     else
-        _fatal "Please install python 2.7+ or 3.6+ or above in your system"
+        _fatal "Please install python 2.7+ or 3.6+ in your system"
     fi
 
-    python_ver=$($python -V 2>&1 | sed 's/Python //g')
-    if [[ "$python_ver" < "2.7" ]]; then
+    local python_ver
+    python_ver=$("$python" -V 2>&1 | sed 's/Python //g')
+    local major=${python_ver%%.*}
+    local rest=${python_ver#*.}
+    local minor=${rest%%.*}
+
+    if ! [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]]; then
         _info "Python version in your machine: $python_ver"
-        _fatal "Please upgrade your python version to 2.7 or 3.6+"
+        _fatal "Cannot parse python version, please install python 2.7+ or 3.6+"
     fi
-    echo $python
+
+    if (( major < 2 )) \
+        || (( major == 2 && minor < 7 )) \
+        || (( major == 3 && minor < 6 )); then
+        _info "Python version in your machine: $python_ver"
+        _fatal "Please upgrade your python version to 2.7+ or 3.6+"
+    fi
+    echo "$python"
 }
 
 
