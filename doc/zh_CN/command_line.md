@@ -8,7 +8,7 @@ blade <子命令> [选项]... [目标模式]...
 
 ## 子命令
 
-subcommand是一个子命令，目前有：
+subcommand 是一个子命令，目前有：
 
 - `build` 构建指定的目标
 - `test`  构建并且运行指定的测试
@@ -26,7 +26,7 @@ subcommand是一个子命令，目前有：
 - `path:name` 表示 path 中的某个 target，这种形式称为直接目标。
 - `path:*` 表示 path 中所有目标，但不包含其子目录
 - `path` 是 `path:*` 的简写形式
-- `path/...` 表示path中所有目标，并递归包括所有子目录
+- `path/...` 表示 path 中所有目标，并递归包括所有子目录
 - `:name` 表示当前目录下的某个目标
 
 如果 `path` 以 `//` 开始，则表示从[工作空间](workspace.md)的根目录开始。name 部分不是通配符的称为“直接目标”。
@@ -93,20 +93,20 @@ $ blade dump --all-tags ...
 下面是一些常用的命令行选项：
 
 - -m32,-m64            指定构建目标位数，默认为自动检测
-- -p PROFILE           指定debug/release，默认release
+- -p PROFILE           指定 debug/release，默认 release
 - -k, --keep-going     构建过程中遇到错误继续执行（如果是致命错误不能继续）
-- -j N,--jobs=N        N路并行构建（Blade默认开启并行构建，自己计算合适的值）
-- -t N,--test-jobs=N   N路并行测试，多CPU机器上适用
+- -j N,--jobs=N        N 路并行构建（Blade 默认开启并行构建，自己计算合适的值）
+- -t N,--test-jobs=N   N 路并行测试，多 CPU 机器上适用
 - --verbose            完整输出所运行的每条命令行
 - –h, --help           显示帮助
 - --color=yes/no/auto  是否开启彩色
 - --exclude-targets    以逗号分割的加载时要排除的目标模式
 - --generate-dynamic   强制生成动态库
-- --generate-java      为proto_library 和 swig_library 生成java文件
-- --generate-php       为proto_library 和 swig_library 生成php文件
-- --generate-go        为proto_library 生成go文件
+- --generate-java      为 proto_library 和 swig_library 生成 java 文件
+- --generate-php       为 proto_library 和 swig_library 生成 php 文件
+- --generate-go        为 proto_library 生成 go 文件
 - --gprof              支持 GNU gprof
-- --coverage           支持生成覆盖率，目前支持 GNU gcov 和Java jacoco
+- --coverage           支持生成覆盖率，目前支持 GNU gcov 和 Java jacoco
 
 ## 示例
 

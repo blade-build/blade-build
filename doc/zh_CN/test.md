@@ -1,6 +1,6 @@
 # 测试支持 #
 
-Blade对测试驱动开发提供了完善的支持，可以通过命令自动运行测试程序。
+Blade 对测试驱动开发提供了完善的支持，可以通过命令自动运行测试程序。
 
 ## 增量测试 ##
 
@@ -57,9 +57,9 @@ cc_test(
 
 ## 测试覆盖率 ##
 
-构建和运行测试时，加上--coverage参数，blade 就会加入覆盖率相关的编译选项，并在运行时收集测试覆盖率数据，目前仅支持 C++、Java 和 Scala。
+构建和运行测试时，加上--coverage 参数，blade 就会加入覆盖率相关的编译选项，并在运行时收集测试覆盖率数据，目前仅支持 C++、Java 和 Scala。
 
-C/C++测试覆盖率，是通过gcc的[gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html)实现的。测试运行完后，需要自己执行gcov或者lcov之类的第三方工具生成测试覆盖报告。
+C/C++测试覆盖率，是通过 gcc 的[gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html)实现的。测试运行完后，需要自己执行 gcov 或者 lcov 之类的第三方工具生成测试覆盖报告。
 
 要生成 Java/Scala 测试覆盖率报告，你需要下载并解压[jacoco](https://www.jacoco.org/)，然后进行配置：
 
@@ -78,10 +78,10 @@ Jacoco 需要 `-g:line` 编译选项才能生成行覆盖率。
 
 ## 排除指定的测试 ##
 
-Blade支持通过--exclude-tests参数显式地排除指定的测试，当需要批量运行大量的测试，而又期望排除某些测试时，这个选项就很有用。例如：
+Blade 支持通过--exclude-tests 参数显式地排除指定的测试，当需要批量运行大量的测试，而又期望排除某些测试时，这个选项就很有用。例如：
 
 ```bash
 blade test base/... --exclude-tests=base/string,base/encoding:hex_test
 ```
 
-表示运行base目录下所有的测试，但是排除base/string里所有的测试以及base/encoding:hex_test。
+表示运行 base 目录下所有的测试，但是排除 base/string 里所有的测试以及 base/encoding:hex_test。

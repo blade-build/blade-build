@@ -6,7 +6,7 @@ Blade 运行时需要以下依赖：
 * Python v2.7+ 或 Python v3.6+
 * Ninja v1.8+
 
-Blade还能和以下软件协作：
+Blade 还能和以下软件协作：
 
 * ccache v3.1+
 * distcc

@@ -1,4 +1,4 @@
-# 构建lex和yacc #
+# 构建 lex 和 yacc #
 
 ## lex_yacc_library ##
 
@@ -10,7 +10,7 @@
 
 属性：
 
-- recursive=True 生成可重入的C scanner。
+- recursive=True 生成可重入的 C scanner。
 
 也支持大部分 [cc_library 的属性](cc.md#cc_library)。
 

@@ -1,8 +1,8 @@
-# 构建Scala目标 #
+# 构建 Scala 目标 #
 
 ## 规则 ##
 
-scala_library scala_binary scala_test用法类似java，区别是编译器换成了scalac。
+scala_library scala_binary scala_test 用法类似 java，区别是编译器换成了 scalac。
 scala\_test 使用 [scalatest](https://www.scalatest.org) 库。
 
 ## 标准库 ##
