@@ -57,7 +57,7 @@ java_library(
 - coverage attribute
   bool, Whether generate test coverage data for this library. It is useful to be False in some cases such as srcs are generated.
 
-### Mutiple kinds of dependancy
+### Multiple kinds of dependency
 
 For java targets,except the normal `deps`, they also support `exported_deps`,`provided_deps`.
 There is a notable difference from C++ targets: for java_library, the dependancies are not **transtive** at the compile phrase.

@@ -349,7 +349,7 @@ class CommandLineParser(object):
 
         parser.add_argument(
             '--exclude-tests', dest='exclude_tests', default='', metavar='TARGET_LIST',
-            help='Exclude tests which matches this comma seperated target pattern list')
+            help='Exclude tests which matches this comma-separated target pattern list')
 
         parser.add_argument(
             '--run-unrepaired-tests', dest='run_unrepaired_tests', action='store_true',
