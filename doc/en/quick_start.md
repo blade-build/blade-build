@@ -1,8 +1,10 @@
-# Quick Start
+# Quick Start Guide
 
-Let's start with a hello-world to practice using Blade.
+This tutorial demonstrates Blade usage through a "Hello World" example, providing hands-on experience with the build system.
 
-## Create a workspace
+## Workspace Setup
+
+Create a new workspace directory:
 
 ```console
 $ mkdir quick-start
@@ -10,19 +12,23 @@ $ cd quick-start
 $ touch BLADE_ROOT
 ```
 
-## Define and implement the `say` library
+## Creating the `say` Library
 
-Create the header file `say.h`:
+### Header File Definition
+
+Create `say.h` with the following content:
 
 ```cpp
 #pragma once
 #include <string>
 
-// Say a message
+// Output a message to standard output
 void Say(const std::string& msg);
 ```
 
-Create the implementation file `say.cpp`:
+### Implementation File
+
+Create `say.cpp` with the implementation:
 
 ```cpp
 #include "say.h"
@@ -33,58 +39,72 @@ void Say(const std::string& msg) {
 }
 ```
 
-Create a `BUILD` file and describe the above file as a `say` library:
+### BUILD File Configuration
+
+Define the library in a `BUILD` file:
 
 ```python
 cc_library(
-    name ='say',
+    name = 'say',
     hdrs = ['say.h'],
     srcs = ['say.cpp'],
 )
 ```
 
-`cc_library` means that this is a C/C++ library, `hdrs` means the library’s public interface header files, and `srcs` means its
-implementation files. If there are private header files, also put them in `srcs`.
+**Key Concepts:**
+- `cc_library`: Declares a C/C++ library target
+- `hdrs`: Public interface header files
+- `srcs`: Implementation source files (including private headers)
 
-## Define and implement the hello library
+## Creating the `hello` Library
 
-Create the header file `hello.h`:
+### Header File Definition
+
+Create `hello.h`:
 
 ```cpp
 #pragma once
 #include <string>
 
-// Say hello to `to`
+// Generate a greeting message
 void Hello(const std::string& to);
 ```
 
-Create the implementation file `hello.cpp`:
+### Implementation File
+
+Create `hello.cpp`:
 
 ```cpp
 #include "say.h"
 
 void Hello(const std::string& to) {
-    Say("Hello, "+ to);
+    Say("Hello, " + to);
 }
 ```
 
-Create a `BUILD` file and describe the above file as a `hello` library:
+### BUILD File Configuration
+
+Extend the `BUILD` file with the `hello` library:
 
 ```python
 cc_library(
-    name ='hello',
+    name = 'hello',
     hdrs = ['hello.h'],
     srcs = ['hello.cpp'],
     deps = [':say'],
 )
 ```
 
-It looks similar to the say library, but with an additional `deps` parameter, which means it depends
-on the `say` library. The `:` prefix indicates that the target is in the same `BUILD` file.
+**Dependency Management:**
+- `deps`: Specifies library dependencies
+- `:` prefix: Indicates target within the same BUILD file
+- Transitive dependencies: Blade automatically handles dependency propagation
 
-## Implement the `hello-world` program
+## Creating the `hello-world` Executable
 
-Create the `hello-world.c` file:
+### Source File
+
+Create `hello-world.c`:
 
 ```c
 #include "hello.h"
@@ -95,21 +115,26 @@ int main() {
 }
 ```
 
-Add the rule call for compiling `hello-world` in the `BUILD` file:
+### BUILD File Extension
+
+Add the executable target to the `BUILD` file:
 
 ```python
 cc_binary(
-    name ='hello-world',
+    name = 'hello-world',
     srcs = ['hello-world.c'],
     deps = [':hello'],
 )
 ```
 
-Note that the rule name is `cc_binary`, the dependency on the `hello` library needs to be added to the `deps`, but there is no
-need to add the dependency on the `say` library, because this is the implementation details of `hello`, the `hello-world` target
-does not need to be understood. When compiling and linking, Blade will correctly handle the transfer of dependencies.
+**Dependency Strategy:**
+- `cc_binary`: Creates an executable target
+- Direct dependencies only: Only specify immediate dependencies
+- Transitive handling: Blade automatically includes indirect dependencies
 
-Build the `hello-world` program:
+## Build and Execution
+
+### Build Process
 
 ```console
 $ blade build :hello-world
@@ -117,14 +142,24 @@ Blade(info): Building...
 Blade(info): Build success.
 ```
 
-Run the `hello-world` program:
+### Program Execution
 
 ```console
 $ blade run :hello-world
 Blade(info): Building...
 Blade(info): Build success.
-Blade(info): Run'['/data1/code/blade-build/example/quick-start/build64_release/hello-world']'
+Blade(info): Run['/data1/code/blade-build/example/quick-start/build64_release/hello-world']
 Hello, World!
 ```
 
-For a complete example, see [quick-start](../../example/quick-start) under [example](../../example).
+## Complete Example Reference
+
+For the complete working example, refer to:
+- [quick-start](../../example/quick-start) directory
+- [example](../../example) directory structure
+
+**Learning Outcomes:**
+- Understanding Blade's declarative build configuration
+- Mastering dependency management principles
+- Learning incremental build optimization strategies
+- Gaining practical experience with C/C++ project structure

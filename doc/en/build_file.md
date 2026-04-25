@@ -1,34 +1,29 @@
-# Write a BUILD file
+# Writing BUILD Files
 
-The Blade passes a series of files named "BUILD" (all uppercase), which need to be written by the
-developer. Each BUILD file describes the source file of a target, other targets it depends on,
-and other properties through a set of object description functions.
+Blade utilizes BUILD files (all uppercase) to define build targets. Each BUILD file specifies the source files, dependencies, and configuration properties for one or more targets using declarative function calls.
 
-## Example of a BUILD file
+## BUILD File Example
 
-Build file is simple:
-
-Example: common/base/string/BUILD
+Example: `common/base/string/BUILD`
 
 ```python
 cc_library(
-    name = 'string',
-    srcs = [
-        'algorithm.cpp',
-        'format.cpp',
-        'concat.cpp',
-    ],
-    hdrs = [
-        'algorithm.h',
-        'format.h',
-        'concat.h',
+    name = 'string',
+    srcs = [
+        'algorithm.cpp',
+        'format.cpp',
+        'concat.cpp',
     ],
-    deps = ['//common/base:int'],
+    hdrs = [
+        'algorithm.h',
+        'format.h',
+        'concat.h',
+    ],
+    deps = ['//common/base:int'],
 )
 ```
 
-It is declarative, just need to list the target name, source file name and dependency name
-(if any), no compiling and linking command is required to specified.
+BUILD files employ a declarative syntax where developers specify target names, source files, and dependencies without needing to define compilation or linking commands explicitly.
 
 ## BUILD Language
 

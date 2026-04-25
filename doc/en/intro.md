@@ -1,11 +1,38 @@
-# What is Blade
+# Introduction to Blade
 
-Software projects use a variety of tools to build code, the most common is probably GNU Make. However, although GNU Make has its own functions, it is difficult to use it directly.
+## Overview
 
-Many people still write Makefiles by hand, and they don't write the correct dependencies, which makes them feel clean every time they have to make clean, and the meaning of Make is greatly reduced.
-This is no problem under the small projects of several files, and it is very inconvenient for large projects.
+Blade is a modern, high-performance build system designed to address the complexities of large-scale software development. While traditional tools like GNU Make offer powerful functionality, their direct usage often introduces significant operational challenges in enterprise environments.
 
-Autotools is called auto, but it still needs to write a lot of things manually. Running a series of commands is still more complicated, and the threshold for developers to learn and use is very high.
+## Traditional Build System Limitations
 
-Blade is aimed at these issues, and is the ["Typhoon" cloud computing platform of Tencent's Infrastructure Department](http://storage.it168.com/a2011/1203/1283/000001283196.shtml)
-The new generation of build tools developed by the project hopes to become the "Swiss Army Knife" in the hands of developers. We are now open sourced out, hoping to make more people more convenient.
+**Dependency Management Complexity:**
+- Manual Makefile creation frequently leads to incomplete dependency specifications
+- Inconsistent dependency tracking results in unreliable incremental builds
+
+**Operational Inefficiencies:**
+- Frequent `make clean` operations negate Make's incremental build advantages
+- Scalability limitations emerge in monorepo environments with thousands of targets
+
+**Developer Experience Challenges:**
+- High learning curve impedes team adoption and productivity
+- Autotools automation promises often require complex command sequences
+- Lack of standardized conventions across projects
+
+## Blade's Enterprise Solution
+
+Developed during Tencent's ["Typhoon" cloud computing platform](http://storage.it168.com/a2011/1203/1283/000001283196.shtml) initiative, Blade represents a next-generation build system engineered for enterprise-scale development.
+
+**Key Design Principles:**
+- **Declarative Configuration:** BUILD files specify what to build, not how to build
+- **Automatic Dependency Management:** Comprehensive dependency tracking without manual specification
+- **High Performance:** Optimized for large-scale monorepo environments
+- **Developer Productivity:** Intuitive syntax with powerful automation capabilities
+
+**Enterprise-Grade Features:**
+- Trunk-based development support for continuous integration
+- Multi-language build capabilities (C/C++, Java, Python, etc.)
+- Advanced caching mechanisms for build acceleration
+- Comprehensive testing and deployment integration
+
+Now open-sourced, Blade combines the simplicity needed for rapid development with the robustness required for enterprise-scale projects.

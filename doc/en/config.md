@@ -1,16 +1,17 @@
-# Configuration
+# Configuration System
 
-## configuration file
+## Configuration File Hierarchy
 
-Blade supports multiple-level configuration files, which are loaded in the following order.
-The loaded configuration will overwrite the previous configuration.
+Blade employs a multi-level configuration system that loads files in the following precedence order, with each subsequent level overriding the previous:
 
-- `blade.conf` in the blade installation directory is the global configuration.
-- `~/.bladerc` in the user's `HOME` directory is a user-level configuration.
-- `BLADE_ROOT` is also actually a configuration file, put your project-level configuration here.
-- `BLADE_ROOT.local` is developer's own local configuration file for temporary adjustment of parameters, etc.
+- **Global Configuration**: `blade.conf` in the Blade installation directory
+- **User Configuration**: `~/.bladerc` in the user's home directory
+- **Project Configuration**: `BLADE_ROOT` file (also functions as a configuration file)
+- **Local Configuration**: `BLADE_ROOT.local` for developer-specific temporary adjustments
 
-The configuration syntax is similar to the build rules, also through function calls, for example:
+## Configuration Syntax
+
+Configuration files use a function-call syntax similar to BUILD files:
 
 ```python
 global_config(
@@ -18,139 +19,166 @@ global_config(
 )
 ```
 
-There is no order requirement between configuration items. Most of the configuration items have appropriate
-default values, and there is no need to set them if they do not need to be overwritten.
+### Key Characteristics:
+- Configuration items can be specified in any order
+- Most parameters have sensible defaults that rarely need modification
+- Only override settings when specific customization is required
 
-You can run `blade dump` command to dump current configuration, and modify it as your need:
+## Configuration Inspection
+
+To examine current configuration settings:
 
 ```bash
+# Dump configuration to file
 blade dump --config --to-file my.config
-```
 
-Without the `--to-file` option, the result will be dumped to stdout.
+# Display configuration to stdout
+blade dump --config
+```
 
 ### global_config
 
-Global configuration:
+Global build system configuration parameters:
 
-- `backend_builder` : string = "ninja"
+#### `backend_builder`: string = "ninja"
+**Backend Build System**
 
-  Backend build system, only `ninja` currently.
+Currently supports only `ninja` as the backend build system.
 
-  [ninja](https://ninja-build.org/) is a lower-level system that focuses on building speeds.
-  We used to use SCons as the backend, but ninja is much faster, so the we only use ninja as
-  backend, and the support for SCons is removed.
+**Technical Background:** Blade previously used SCons but transitioned to [Ninja](https://ninja-build.org/) due to its superior build performance. Ninja is a lower-level build system optimized for speed, making it the exclusive backend choice.
 
-- `duplicated_source_action` : string = "warning"; ["warning", "error"]
+#### `duplicated_source_action`: string = "warning"
+**Duplicate Source File Handling**
 
-  The action when the same source file is found to belong to multiple targets.
+**Valid Values:** `["warning", "error"]`
+**Behavior:** Specifies the action when a source file is detected in multiple targets.
 
-- `test_timeout` : int = 600
+#### `test_timeout`: int = 600
+**Test Execution Timeout**
 
-  In seconds, tests which can't finish in this seconds will be reported as fail.
+**Unit:** Seconds
+**Purpose:** Tests exceeding this duration are automatically marked as failed.
 
-- `debug_info_level` : string = "mid" | ["no", "low", "mid", "high"]
+#### `debug_info_level`: string = "mid"
+**Debug Information Generation**
 
-  Debug information level, the higher may be helpful for debugging, but cost more disk space.
+**Valid Values:** `["no", "low", "mid", "high"]`
+**Trade-off:** Higher levels provide better debugging capability but increase disk space consumption.
 
-- `build_jobs` int = 0       | 0~#CPU cores
+#### `build_jobs`: int = 0
+**Parallel Build Jobs**
 
-  The number of concurrent build jobs, 0 means decided by blade itself.
+**Range:** 0 to number of CPU cores
+**Default Behavior:** 0 enables automatic job count determination by Blade.
 
-- `test_jobs` : int = 0 | 0~#CPU cores/2
+#### `test_jobs`: int = 0
+**Parallel Test Jobs**
 
-  The number of concurrent test jobs, 0 means decided by blade itself.
+**Range:** 0 to half the number of CPU cores
+**Default Behavior:** 0 enables automatic test concurrency management.
 
-- `test_related_envs` : list = []
+#### `test_related_envs`: list = []
+**Test-Related Environment Variables**
 
-  string or regex    | Environment variables which will affect tests during incremental test.
+**Format:** String or regular expression patterns
+**Purpose:** Identifies environment variables that impact test behavior during incremental testing.
 
-- `run_unrepaired_tests` : bool = False
+#### `run_unrepaired_tests`: bool = False
+**Unrepaired Test Execution**
 
-  Whether run unrepaired(no changw after previous failure) tests during incremental test.
+**Behavior:** Controls whether to execute tests that failed previously without code changes.
 
-- `legacy_public_targets` : list = []
+#### `legacy_public_targets`: list = []
+**Backward Compatibility for Target Visibility**
 
-  For targets whose `visibility` is not explicitly set, its visibility is set to `PUBLIC` if it is in this list.
+**Purpose:** For targets without explicit `visibility` settings, this list determines which targets default to `PUBLIC` visibility.
 
-  For existing projects, we provide a too [`tool/collect-missing-visibilty.py`](../../tool), which can be used to generate this list.
+**Migration Tool:** Use [`tool/collect-missing-visibility.py`](../../tool) to generate this list for existing projects:
 
-  You can save the output of this tool to a file and load it with `load_value()`:
+```python
+global_config(
+    legacy_public_targets = load_value('legacy_public_targets.conf')
+)
+```
 
-  ```python
-  global_config(
-      legacy_public_targets = load_value('legacy_public_targets.conf')
-  )
-  ```
+#### `default_visibility`: list = []
+**Default Target Visibility**
 
--`default_visibility` : list = [] | ['PUBLIC']
-
-  For targets that do not explicitly set visibility (`visibility`), set it to this value.
-
-  Can only be set to empty (`[]`) or `['PUBLIC']`.
-  If set to `['PUBLIC']`, it will be consistent with Blade 1.
+**Valid Values:** `[]` (private) or `['PUBLIC']`
+**Historical Context:** Setting to `['PUBLIC']` maintains compatibility with Blade 1.x behavior.
 
 ### cc_config
 
-Common configuration of all c/c++ targets:
+Common configuration parameters for all C/C++ build targets:
 
-- `extra_incs` : list = []
+#### `extra_incs`: list = []
+**Additional Include Directories**
 
-  header file search paths.
+**Purpose:** Specifies extra header file search paths for the compiler.
 
-- `cppflags` : list = []
+#### `cppflags`: list = []
+**C/C++ Common Compiler Flags**
 
-  C/C++ common options.
+**Usage:** Flags applicable to both C and C++ compilation.
 
-- `cflags` : list = []
+#### `cflags`: list = []
+**C-Specific Compiler Flags**
 
-  C only options.
+**Usage:** Flags exclusive to C language compilation.
 
-- `cxxflags` : list = []
+#### `cxxflags`: list = []
+**C++-Specific Compiler Flags**
 
-  C++ only options
+**Usage:** Flags exclusive to C++ language compilation.
 
-- `linkflags` : list = []
+#### `linkflags`: list = []
+**Linker Flags**
 
-  Link options.
+**Usage:** Additional flags passed to the linker during executable/library linking.
 
-- `warnings` : list = builtin
+#### `warnings`: list = builtin
+**C/C++ Common Warning Flags**
 
-  C/C++ common warnings. such as `['-Wall', '-Wextra']`.
+**Default:** `['-Wall', '-Wextra']`
+**Recommendation:** The default warning configuration is carefully selected and suitable for most development scenarios.
 
-  The default options are carefully handpicked and are recommended to most developers.
+#### `c_warnings`: list = builtin
+**C-Specific Warning Flags**
 
-- `c_warnings` : list = builtin
+**Usage:** Warning flags exclusive to C language compilation.
 
-  C only warnings.
+#### `cxx_warnings`: list = builtin
+**C++-Specific Warning Flags**
 
-- `cxx_warnings` : list = builtin
+**Usage:** Warning flags exclusive to C++ language compilation.
 
-  C++ only warnings.
+#### `optimize`: list = ['-O2']
+**Optimization Flags**
 
-- `optimize` : list = ['-O2']
+**Default:** `['-O2']`
+**Special Behavior:** Optimization flags are disabled in debug mode to preserve debugging capability.
 
-  Optimize options. It is separate from other compile flags because it is ignored in debug mode.
+#### `fission`: bool = False
+**Debug Information Fission**
 
-- `fission` : bool = False
+**Feature:** Enables GCC's [DebugFission](https://gcc.gnu.org/wiki/DebugFission) feature.
 
-  Whether to enable GCC's [DebugFission](https://gcc.gnu.org/wiki/DebugFission) feature.
+**Behavior:** When enabled, debug information is separated into `.dwo` files, significantly reducing executable size.
 
-  When enabled, debug information is split into separate `.dwo` files.
-  This can significantly reduce the size of executable files. In our real test, with the middle debug information level,
-  the size of an executable file has been reduced from 1.9GB to 532MB.
+**Performance Impact:** In production testing with medium debug information level, executable size reduced from 1.9GB to 532MB.
 
-  You can also enable this feature via the command line parameter `--fission`.
+**Command Line Alternative:** `--fission` parameter
 
-- `dwp`: bool = False
+#### `dwp`: bool = False
+**Debug Information Packaging**
 
-  Whether to package `.dwo` files into a `.dwp` file.
+**Prerequisite:** Requires `fission = True`
 
-  This option requires `fission` to be enabled. When enabled, the build process will automatically package
-  the scattered `.dwo` debug information files into a single `.dwp` file, which makes it easier to manage
-  and distribute debug information. For how to use dwp files in packages, see the [`cc_binary`](build_rules/cc.md#cc_binary) documentation.
+**Function:** Packages scattered `.dwo` files into a single `.dwp` file for easier debug information management and distribution.
 
-  You can also enable this feature via the command line parameter `--dwp`.
+**Usage Reference:** See [`cc_binary`](build_rules/cc.md#cc_binary) documentation for `.dwp` file integration.
+
+**Command Line Alternative:** `--dwp` parameter
 
 - `hdr_dep_missing_severity` : string = 'warning' | ['info', 'warning', 'error']
 

@@ -9,7 +9,7 @@
 
 English | [简体中文](README-zh.md)
 
-An easy-to-use, fast, and modern build system for trunk-based development in a large-scale monorepo codebase.
+A modern, high-performance build system optimized for trunk-based development in large-scale monorepo environments.
 
 ## Build Status
 
@@ -30,13 +30,13 @@ The code on the master branch is the development version and should be considere
 Please prefer using the version on the tags in your formal environment.
 We will release the verified version on the large-scale internal code base to the tag from time to time.
 
-* Version 2.0 is released! It includes the following notable changes:
+* Version 2.0 is now available with the following major enhancements:
 
-  * minimal Python version 2.7, support Python 3
-  * Support Java, scala building
-  * Full support for Python
-  * Support custom extensions
-  * Only use [ninja](doc/en/config.md#global_config) as backend build system, increases speed dramatically.
+  * Minimum Python version requirement: 2.7, with full Python 3 support
+  * Java and Scala build support
+  * Comprehensive Python language support
+  * Custom extension framework
+  * Exclusive use of [Ninja](doc/en/config.md#global_config) as the backend build system, delivering significant performance improvements
 
 Please follow the [Upgrade Notes](doc/en/upgrade-to-v2.md) to upgrade.
 
@@ -46,19 +46,19 @@ Please follow the [Upgrade Notes](doc/en/upgrade-to-v2.md) to upgrade.
 
 ## Origin
 
-Blade is designed to be a modern build system. It is powerful and easy to use. It supports building
-multiple languages, such as c/c++, Java, Python, Scala, protobuf, etc. It analyzes the
-target dependency automatically and integrates compiling, linking, testing(including incremental
-testing and parallel testing), and static code inspection together.
-It aims to improve the clarity and simplicity of the building rules for a project.
+Blade is engineered as a modern, high-performance build system that combines power with ease of use. It provides comprehensive support for multiple programming languages including C/C++, Java, Python, Scala, Protocol Buffers, and more. The system automatically analyzes target dependencies and seamlessly integrates compilation, linking, testing (with support for incremental and parallel testing), and static code analysis.
+
+Designed to enhance development productivity, Blade simplifies build configuration while maintaining robust functionality for complex projects.
 
 Blade is primarily positioned for large C++ projects on Linux, closely integrated with development workflows such as unit testing, continuous integration, and coverage statistics. Like Unix text filtering programs, it maintains relative independence and can run standalone. Currently, it focuses on supporting i386/x86_64 Linux, with potential future support for other Unix-like systems.
 
-During the development of [Tencent's "Typhoon" cloud computing platform](/doc/Hadoop-in-China-2011-Typhoon.mhtml), to solve the complexity and difficulty issues of GNU Make and Autotools, and referencing [some articles from Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we developed this entirely new build system. The entire system is based on multiple declarative build scripts where you only need to declare what targets to build, their source code, and their direct dependencies on other targets, without specifying how to build. This greatly reduces usage difficulty and improves development efficiency.
+During the development of [Tencent's "Typhoon" cloud computing platform](/doc/Hadoop-in-China-2011-Typhoon.mhtml), we identified significant challenges with GNU Make and Autotools in large-scale environments. Inspired by insights from [Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we engineered Blade as a declarative build system.
 
-In 2012, Blade was open-sourced, becoming Tencent's earliest open-source project. It has now been widely adopted across Tencent's advertising systems, WeChat backend services, Tencent gaming backend services, Tencent's basic infrastructure, as well as other companies like Xiaomi, Baidu, and iQiyi. We have also received multiple Pull Requests from both inside and outside the company.
+The system utilizes declarative build scripts where developers specify what to build (targets, sources, and direct dependencies) rather than how to build it. This approach dramatically reduces configuration complexity while significantly improving development efficiency and maintainability.
 
-After being open-sourced, the code was hosted on googlecode, and due to googlecode's later closure, it was migrated to chen3feng's personal git repository for continued maintenance.
+Blade was open-sourced in 2012 as one of Tencent's earliest open-source initiatives. The system has achieved widespread adoption across Tencent's technology stack, including advertising platforms, WeChat backend services, gaming infrastructure, and core infrastructure systems. Beyond Tencent, Blade has been deployed at major technology companies including Xiaomi, Baidu, and iQiyi.
+
+The project has fostered an active contributor community, receiving numerous Pull Requests from both internal and external developers. Originally hosted on Google Code, the project was migrated to chen3feng's personal repository following Google Code's deprecation, where it continues to be actively maintained and developed.
 
 With Blade, you can compile, link, and test multiple targets by just inputting one simple command line.
 For example:

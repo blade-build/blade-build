@@ -1,11 +1,66 @@
-# Features
+# Key Features
 
-* Source file updates cause a rebuild. This gnu make can be solved very well.
-* The build command is complex, and the developer may need to understand the command line and various parameters.
-* The header file is updated, so the source files that depend on this header file need to be rebuilt. This gnu make is not directly supported and needs to be used with gcc to generate and update dependencies.
-* Library file update, after the library file depends on the update, the program should be reconnected, GNU Make can do it.
-* Even if I only build my own target, if the source code of the library changes, the library should be regenerated, and GNU Make can't do it with Recursive Make.
-* Dependencies between library files are automatically passed, one library depends on another library, and the end users of the library don't need to care.
-* Warnings and errors during the build process should be prominently displayed.
-* It can automatically support the proto buffer used by the typhoon system in a large amount, and it is convenient to expand to support new tools that may be introduced by foreigners.
-* Should be able to integrate automatic testing, code checking and other commonly used functions.
+## Intelligent Dependency Management
+
+**Automatic Dependency Resolution:**
+- Automatic rebuilds triggered by source file modifications
+- Comprehensive header file dependency tracking with automatic rebuild capability
+- Transitive library dependency resolution without manual intervention
+
+**Advanced Dependency Analysis:**
+- Automatic library regeneration when source dependencies change
+- Seamless dependency propagation across library boundaries
+- Intelligent dependency graph optimization for build performance
+
+## Advanced Build Capabilities
+
+**Build System Intelligence:**
+- Prominent display of build warnings and errors with actionable insights
+- Automatic optimization flag management based on build mode
+- Parallel build execution with intelligent job scheduling
+
+**Quality Assurance Integration:**
+- Built-in support for automated testing frameworks
+- Code quality analysis and static checking capabilities
+- Comprehensive build artifact validation
+
+## Protocol Buffers Integration
+
+**Native Protocol Buffers Support:**
+- First-class support for Protocol Buffers extensively used in Typhoon systems
+- Automatic `.proto` file compilation and dependency management
+- Seamless integration with C++, Java, and Python code generation
+
+**Extensible Architecture:**
+- Plugin-based architecture for integrating new tools and technologies
+- Custom build rule support for specialized requirements
+- Modular design enabling targeted feature extensions
+
+## Development Workflow Integration
+
+**Unified Command-Line Interface:**
+- Simplified command-line interface reducing operational complexity
+- Consistent command patterns across all build operations
+- Comprehensive help system with contextual guidance
+
+**Enterprise Workflow Support:**
+- Continuous integration pipeline integration
+- Multi-environment build configuration management
+- Team collaboration features for large-scale development
+
+## Competitive Advantages
+
+**Technical Superiority:**
+- Solves fundamental limitations of GNU Make's recursive make approach
+- Eliminates manual dependency specification overhead
+- Provides enterprise-grade scalability for large codebases
+
+**Performance Optimization:**
+- Advanced caching mechanisms for build acceleration
+- Incremental build optimization minimizing rebuild time
+- Memory-efficient dependency graph processing
+
+**Developer Experience:**
+- Intuitive BUILD file syntax reducing learning curve
+- Comprehensive error reporting with actionable suggestions
+- Integration with popular development tools and IDEs

@@ -1,69 +1,90 @@
 # Testing Support
 
-Blade provides complete support for test-driven development, and can run multiple test programs automatically through command line.
+Blade provides comprehensive support for test-driven development, enabling automated execution of multiple test programs through command-line interfaces.
 
 ## Incremental Testing
 
-Blade test supports incremental testing defaultly to speed up the execution of tests.
+Blade test supports incremental testing by default to optimize test execution performance.
 
-Tests that have already been PASSED do not need to run again in the next build and test unless:
+### Test Execution Conditions
 
-* Any dependency changes to tests cause it to regenerate.
-* Tests dependent test data changes, this dependency is explicitly dependent, the user needs to specify using a BUILD file, such as testdata.
-* Tests where the related environment variable has changed.
-* Test arguments change.
-* Test expired.
+Tests that have previously passed do not require re-execution in subsequent builds unless:
 
-Test related environment variable names can be configureed in the `global_config.test_related_envs` config item, regex is allowed.
+- **Dependency Changes:** Any modifications to test dependencies trigger regeneration
+- **Test Data Changes:** Explicitly declared test data dependencies change (specified in BUILD files using `testdata` attribute)
+- **Environment Variable Changes:** Related environment variables are modified
+- **Argument Changes:** Test execution arguments are altered
+- **Test Expiration:** Tests exceed their validity period
 
-Text expired time is 1 day.
+### Configuration Options
 
-For any failed test, if it is the first time, it will run at the next time. but after the retry, it will not run again until it is rebuilt or expired.
-You can use `global_config.run_unchanged_tests` config item or `run-unchanged-tests` command line option to change the behavior.
+- **Environment Variables:** Configure test-related environment variables in `global_config.test_related_envs` (supports regex patterns)
+- **Expiration Period:** Default test expiration time is 1 day
+- **Failed Test Handling:** Failed tests run once more on retry; subsequent executions require rebuild or expiration
+- **Behavior Override:** Use `global_config.run_unchanged_tests` or `--run-unchanged-tests` command-line option to modify default behavior
 
-## Full Test
+## Full Test Execution
 
-If you need to run the full test, use the --full-test option, such as blade test common/... --full-test, all tests will be run unconditionly.
-In addition, cc_test supports the `always_run` attribute, which is used to always run every time during incremental testing, regardless of the last execution result.
+To execute all tests unconditionally, use the `--full-test` option:
+
+```bash
+blade test common/... --full-test
+```
+
+### Always Run Attribute
+
+`cc_test` targets support the `always_run` attribute, which forces execution during incremental testing regardless of previous results:
 
 ```python
 cc_test(
-    name = 'zookeeper_test',
-    srcs = 'zookeeper_test.cc',
-    always_run = True
+    name = 'zookeeper_test',
+    srcs = 'zookeeper_test.cc',
+    always_run = True
 )
 ```
 
 ## Concurrent Testing
 
-Blade test supports concurrent testing. The concurrent test runs the test that need to be run after build.
-You can use `-t` (or `--test-jobs N`) to set the number of concurrent tests. Blade will execute max N test processes concurrently.
+Blade supports parallel test execution to maximize testing efficiency.
 
-Example:
+### Configuration
+
+Use `-t` or `--test-jobs N` to specify the number of concurrent test processes:
 
 ```bash
 blade test //common... --test-jobs 8
 ```
 
-## Non-concurrent Testing
+### Exclusive Test Execution
 
-For some tests that may not run in concurrent because they may interfere with each other, you can add the `exclusive` attribute.
+For tests that cannot run concurrently due to potential interference, use the `exclusive` attribute:
 
 ```python
 cc_test(
-    name = 'zookeeper_test',
-    srcs = 'zookeeper_test.cc',
-    exclusive = True
+    name = 'zookeeper_test',
+    srcs = 'zookeeper_test.cc',
+    exclusive = True
 )
 ```
 
-## Test Coverage
+## Test Coverage Analysis
 
-When building and running tests, with the `--coverage` option, blade will include coverage-related compile options, and collect coverage data after the tests finished, currently only support C++, Java and Scala.
+Blade supports code coverage analysis for C++, Java, and Scala tests using the `--coverage` option.
 
-C/C++ test coverage is implemented by gcc's [gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html). After the test is run, you need to execute a third-party tool such as gcov or lcov to generate a test coverage report.
+### C/C++ Coverage (GCOV)
 
-To generate java/scala test coverage, you need to download and unzip a [jacoco](https://www.jacoco.org/jacoco/) releases build, and configure it correctly:
+C/C++ test coverage utilizes GCC's [gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html) implementation:
+
+- Coverage-related compilation flags are automatically included
+- Coverage data is collected after test execution
+- Generate reports using third-party tools like gcov or lcov
+
+### Java/Scala Coverage (JaCoCo)
+
+Java/Scala test coverage requires JaCoCo configuration:
+
+1. Download and extract [JaCoCo](https://www.jacoco.org/jacoco/) release build
+2. Configure in BUILD file:
 
 ```python
 java_test_config(
@@ -73,16 +94,17 @@ java_test_config(
 )
 ```
 
-The java/scala test coverage report will be generated into the `jacoco_coverage_report` dir under the build dir.
+- Coverage reports are generated in `jacoco_coverage_report` directory under build directory
+- Line coverage requires `global_config.debug_info_level` of `mid` or higher (requires `-g:line` compilation flag)
 
-If `global_config.debug_info_level` is `low` or lower, line coverage will not be generated. because `-g:line` is required.
+## Test Exclusion
 
-## Exclude Specified Tests
+Blade supports selective test exclusion using the `--exclude-tests` parameter for batch test execution scenarios.
 
-Blade supports explicitly excluding specified tests with the `--exclude-tests` parameter, which is useful when you need to run a large number of tests in batches and expect to exclude some ones. E.g:
+### Usage Example
 
 ```bash
 blade test base/... --exclude-tests=base/string,base/encoding:hex_test
 ```
 
-Indicates to run all tests in the base directory, but exclude all tests in `base/string` and `base/encoding:hex_test`.
+This command executes all tests in the base directory except those in `base/string` and the specific target `base/encoding:hex_test`.

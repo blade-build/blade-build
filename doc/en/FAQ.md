@@ -1,234 +1,288 @@
-# Blade FAQ
+# Blade Frequently Asked Questions
 
-## Running environment
+## Runtime Environment Issues
 
-### Why can't blade run on my platform
+### Platform Compatibility Problems
 
-description:
-Run blade and report syntax error.
+**Symptom:** Blade fails to execute and reports syntax errors on the target platform.
 
-Solution process:
+**Diagnostic Procedure:**
 
-Blade needs to run python 2.7 or python 3.6 or higher. Please use python -V to view the python version.
-
-- Installed python 2.7 or reported an error, confirm that python -V sees the new version, configure the PATH environment variable if necessary or log in again.
-- Use env python, which python and other commands to see which python command is used.
-
-### vim No syntax highlighting when editing BUILD files
-
-- First confirm whether it is installed by install
-- Then check if ~/.vim/syntax/blade.vim exists and points to the correct file
-- Then check if there is autocmd in the ~/.vimrc! BufRead, BufNewFile BUILD set filetype=blade
-
-If the problem has not been resolved, please contact us.
-
-### Why can't alt be used
-
-description:
-Alt can't use
-
-Solution process:
-
- 1. Re-execute the install
- - Add ~/bin to the user profile and log in again
-
-## Building problem
-
-### Why do the dependencies in the deps have different target sequences, and the compilation results are different
-
-description:
-//common/config/ini:ini The order of placement in a library's deps is different. It is not passed before, and passed to the back.
-
-Solution process:
-
-- View compilation error output, there is a library in the middle su.1.0 is a prebuilt library.
-- //common/config/ini:ini The compilation result is different before and after this target.
-- After viewing, su.1.0 relies on //common/config/ini:ini, but it is not compiled into a static library. and so
-  //common/config/ini:ini. When it is placed behind it, gcc looks up in order to find symbols, but puts
-  It can't be found before su.1.0, so the output is undefined reference.
-
-In conclusion:
-
-- It is recommended to compile the project as much as possible.
-- Reduce the prebuilt project, the prebuilt library tries to complete the dependent target.
-
-### ccache cached the error message, is there a problem with ccache
-
-description:
-There is an error in the compile prompt. After re-compiling in the source file, there is still an error. Is ccache buffering the alarm or error message, and there is no update?
-
-Solution process:
-
- 1. Check ccache manual, ccache may have an internal error in direct mode.
- - If you encounter this problem again, immediately modify the configuration to see if it is a cache itself.
- - At the same time, the results of pre-processing the cpp file are checked, and it is found that the header file modification is not reflected in the pre-processed file.
- - It should contain the path error. After searching, the same header file exists under build64_release, and build64_release is added by default.
--I, compile time by default -Ibuild64_realease -I.
-In the build64_realease first find the header file, so find the header file of the same name, XFS colleagues put a file in this output directory, but the modification is
-Your own project file.
-
-in conclusion:
-
- * Check include path.
-
-### I only have one library without source code, how to use it
-
-Please refer to [[#cc_library]] for the prebuilt part.
-
-### prebuilt library only .so files, I only need to compile the .so library
-
-description:
-The prebuilt library has only .so files, and I only need to compile the .so library.
-
-Solution process:
-
- 1. cc_library If you need to compile to a dynamic library, you only need to provide a dynamic library.
- - cc_plugin requires a static library.
-
-in conclusion:
-
-- So the prebuilt library is best to provide static and dynamic libraries.
-- Upgrade to the latest blade.
-
-### There is only a static library of passive code, but we need to compile the dynamic library
-
-description:
-Only static libraries are provided, but do we need to compile dynamic libraries?
-
-Solution process:
-
- 1. .a files are just archives of .o object files, so all you need to do is unpack the archive and repackage them as a shared object (.so).
+Blade requires Python 2.7 or Python 3.6+. Verify your Python installation:
 
 ```bash
+python -V  # Check Python version
+```
+
+**Troubleshooting Steps:**
+
+1. **Version Verification:** If Python 2.7 is installed but errors persist, confirm `python -V` displays the expected version
+2. **PATH Environment:** Update your PATH environment variable if necessary, or restart your terminal session
+3. **Interpreter Identification:** Use `env python` or `which python` to identify the active Python interpreter
+
+### Vim Syntax Highlighting for BUILD Files
+
+**Issue:** Syntax highlighting fails when editing BUILD files in Vim.
+
+**Resolution Checklist:**
+
+1. **Installation Verification:** Confirm Blade installation completed successfully
+2. **Syntax File Existence:** Check if `~/.vim/syntax/blade.vim` exists and references the correct file
+3. **Configuration Validation:** Ensure `~/.vimrc` contains: `autocmd! BufRead,BufNewFile BUILD set filetype=blade`
+
+**Escalation:** If the issue persists after these steps, contact the Blade development team for assistance.
+
+### Alt Key Functionality Issues
+
+**Issue:** Alt key functionality is not working as expected.
+
+**Resolution:**
+
+1. **Reinstallation:** Execute the Blade installation process again
+2. **PATH Configuration:** Add `~/bin` to your user profile and restart your session
+
+**Note:** This issue typically relates to terminal emulator configuration rather than Blade itself.
+
+## Build System Issues
+
+### Dependency Ordering Impact on Compilation Results
+
+**Symptom:** Dependency order in `deps` affects compilation outcomes. For instance, `//common/config/ini:ini` produces different results based on its position in the dependency list.
+
+**Root Cause Investigation:**
+
+1. **Prebuilt Library Interference:** Compilation errors indicate `su.1.0` (a prebuilt library) positioned between dependencies
+2. **Behavioral Variation:** `//common/config/ini:ini` compilation behavior changes relative to `su.1.0` placement
+3. **Dependency Analysis:** Investigation reveals `su.1.0` depends on `//common/config/ini:ini` but lacks static library compilation
+4. **Symbol Resolution Failure:** When `//common/config/ini:ini` follows `su.1.0`, GCC's symbol lookup order fails to resolve references
+
+**Best Practices:**
+
+- **Source Compilation Preference:** Compile projects from source whenever feasible
+- **Prebuilt Library Minimization:** Limit prebuilt library usage; ensure they include complete dependency targets
+- **Dependency Verification:** Validate dependency relationships when using prebuilt components
+
+### ccache Error Message Caching Problem
+
+**Symptom:** Compilation errors persist despite source file modifications, suggesting ccache may be caching error messages or warnings.
+
+**Diagnostic Procedure:**
+
+1. **Documentation Review:** Examine ccache documentation - direct mode may experience internal errors
+2. **Configuration Isolation:** Test with modified configuration to isolate cache-related issues
+3. **Preprocessing Analysis:** Header file changes not reflected in preprocessed output
+4. **Path Resolution Discovery:** Identical header files exist in both `build64_release` and source directories
+5. **Include Path Order:** Default ordering (`-Ibuild64_release -I.`) prioritizes `build64_release` directory
+6. **File Placement Conflict:** Colleagues placed files in output directory while modifications occurred in project files
+
+**Resolution:**
+
+- **Include Path Validation:** Thoroughly review and validate include path configurations
+- **Build Directory Management:** Maintain clear separation between source and build directories
+- **Cache Management:** Implement proper ccache invalidation procedures when file conflicts occur
+
+### Using Libraries Without Source Code
+
+**Scenario:** Working with prebuilt libraries that lack source code.
+
+**Solution:** Refer to the [[#cc_library]] documentation for prebuilt library configuration.
+
+### Prebuilt Library with Shared Objects Only
+
+**Problem Description:**
+Prebuilt library contains only `.so` files, but dynamic library compilation is required.
+
+**Technical Analysis:**
+
+1. For `cc_library` targets requiring dynamic library compilation, provide only dynamic library files
+2. `cc_plugin` targets require static library files
+
+**Recommendations:**
+
+- Prebuilt libraries should ideally provide both static and dynamic library variants
+- Ensure you're using the latest version of Blade for optimal compatibility
+
+### Converting Static Libraries to Dynamic Libraries
+
+**Scenario:**
+Only static libraries (.a files) are available, but dynamic library (.so) compilation is required.
+
+**Technical Solution:**
+
+Static libraries (.a) are archives containing object files (.o). Conversion to dynamic libraries involves:
+
+```bash
+# Extract object files from static library
 ar -x mylib.a
+# Create shared object from extracted object files
 gcc -shared *.o -o mylib.so
 ```
 
-- We provide script auto-transfer, atoso
-- so can't be converted to .a library.
+**Additional Notes:**
 
-Conclusion: When it comes to passive code, it's best to get both dynamic and static libraries.
+- Blade provides automated conversion via the `atoso` script
+- Dynamic libraries cannot be converted back to static libraries
+- For third-party code, obtain both static and dynamic library variants whenever possible
 
-### bladeSupport the gcc specified in the environment variable to compile the project
+### Using Specific GCC Version via Environment Variables
 
-description:
-I want to compile a project with a specific version of gcc.
+**Requirement:**
+Compile projects using a specific GCC version.
 
-Solution process:
+**Implementation:**
+Set environment variables to specify compiler paths:
 
- * CC=/usr/bin/gcc CXX=/usr/bin/g++ CPP=/usr/bin/cpp LD=/usr/bin/g++ blade targets
+```bash
+CC=/usr/bin/gcc CXX=/usr/bin/g++ CPP=/usr/bin/cpp LD=/usr/bin/g++ blade targets
+```
 
-in conclusion:
+**Best Practices:**
 
- * Upgrade to the latest blade and note that the configuration of the environment variables is the same, that is, use the same version of the compiler and linker.
+- Ensure you're using the latest Blade version
+- Maintain consistency across all compiler-related environment variables
+- Use matching versions for compiler and linker components
 
-### My code has been modified, there is still a problem with blade compilation
+### Persistent Compilation Errors After Code Modifications
 
-description:
-On the CI machine, the blade compiles with an error. After fixing the error, it is pulled from the svn, but it still prompts the same error.
+**Issue Description:**
+Blade compilation errors persist on CI machines even after error fixes and code updates from SVN.
 
-Solution process:
+**Root Cause Analysis:**
 
-- Check if the file is a modified copy.
-- The file is rooted on the CI machine, and the user name of the colleague logging in to the machine is not root and cannot overwrite the original file.
-- The file that indicated the error is an old file.
+- File modification verification reveals potential copy issues
+- CI machine file ownership: non-root user cannot overwrite root-owned files
+- Error messages reference outdated file versions due to permission constraints
 
-Conclusion:
+**Resolution:**
 
-- Pay attention to the owner of the file when switching permissions.
+- Carefully manage file ownership during permission transitions
+- Ensure proper file synchronization between development and CI environments
 
-### Compiled SO library with path information
+### SO Libraries with Embedded Path Information
 
-Description:
-The `so` library compiled with Blade has path information, which is troublesome to use. Can you configure changes?
+**Issue Description:**
+Blade-compiled shared object (.so) libraries contain path information, which complicates usage. Can this behavior be configured?
 
-In a large project, different sub-projects, the library may be completely re-named, if the problem is manually coordinated, it is obviously not worth mentioning.
-Therefore, when Blade uses the library, it always has path information, which fundamentally avoids this problem. You can also take the path when you use it.
+**Design Rationale:**
 
-### Why does the new error flag of Blade not work
+In large-scale projects with multiple sub-projects, libraries may be renamed across different contexts. Manual coordination of naming conflicts would be impractical.
 
-Description:
-Compiling the local project with the updated Blade found that the error flag didn't work?
+Blade's approach of embedding path information in libraries provides a fundamental solution to naming conflicts. When utilizing these libraries, simply reference them using their full path identifiers.
 
-Solution process:
+### New Error Flags Not Functioning
 
-- Check if the Blade is up to date.
-- Check if the cpp program filters the error flag. If the error flag is not supported, Blade will not use it, otherwise the compiler will report an error.
-- Check that the gcc version is too low.
+**Issue Description:**
+Recently updated Blade version, but new error flags are not taking effect during compilation.
 
-Conclusion:
+**Troubleshooting Steps:**
 
-- Upgrade gcc.
+- Verify Blade installation is current and properly updated
+- Check if C++ program filters or ignores specific error flags
+- Blade selectively applies error flags based on compiler support to avoid compilation failures
+- Confirm GCC version meets minimum requirements for new flag features
 
-### blade -c Can't clear files generated by the project
+**Resolution:**
 
-Description:
-`blade clean` can't clear the files generated by the project
+- Upgrade GCC to a version that supports the required error flag functionality
 
-Solution process:
+### blade clean Command Not Removing Generated Files
 
-- Please check if the command is paired, clean `blade build -prelease` with `blade clean -prelease`, clean `blade build -pdebug` with `blade clean -pdebug`.
+**Issue Description:**
+`blade clean` command fails to remove project-generated files.
 
-Conclusion:
+**Resolution:**
 
-- Check the command.
+Ensure command parameter consistency between build and clean operations:
+
+- Use `blade clean -prelease` to clean files generated by `blade build -prelease`
+- Use `blade clean -pdebug` to clean files generated by `blade build -pdebug`
+
+**Verification:**
+
+Double-check command syntax and parameter matching to ensure proper cleanup execution.
 
 ### How to display the command line of the build
 
 I want to see the complete command executed during the build process.
 The complete command line can be displayed by adding the --verbose parameter to the build.
 
-### How do I publish a precompiled library
+### Publishing Precompiled Libraries
 
-Some confidential code, I hope to release it as a library, but at the same time rely on non-confidential libraries (such as common), how to publish it?
-Such a library:
+**Scenario:**
+Distributing proprietary code as precompiled libraries while maintaining dependencies on open-source components.
 
-```python
-cc_library(
-    name = 'secrity',
-    srcs = 'secrity.cpp',
-    hdrs = ['security.h'],
-    deps = [
-        '//common/base/string:string',
-        '//thirdparty/glog:glog',
-    ]
-)
-```
-
-So released:
-Modify the BUILD file and remove the srcs
+**Original Library Configuration:**
 
 ```python
 cc_library(
-    name = 'secrity',
+    name = 'security',
+    srcs = 'security.cpp',
     hdrs = ['security.h'],
-    prebuilt = True, # srcs changed to this
-    deps = [
-        '//common/base/string:string',
-        '//thirdparty/glog:glog',
-    ]
+    deps = [
+        '//common/base/string:string',
+        '//thirdparty/glog:glog',
+    ]
 )
 ```
 
-At the same time, the external header file remains unchanged. According to the cc_library introduction, the prebuild requires the organization of the library.
-It's important to note that deps must remain the same, and don't publish libraries that are owned by you but not yours as pre-compiled libraries.
+**Precompiled Distribution Configuration:**
 
-### unrecognized options What does this mean
+```python
+cc_library(
+    name = 'security',
+    hdrs = ['security.h'],
+    prebuilt = True,  # Replace srcs with prebuilt flag
+    deps = [
+        '//common/base/string:string',
+        '//thirdparty/glog:glog',
+    ]
+)
+```
 
-For example unrecognized options {'link_all_symbols': 1}.
-Different targets have different option parameters, and this error is reported if a parameter that is not supported by the target is passed. Possible cause is misuse of other targets
-The parameters, or spelling errors, for the latter case, BLADE's vim syntax highlighting feature can help you see the error more easily.
+**Key Considerations:**
 
-### Source file xxx.cc belongs to both xxx and yyy What does this mean
+- External header files remain unchanged
+- Dependency specifications must be preserved
+- Only distribute libraries you have rights to publish as precompiled binaries
+- Follow cc_library documentation for proper prebuilt library organization
 
-For example, Source file cp_test_config.cc belongs to both cc_test xcube/cp/jobcontrol:job_controller_test and cc_test xcube/cp/jobcontrol:job_context_test?
+### Unrecognized Options Error
 
-In order to avoid unnecessary repetitive compilation and possible different compilation parameters, it violates C++'s [one-time definition rule](http://en.wikipedia.org/wiki/One_Definition_Rule).
-Usually each source file should belong to only one target. If a source file is used by multiple targets, it should be written as a separate cc_library and depend on this library in deps.
+**Error Example:** `unrecognized options {'link_all_symbols': 1}`
 
-### How to open C++11
+**Root Cause:**
+Different target types support distinct parameter sets. This error occurs when attempting to use parameters not supported by the target type.
 
-Edit the configuration file and add:
+**Common Causes:**
+
+- Parameter misapplication across different target types
+- Spelling errors in parameter names
+
+**Debugging Assistance:**
+Blade's Vim syntax highlighting helps identify parameter errors during editing.
+
+### Source File Ownership Conflict
+
+**Error Example:**
+`Source file cp_test_config.cc belongs to both cc_test xcube/cp/jobcontrol:job_controller_test and cc_test xcube/cp/jobcontrol:job_context_test`
+
+**Technical Rationale:**
+
+This violates C++'s [One Definition Rule](http://en.wikipedia.org/wiki/One_Definition_Rule), which prevents:
+- Unnecessary duplicate compilation
+- Potential compilation parameter inconsistencies
+
+**Best Practice:**
+
+Each source file should belong to exactly one target. For shared functionality:
+1. Extract common code into a separate `cc_library`
+2. Reference this library via `deps` in dependent targets
+3. Maintain clear ownership boundaries between components
+
+### Enabling C++11 Support
+
+**Configuration:**
+Add the following to your configuration file:
 
 ```python
 cc_config(
@@ -236,123 +290,194 @@ cc_config(
 )
 ```
 
-See [GCC Online Documents](https://gcc.gnu.org/onlinedocs/gcc/C-Dialect-Options.html) to see other values. Some version
-of GCC was released before C++11 standard, maybe you should use "gnu++0x" instead.
+**Version Compatibility:**
 
-For higher version GCC, such as GCC 6, C++14 is already the default std value, this configuration item maybe become unnecessary.
+- Refer to [GCC Online Documentation](https://gcc.gnu.org/onlinedocs/gcc/C-Dialect-Options.html) for additional dialect options
+- For GCC versions predating C++11 standardization, use `"gnu++0x"` instead
+- Modern GCC versions (e.g., GCC 6+) default to C++14, making this configuration optional
 
-### Compiled results take up too much disk space
+### Optimizing Disk Space Usage
 
-Projects built with blade are often large-scale projects, so the result files often take up more disk space. If it is a
-problem, you can try to optimize them in the following ways.
+**Challenge:**
+Blade-built projects often involve large-scale codebases, resulting in substantial disk space consumption from build artifacts.
 
-#### Reduce debug information level
+**Space Optimization Strategies:**
 
-Blade compiles the code with debugging symbols defaultly, so that when you use some tools such as gdb to debug, you can
-see the names of functions and variables, but the debugging symbols are usually the largest part of the binary file.
-By reducing the level of debugging symbols, the size of the binary file can be significantly reduced, but it also makes
-the program more difficult to debug.
+#### Debug Information Level Management
 
+Blade defaults to including debugging symbols for enhanced debugging capabilities with tools like GDB. However, debug symbols constitute the largest portion of binary files.
+
+**Configuration:**
 ```python
-# Reduce the overhead of debug information
+# Reduce debug information overhead
 global_config(
-    debug_info_level = 'no'
+    debug_info_level = 'no'
 )
 ```
 
-Description:
+**Debug Level Options:**
 
-- `no`: no debug information. When debugging with gdb, you can not see the symbolic names for functions and variables, etc
-- `low`: low debug information, you can only see the function name and global variables
-- `mid`: medium, you can see more symbols than `low`, includes local variables and function parameters
-- `high`: highest, contains more debug information, such as for macros
+- `no`: No debug information - minimal binary size, no symbol visibility in GDB
+- `low`: Basic symbols - function names and global variables only
+- `mid`: Standard debugging - includes local variables and function parameters (default)
+- `high`: Comprehensive debugging - maximum symbol information including macros
 
-The default value is `mid`.
+**Trade-off:** Lower debug levels significantly reduce binary size but limit debugging capabilities.
 
-#### Enable DebugFission
+#### DebugFission Optimization
 
-For DebugFission configuration details, please refer to:
-- [`cc_config.fission`](config.md#cc_config) - Enable DebugFission feature
-- [`cc_config.dwp`](config.md#cc_config) - Package dwo files into dwp files
-- [Using dwp files in package](build_rules/cc.md#using-dwp-files) - How to include dwp files in deployment packages
+**Feature:** DebugFission separates debug information from executable files, reducing binary size while maintaining debugging capabilities.
+
+**Configuration Reference:**
+
+- [`cc_config.fission`](config.md#cc_config) - Enable DebugFission functionality
+- [`cc_config.dwp`](config.md#cc_config) - Package debug information files (.dwo) into debug packages (.dwp)
+- [Using dwp files in package](build_rules/cc.md#using-dwp-files) - Integration of debug packages in deployment artifacts
 
 
-#### Compress debug information
+#### Debug Information Compression
 
-You can use the [`-gz`](https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html) option of GCC to compress debug information.
-This option can be used in both compile and link phases.
-If you only want to reduce the size of the final executable file, suggest only use it in the the link phase, because
-compression and decompression will reduce the build speed.
+**Optimization:** Utilize GCC's [`-gz`](https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html) option to compress debug information.
 
-This option can be used globally in the configuration:
+**Implementation Strategy:**
+
+- Applicable during both compilation and linking phases
+- For final executable size optimization, apply only during linking phase
+- Compression/decompression overhead may impact build performance
+
+**Global Configuration:**
 
 ```python
 cc_config(
     ...
-    cppflags = [...,'-gz', ...],
-    linkflags = [...,'-gz', ...],
+    cppflags = [..., '-gz', ...],
+    linkflags = [..., '-gz', ...],
     ...
 )
 ```
 
-It can also be used for a specific single target:
+**Target-Specific Configuration:**
 
 ```python
 cc_binary(
-    name ='xxx_server',
+    name = 'xxx_server',
     ...
     extra_linkflags = ['-gz'],
 )
 ```
 
-NOTE: Only [newer version of gdb supports reading compressed debugging symbols](https://sourceware.org/gdb/current/onlinedocs/gdb/Requirements.html),
-if the gdb version is too low or `zlib` is not configured, the debugging information cannot be read correctly.
+**Compatibility Notes:**
 
-#### Separate Debugging Symbols
+- Requires [GDB versions supporting compressed debug symbols](https://sourceware.org/gdb/current/onlinedocs/gdb/Requirements.html)
+- Older GDB versions or missing zlib configuration will prevent debug symbol reading
 
-Lowering the level of debugging symbols or using strip to delete debugging symbols can reduce the size of the binary file,
-but it also makes the program difficult to debug.
-Splitting the debugging symbols into separate files through [Separated Debugging Symbols](https://sourceware.org/gdb/onlinedocs/gdb/Separate-Debug-Files.html) is a compromise.
+#### Debug Symbol Separation
 
-#### Link test programs dynamically
+**Challenge:** Reducing debug symbol levels or stripping symbols minimizes binary size but compromises debugging capabilities.
 
+**Solution:** Implement [Separated Debugging Symbols](https://sourceware.org/gdb/onlinedocs/gdb/Separate-Debug-Files.html) to maintain debugging functionality while optimizing binary size.
+
+**Benefits:**
+
+- Maintains full debugging capabilities
+- Reduces deployed binary footprint
+- Enables efficient debugging symbol distribution
+
+**Implementation:** Store debug symbols in separate files referenced by the main executable.
+
+#### Dynamic Linking for Test Programs
+
+**Configuration:**
 ```python
 cc_test_config(
     dynamic_link = True
 )
 ```
 
-The test program is not used for publishing. Dynamic linking can reduce a lot of disk overhead. If a specific test dynamic link fails, you can specify `dynamic_link = False` for it separately.
+**Rationale:**
 
-#### Generate "thin" static library
+- Test programs are not deployed to production environments
+- Dynamic linking significantly reduces disk space requirements
+- Individual test cases requiring static linking can override with `dynamic_link = False`
 
-Gnu ar supports the generation of static libraries of type 'thin', which is different from regular static libraries. The thin static library only records the path of the .o file, which can reduce the space occupation to a large extent.
-However, this kind of library can't be used for publishing. Fortunately, in the scenario of using blade, static libraries are generally used only inside the build system.
+**Benefits:**
 
-The practice is to modify the cc_library_config.arflags parameter, plus the `T` option:
+- Substantial disk space savings for test artifacts
+- Faster build times due to reduced linking overhead
+- Flexible configuration for specific test requirements
+
+#### Thin Static Library Generation
+
+**Feature:** GNU ar supports 'thin' static library format, which differs from traditional static libraries by storing object file paths rather than actual object code.
+
+**Benefits:**
+
+- Significantly reduces disk space consumption
+- Maintains build system efficiency
+
+**Limitations:**
+
+- Not suitable for distribution outside the build environment
+- Compatible with Blade's internal library usage patterns
+
+**Configuration:**
 
 ```python
 cc_library_config(
-    arflags = 'rcsT'
+    arflags = 'rcsT'  # Add 'T' flag for thin library generation
 )
 ```
 
-### cannot find -lstdc++
+**Usage Context:** Ideal for internal build system libraries where distribution is not required.
 
-Maybe you need to install a static version of libstdc++:
+### libstdc++ Library Not Found
+
+**Error:** `cannot find -lstdc++`
+
+**Solution:** Install the static version of libstdc++ library:
 
 ```bash
 yum install libstdc++-static
 ```
 
-### g++: Fatal error:Killed signal terminated program cc1plus
+**Context:** This error typically occurs when linking requires the static C++ standard library, which may not be installed by default on some systems.
 
-Maybe your devbox is not powerful enough to support defaultly calculated number of jobs, retry with `-j <smaller-job-number>` parameter, such as using `blade build -j4` in a 8 cores machine.
+### Compiler Process Termination Due to Resource Constraints
 
-### No space left on device
+**Error:** `g++: Fatal error: Killed signal terminated program cc1plus`
 
-The output disk is full. Besides the output directory, the temporary directory is often a root cause, you can try to clean it or modify the [TMPDIR](https://gcc.gnu.org/onlinedocs/gcc/Environment-Variables.html) environment variable to change it.
+**Root Cause:** System resources may be insufficient for Blade's default job count calculation.
 
-### How to skip some directories contains foreign `BUILD` files (such as from bazel)
+**Resolution:** Reduce parallel job count using the `-j` parameter:
 
-Place an empty `.bladeskip` file under this directory, it and its subdirectories will be skipped.
+```bash
+blade build -j4  # Use 4 jobs on an 8-core machine
+```
+
+**Best Practice:** Adjust job count based on available system memory and CPU resources to prevent out-of-memory conditions.
+
+### Disk Space Exhaustion
+
+**Error:** `No space left on device`
+
+**Root Causes:**
+
+- Output directory disk space depletion
+- Temporary directory space constraints
+
+**Resolution:**
+
+- Clean up build artifacts and temporary files
+- Configure alternative temporary directory via [TMPDIR](https://gcc.gnu.org/onlinedocs/gcc/Environment-Variables.html) environment variable
+
+**Prevention:** Monitor disk usage during large builds and implement cleanup automation.
+
+### Excluding Directories with External Build Files
+
+**Scenario:** Skip directories containing build files from other build systems (e.g., Bazel).
+
+**Solution:** Create an empty `.bladeskip` file in the target directory.
+
+**Effect:** Blade will exclude the directory and all its subdirectories from build processing.
+
+**Use Case:** Ideal for managing mixed build system environments or excluding third-party code with incompatible build configurations.

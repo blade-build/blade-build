@@ -1,47 +1,49 @@
-# C/C++ Rules
+# C/C++ Build Rules
 
-There are 3 phrases in the C/C++ building: preprocessing, compiling, linking. with different flags.
+C/C++ compilation involves three distinct phases: preprocessing, compiling, and linking, each requiring specific compiler flags.
 
-The common CC attributes are:
+## Common C/C++ Attributes
 
-- `warning`: str = ['yes', 'no'], Whether suppress all warnings
+### `warning`: string = ['yes', 'no']
+Controls whether to suppress all compiler warnings.
 
-  Example: `warning='no'`. The default values is 'yes', so can be omitted.
+**Example:** `warning='no'`
+**Default:** 'yes' (can typically be omitted)
 
-- `defs`:str = [], User define macros
+### `defs`: string[] = []
+User-defined preprocessor macros.
 
-  Example: `defs=['_MT']`, can also has value, eg. `'A=1'`.
+**Example:** `defs=['_MT']` or `defs=['A=1']` for macros with values
 
-- `incs`: list(str) = [] header search paths
+### `incs`: string[] = []
+Header file search paths.
 
-  Example: `incs=['poppy/myinc']`.
+**Example:** `incs=['poppy/myinc']`
+**Best Practice:** Use full include paths in source code rather than relying on additional search paths
 
-  Usually used for thirdparty library, use full include path in our code is more recommended.
+### `optimize`: string[] = []
+Compiler optimization flags.
 
-- `optimize` optimize flags
+**Example:** `optimize=['-O3']`
+**Rationale:** Optimization flags are separated from `extra_cppflags` because they should be disabled in debug mode to preserve debugging capability. For mature, performance-critical libraries (e.g., hash, compression, cryptography) where debugging is rarely needed, set `always_optimize = True`.
 
-  Example: `optimize=['-O3']`
+### `extra_cppflags`: string[] = []
+Additional C/C++ compilation flags.
 
-  There is a separated `optimize` attribute from the `extra_cppflags`, because it should be ignored
-  in the debug mode, otherwise it will hinder debugging. but for some kind of libraries, which are
-  mature enough and performance related, we rarely debug trace into them, such as hash, compress,
-  crypto, you can specify `always_optimize = True`.
+**Example:** `extra_cppflags = ['-Wno-format-literal']`
+**Note:** Essential flags like `-g` and `-fPIC` are built-in, so this parameter should be used sparingly.
 
-- `extra_cppflags`:list(str) = [], Extra C/C++ compile flags.
+### `extra_linkflags`: string[] = []
+Additional linker flags.
 
-  Example: `extra_cppflags = ['-Wno-format-literal']`. many useful flags, such as `-g`,`-fPIC` are builtin. so it should be rarely used.
+**Example:** `extra_linkflags = ['-fopenmp']`
+**Note:** Common flags like `-g` are already included, minimizing the need for this parameter.
 
-- `extra_linkflags`:list(str) = [], Extra link flags
+### `linkflags`: string[] = None
+Overrides global [linkflags](../config.md#cc_config) configuration.
 
-  Example: `extra_linkflags = ['-fopenmp']`. many useful flags such `-g` are already built in, so it should be rarely used.
-
-- `linkflags`: list = None, Overrides the global [linkflags](../config.md#cc_config) in the configuration.
-
-  For example: `linkflags = ['-fopenmp']`.
-
-  Commonly used flags such as `-g` are already built-in, and generally do not need to be specified.
-  Because global options will be overridden, unless you really understand the link related options of `gcc` and `ld`,
-  do not use this parameter lightly.
+**Example:** `linkflags = ['-fopenmp']`
+**Caution:** This parameter overrides global settings. Use only with thorough understanding of GCC and linker options.
 
 ## cc_library
 

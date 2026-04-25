@@ -1,23 +1,42 @@
-# Installation
+# Installation Guide
 
-## Auto Install
+## Automated Installation
 
-By executing the following command in a terminal:
+Execute the following command in your terminal to install Blade automatically:
 
 ```console
 curl https://blade-build.github.io/install.sh | bash
 ```
 
-blade will be cloned to your `~/.cache/blade-build`. It also create a symbolic link at `~/bin/blade`, so you can run `blade` command in the terminal.
+**Installation Process:**
+- **Source Download:** Blade is cloned to `~/.cache/blade-build`
+- **Symbolic Link Creation:** A symbolic link is created at `~/bin/blade`
+- **Command Availability:** The `blade` command becomes available system-wide
 
-## Manual Install
+## Manual Installation
 
-By executing the install script, blade can be installed under ~/bin.
-It is installed in a soft chain mode. After installation, the original directory that is checked out cannot be deleted.
-Blade uses ninja as the backend, you need to install ninja.
-Blade supports both Python 2.7.x and Python 3.6+ (Python 3.x has been tested on 3.6 and 3.9), and Python 2.7 support will be deprecated in the future.
+### Installation Method
 
-Install makes it possible to execute directly in any directory
+Execute the installation script to install Blade under `~/bin`:
+
+**Installation Characteristics:**
+- **Symbolic Link Installation:** Uses symbolic links for flexible updates
+- **Source Preservation:** Original checkout directory must remain intact
+- **Backend Dependency:** Requires [Ninja](https://ninja-build.org/) as the build backend
+
+### Python Version Support
+
+**Supported Python Versions:**
+- **Python 2.7.x:** Legacy support (scheduled for deprecation)
+- **Python 3.6+:** Primary support (tested on 3.6, 3.9, and newer versions)
+
+**Migration Recommendation:** Transition to Python 3.x for long-term compatibility
+
+## Post-Installation Verification
+
+### Command Execution Test
+
+Verify installation by running Blade without arguments:
 
 ```bash
 $ blade
@@ -26,10 +45,41 @@ blade: error: too few arguments
 Blade(error): Failure
 ```
 
-If not, make sure ~/bin is in your PATH environment variable, otherwise modify ~/.profile and add
+### PATH Configuration
+
+If the command is not found, ensure `~/bin` is in your PATH environment variable:
+
+Add the following line to `~/.profile`:
 
 ```bash
 export PATH=~/bin:$PATH
 ```
 
-Then relogin.
+**Activation:** Relogin or restart your terminal session to apply changes
+
+## System Requirements
+
+### Required Dependencies
+
+- **Ninja Build System:** Required for backend build operations
+- **Python Interpreter:** Python 2.7.x or Python 3.6+
+- **Development Tools:** Standard C/C++ toolchain (GCC/Clang)
+
+### Optional Dependencies
+
+- **ccache:** For build acceleration through caching
+- **argcomplete:** Enhanced command-line completion support
+
+## Troubleshooting
+
+### Common Issues
+
+- **Command Not Found:** Verify PATH configuration and symbolic link creation
+- **Permission Errors:** Ensure `~/bin` directory has appropriate permissions
+- **Python Version Conflicts:** Confirm compatible Python version availability
+
+### Support Resources
+
+- **Documentation:** Refer to Blade documentation for detailed troubleshooting
+- **Community Support:** Access GitHub issues for community assistance
+- **Version Compatibility:** Check version-specific requirements before installation
