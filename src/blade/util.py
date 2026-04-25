@@ -68,7 +68,7 @@ def md5sum(obj):
         return md5sum_bytes(obj)
     if isinstance(obj, str):
         return md5sum_str(obj)
-    raise TypeError('Invalid type %s' % type(str))
+    raise TypeError('Invalid type %s' % type(obj))
 
 
 def lock_file(filename):
