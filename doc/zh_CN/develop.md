@@ -71,7 +71,7 @@ blade build --stop-after generate
 
 ### Pull Request ###
 
-代码本地修改后，Push到你自己的github仓库，在向我们发起Pull Request即可。我们会尽快进行review，但是由于工作繁忙，时间不好保证。
+代码本地修改后，Push到你自己的github仓库，再向我们发起Pull Request即可。我们会尽快进行review，但是由于工作繁忙，时间不好保证。
 最好检查一下代码风格，确保有必要而不冗余的注释，避免不必要的评审往复。
 
 ## 其他资料 ##

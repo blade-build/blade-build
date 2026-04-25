@@ -4,7 +4,7 @@
 
 ### install
 
-blade命令的符号链接会被安装下面的命令到~/bin 下。
+将 blade 命令的符号链接安装到 ~/bin 目录下。
 
 ### lsrc
 

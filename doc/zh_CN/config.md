@@ -67,7 +67,8 @@ blade dump --config --to-file my.config
 
 - `run_unrepaired_tests` : bool = False
 
-  增量测试时，是否运行未修复的（先前已经失败且未修改的）测试。
+  增量测试时，是否运行未修复（指之前失败且源代码仍未修改）的测试。
+  也可以通过命令行选项 `--run-unrepaired-tests` 开启。
 
 - `legacy_public_targets` : list = []
 
@@ -127,7 +128,7 @@ blade dump --config --to-file my.config
 
 - `optimize` : list = 内置
 
-  优化专用选项，debug 模式下会被忽略，比如 `['-O2'，'-omit-frame-pointer'] 等。
+  优化专用选项，debug 模式下会被忽略，比如 `['-O2', '-omit-frame-pointer']` 等。
   单独分出 optimize 选项是因为这些选项在 debug 模式下需要被忽略。
 
 - `fission` : bool = False
@@ -149,7 +150,7 @@ blade dump --config --to-file my.config
 
   也可以通过命令行参数 `--dwp` 来开启此功能。
 
-- `hdr_dep_missing_severity` : string = warning | ['info', 'warning', 'error'
+- `hdr_dep_missing_severity` : string = 'warning' | ['info', 'warning', 'error']
 
   对头文件所属的库的依赖的缺失的严重性。
   和 `hdr_dep_missing_suppress` 一起控制头文件依赖缺失检查的行为，参见 [`cc_library.hdrs`](build_rules/cc.md#cc_library)。
@@ -246,7 +247,7 @@ C/C++ 库的配置：
 
   ```python
   cc_library_config(
-      hdrs_missing_suppress = load_value('blade_hdr_missing_spppress'),
+      hdrs_missing_suppress = load_value('hdrs_missing_suppress.conf'),
   )
   ```
 
@@ -266,9 +267,9 @@ C/C++ 库的配置：
 
 - `gperftools_libs` : list = ['#tcmalloc']
 
-  tcmclloc 库，blade deps 格式。
+  tcmalloc 库，blade deps 格式。
 
-- `gperftools_debug_`libs | list     | ['#tcmalloc_debug']
+- `gperftools_debug_libs` : list = ['#tcmalloc_debug']
 
   tcmalloc_debug 库，blade deps 格式。
 
@@ -276,7 +277,7 @@ C/C++ 库的配置：
 
   gtest 的库，blade deps 格式。
 
-- `gtest_main_libs` : list = [‘#gtest_main’]
+- `gtest_main_libs` : list = ['#gtest_main']
 
   gtest_main 的库路径，blade deps 格式。
 
@@ -310,7 +311,7 @@ Java 构建相关的配置：
 
   设置JAVA_HOME。
 
-- `version` : string = '' | ['8' '1.8'] 等
+- `version` : string = '' | ['8', '1.8'] 等
 
   JDK 兼容性版本号。默认为空，由编译器决定。
 
@@ -342,7 +343,7 @@ Java 构建相关的配置：
 
   maven 仓库的 URL。
 
-- `maven_jar_allowed_dirs` : list = ''
+- `maven_jar_allowed_dirs` : list = []
 
   允许调用 `maven_jar` 的目录列表（及其子目录）。
 

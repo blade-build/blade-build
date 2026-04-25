@@ -1,31 +1,30 @@
 # 测试支持 #
 
-Blade对测试驱动开发提供了完善的支持 ，可以通过命令自动运行测试程序。
+Blade对测试驱动开发提供了完善的支持，可以通过命令自动运行测试程序。
 
 ## 增量测试 ##
 
-Blade test支持增量测试 ，可以加快tests的执行。
+Blade test 支持增量测试，可以加快测试的执行。
 
-已经Pass 的tests 在下一次构建和测试时不需要再跑，除非：
+已经通过的测试，在下一次构建和测试时不需要再跑，除非：
 
-* tests 的任何依赖变化导致其重新生成。
-* tests 依赖的测试数据改变，这种依赖为显式依赖，用户需要使用BUILD文件指定，如testdata。
-* tests 所依赖的环境变量发生改变。
-* test arguments 改变。
-* 测试过期
+* 测试的任何依赖变化导致其重新生成。
+* 测试依赖的测试数据改变，这种依赖为显式依赖，需要用户在 BUILD 文件中指定，比如 testdata。
+* 测试所依赖的环境变量发生改变。
+* 测试参数（test arguments）改变。
+* 测试结果过期。
 
 测试相关的环境变量名可以通过 `global_config.test_related_envs` 配置项设置，支持正则表达式。
 
 测试过期时间是一天。
 
 对于失败的测试，如果这是第一次失败，下次还会尝试重新运行。但是如果还是失败，就不会再运行，除非发生了重新构建或者过期。
-你可以用 `global_config.run_unchanged_tests` 配置项或者 `run-unchanged-tests` 命令行参数改变这个行为。
+你可以用 `global_config.run_unrepaired_tests` 配置项或者 `--run-unrepaired-tests` 命令行参数改变这个行为。
 
 ## 全量测试 ##
 
-如果需要使用全量测试，使用--full-test option, 如 blade test common/... --full-test ， 全部测试都需要跑。
-另外，cc_test 支持了 always_run 属性，用于在增量测试时，不管上次的执行结果，每次总是要跑。
-
+如果需要进行全量测试，使用 `--full-test` 选项，比如 `blade test common/... --full-test`，这时所有测试都需要运行。
+另外，cc_test 支持了 `always_run` 属性，用于在增量测试时，不管上次的执行结果，每次总是重新运行。
 ```python
 cc_test(
     name = 'zookeeper_test',
@@ -36,9 +35,13 @@ cc_test(
 
 ## 并行测试 ##
 
-Blade test支持并行测试，并行测试把这一次构建后需要跑的test cases并发地run。
+Blade test 支持并行测试，在构建完成后并发执行本次需要运行的测试用例。
+
+```bash
 blade test [targets] --test-jobs N
--t, --test-jobs N 设置并发测试的并发数，Blade会让N个测试进程并行执行
+```
+
+`-t, --test-jobs N` 设置并行测试的数目，Blade 会让 N 个测试进程并行执行。
 
 ## 非并行测试 ##
 

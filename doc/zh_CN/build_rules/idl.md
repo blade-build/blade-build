@@ -40,10 +40,10 @@ proto_library(
 C++ 代码总是会生成。
 
 如果你想生成C++的其他后缀名代码，可以使用 `cpp_outs` 参数。
-默认值是 `['.pb']`。例如，如果你想使用grpc插件生成 `rpc_meta_info.pb.cc/h` 和 `rpc_meta_info.grpc.pb.cc/h`, 那么设置 `cpp_outs = [".pb', '.grpc.pb']`
+默认值是 `['.pb']`。例如，如果你想使用 grpc 插件生成 `rpc_meta_info.pb.cc/h` 和 `rpc_meta_info.grpc.pb.cc/h`，那么设置 `cpp_outs = ['.pb', '.grpc.pb']`。
 
-另外，使用 `plugin_opts` 传递给插件所需参数, 例如 `plugin_opts={"plugin_name":["option1", "option2.."]},`.
-Blade 会传递 `--plugin_name_opt=option1 --plugin_name_opt=option2` 给 grpc 插件.
+另外，使用 `plugin_opts` 传递插件所需参数，例如 `plugin_opts = {"plugin_name": ["option1", "option2"]}`。
+Blade 会传递 `--plugin_name_opt=option1 --plugin_name_opt=option2` 给 grpc 插件。
 
 ```python
 proto_library(
@@ -81,5 +81,5 @@ thrift_library(
 
 C++中使用生成的头文件时，规则类似proto，需要带上相对BLADE_ROOT的目录前缀。
 
-* thrift 0.9版（之前版本未测）有个[bug](https://issues.apache.org/jira/browse/THRIFT-1859)，
-  需要修正才能使用，此bug已经在开发版本中修正)
+* thrift 0.9 版（之前版本未测）有个 [bug](https://issues.apache.org/jira/browse/THRIFT-1859)，
+  需要修正才能使用，此 bug 已经在开发版本中修正。

@@ -22,7 +22,7 @@ java_library(
         'resources/services.xml'
     ],
     deps = [
-        '//common/rpc:rpc_error_code_proto'         # 可以依赖proto_library生成的java文件一起编译打包
+        '//common/rpc:rpc_error_code_proto',        # 可以依赖proto_library生成的java文件一起编译打包
         '//common/rpc:rpc_options_proto',
         '//poppy:poppy_client',                     # 可以依赖swig_library生成的java文件一起编译打包
         '//common/net/http/java:http_utilities',    # 可以依赖别的 java_library 目标
@@ -175,7 +175,7 @@ java_fat_library(
 java_binary(
     name = 'poppy_java_example',
     srcs = [
-        glob('src/com/soso/poppy/tool/*.Java)'
+        glob('src/com/soso/poppy/tool/*.java')
     ],
     deps = [
         '//poppy:poppy_java_client',
@@ -194,7 +194,7 @@ java_binary(
 java_test(
     name = 'poppy_java_test',
     srcs = [
-        glob('test/com/soso/poppy/**/*Test.Java)'
+        glob('test/com/soso/poppy/**/*Test.java')
     ],
     deps = [
         '//poppy:poppy_java',
