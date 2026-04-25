@@ -29,13 +29,19 @@ omit =
 parallel = true
 EOF
 
-export PYTHONPATH=$PYTHONPATH:$ROOT/src
-export BLADE_PYTHON_INTERPRETER="coverage run --source=$ROOT/src/blade --rcfile=$ROOT/.coveragerc"
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON=python3
+else
+    PYTHON=python
+fi
 
-python -B $@
+export PYTHONPATH=$PYTHONPATH:$ROOT/src
+export BLADE_PYTHON_INTERPRETER="$PYTHON -m coverage run --source=$ROOT/src/blade --rcfile=$ROOT/.coveragerc"
+
+$PYTHON -B "$@"
 exit_code=$?
 
-coverage combine --rcfile=$ROOT/.coveragerc
-coverage report --rcfile=$ROOT/.coveragerc
+$PYTHON -m coverage combine --rcfile=$ROOT/.coveragerc
+$PYTHON -m coverage report --rcfile=$ROOT/.coveragerc
 
 exit $exit_code
