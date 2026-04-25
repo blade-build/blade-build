@@ -53,7 +53,6 @@ def _check_path(path):
         path = path[2:]
     if path.startswith('/'):
         msg.append('absolute path is not allowed')
-        result = False
     if '..' in path:
         msg.append('parent path ".." is not allowed')
     return msg
