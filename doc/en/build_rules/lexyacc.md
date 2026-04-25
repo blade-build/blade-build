@@ -1,6 +1,6 @@
-# Build Lex and Yacc #
+# Build Lex and Yacc
 
-## lex_yacc_library ##
+## lex_yacc_library
 
 Used to describe a lex yacc target, generate a scanner and a grammer for a compiler.
 

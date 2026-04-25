@@ -1,8 +1,8 @@
-# Blade FAQ #
+# Blade FAQ
 
-## 运行环境 ##
+## 运行环境
 
-### 为什么 blade 不能在我的平台运行 ###
+### 为什么 blade 不能在我的平台运行
 
 描述：
 运行 blade , 报 syntax error。
@@ -13,14 +13,14 @@
 - 装了 python 2.7 还是报错，确认 ptyhon -V 看到的是新版本，必要时配置 PATH 环境变量或者重新登录。
 - 使用 env python, which python 等命令查看 python 命令到底用的是哪个。
 
-### vim 编辑 BUILD 文件时没有语法高亮 ###
+### vim 编辑 BUILD 文件时没有语法高亮
 
 - 首先确认是否是以 install 的方式安装的
 - 然后检查 ~/.vim/syntax/blade.vim 是否存在，是否指向正确的文件
 - 然后检查 ~/.vimrc 里是否有 autocmd! BufRead,BufNewFile BUILD set filetype=blade 这条命令。
 - 如果问题还没解决，请联系我们。
 
-### 为什么 alt 用不了 ###
+### 为什么 alt 用不了
 
 描述：
 alt 用不了
@@ -30,9 +30,9 @@ alt 用不了
 - 重新执行 install
 - 把 ~/bin 加入到用户 profile，重新登录
 
-## 构建问题 ##
+## 构建问题
 
-### 为什么 deps 里有写的依赖 target 顺序不同，编译结果不同 ###
+### 为什么 deps 里有写的依赖 target 顺序不同，编译结果不同
 
 描述：
 //common/config/ini:ini 在某个库的 deps 里放置的顺序不同，放前面没有通过，放到后面通过了。
@@ -50,7 +50,7 @@ alt 用不了
 - 建议尽量源代码编译项目。
 - 减少 prebuilt 项目，prebuilt 库尽量补全依赖的 target。
 
-### ccache 缓存了错误信息，是不是 ccache 出问题了 ###
+### ccache 缓存了错误信息，是不是 ccache 出问题了
 
 描述：
 编译提示有错误，在源文件里修改后重新编译还是有错误，是不是 ccache 缓存了告警或者错误信息，没有更新出问题了 ？
@@ -69,11 +69,11 @@ alt 用不了
 
 - 检查 include path。
 
-### 我只有一个没有源代码的库，如何使用 ###
+### 我只有一个没有源代码的库，如何使用
 
 请参考[[#cc_library]]中，关于 prebuilt 的部分。
 
-### prebuilt 库只有.so 文件，我也只需要编译.so 库 ###
+### prebuilt 库只有.so 文件，我也只需要编译.so 库
 
 描述：
 prebuilt 库只有.so 文件，我也只需要编译.so 库
@@ -88,7 +88,7 @@ prebuilt 库只有.so 文件，我也只需要编译.so 库
 - prebuilt 库最好提供静态库和动态库。
 - 升级到最新 blade。
 
-### 手头只有无源代码的静态库，但是我们需要编译动态库 ###
+### 手头只有无源代码的静态库，但是我们需要编译动态库
 
 描述：
 只提供了静态库，但是我们需要编译动态库 ？
@@ -105,7 +105,7 @@ gcc -shared *.o -o mylib.so
 
 结论：无源代码时，最好同时得到动态和静态库。
 
-### blade 支持环境变量里指定的 gcc 去编译项目吗 ###
+### blade 支持环境变量里指定的 gcc 去编译项目吗
 
 描述：
 想使用特定版本的 gcc 编译项目。
@@ -118,7 +118,7 @@ gcc -shared *.o -o mylib.so
 
 - 升级到最新 blade 且注意环境变量的配置要一致，即使用版本一致的编译器和 linker。
 
-### 我的代码已经修改了，blade 编译还有问题 ###
+### 我的代码已经修改了，blade 编译还有问题
 
 描述：
 在 CI 机器上，blade 编译有 error, 修复错误后从新从 svn 拉取，但是还是提示相同的错误。
@@ -133,7 +133,7 @@ gcc -shared *.o -o mylib.so
 
 - 权限切换时需要注意文件的所属者。
 
-### 编译出来的 SO 库带有路径信息 ###
+### 编译出来的 SO 库带有路径信息
 
 描述：
 使用 Blade 编译出来的 so 库带有路径信息，使用起来麻烦，可以配置更改一下吗 ？
@@ -141,7 +141,7 @@ gcc -shared *.o -o mylib.so
 在一个大的项目中，不同的子项目，库完全可能重名，如果人工去协调这个问题，显然是划不来的。
 因此，Blade 使用库时，总是带有路径信息的，从根本上避免了这个问题。用的时候也带上路径即可。
 
-### 为什么 Blade 新加的 error flag 不起作用 ###
+### 为什么 Blade 新加的 error flag 不起作用
 
 描述：
 使用更新后的 Blade 编译本地项目发现 error flag 没有起作用 ？
@@ -156,7 +156,7 @@ gcc -shared *.o -o mylib.so
 
 - 升级 gcc。
 
-### blade -c 清除不了项目生成的文件 ###
+### blade -c 清除不了项目生成的文件
 
 描述：
 blade -c 清除不了项目生成的文件
@@ -169,12 +169,12 @@ blade -c 清除不了项目生成的文件
 
 - 检查命令。
 
-### 如何显示构建的命令行 ###
+### 如何显示构建的命令行
 
 我想看到构建过程中中执行的完整命令。
 构建时加上 --verbose 参数，就能显示完整的命令行。
 
-### 如何发布预编译的库 ###
+### 如何发布预编译的库
 
 有些机密的代码，希望以库的方式发布，但同时又依赖了非机密的库（比如 common），如何发布呢？比如这样的库：
 
@@ -208,21 +208,21 @@ cc_library(
 同时对外的头文件保持不变，按照 cc_library 介绍中，prebuild 要求的方式组织库即可。
 尤其需要注意的是，deps 必须保持不变，且不要把虽然被你一来但却不属于你的项目的库作为预编译库发布出去。
 
-### unrecognized options 是什么意思 ###
+### unrecognized options 是什么意思
 
 比如 unrecognized options {'link_all_symbols': 1}。
 
 不同的目标有不同的选项参数，如果传了目标所不支持的参数，就会报告这个错误。可能的原因是误用了其他目标
 的参数，或者拼写错误，对于后一种情况，BLADE 的 vim 语法高亮功能可以帮你更容易看到错误。
 
-### Source file xxx.cc belongs to both xxx and yyy 是什么意思 ###
+### Source file xxx.cc belongs to both xxx and yyy 是什么意思
 
 比如 Source file cp_test_config.cc belongs to both cc_test xcube/cp/jobcontrol:job_controller_test and cc_test xcube/cp/jobcontrol:job_context_test？
 
 为了避免不必要的重复编译和可能的编译参数不同导致违反 C++ 的[一次定义规则](http://en.wikipedia.org/wiki/One_Definition_Rule)，
 通常每个源文件应该只属于一个目标，如果一个源文件被多个目标使用，应该写成单独的 cc_library，并在 deps 中依赖这个库。
 
-### 如何开启 C++11 ###
+### 如何开启 C++11
 
 编辑配置文件，加入：
 
@@ -235,11 +235,11 @@ cc_config(
 要配置到更高的版本，可以选 gnu++11，gnu++14 等，只要编译器支持即可，具体可见[GCC 相关文档](https://gcc.gnu.org/onlinedocs/gcc/C-Dialect-Options.html)。某些版本的编译器是在 C++11 标准发布之前发布的，此时可以尝试使用”gnu++0x“来代替。
 更高版本的 gcc，比如 GCC 6, C++14 已经成为默认配置，就不再需要这个选项了。
 
-### 编译出来的结果占用了太多的磁盘空间 ###
+### 编译出来的结果占用了太多的磁盘空间
 
 采用 Blade 来构建的项目往往是比较大规模的项目，因此构建后的结果往往也会占用较多的空间，如果你有这方面的问题，可以尝试用以下方式进行优化：
 
-#### 降低调试符号级别 ####
+#### 降低调试符号级别
 
 Blade 编译代码时默认是带调试符号的，这样当你用 gdb 等工具进行调试时可以看到函数和变量的名字，但是调试符号一般都是二进制文件中最占磁盘空间的部分。
 通过降低调试符号的级别可以显著降低二进制文件的大小，但是也让程序更难于被调试。
@@ -259,7 +259,7 @@ global_config(
 
 默认为 `mid`。
 
-#### 开启 DebugFission ####
+#### 开启 DebugFission
 
 关于 DebugFission 的配置说明，请参考：
 - [`cc_config.fission`](config.md#cc_config) - 开启 DebugFission 功能
@@ -268,7 +268,7 @@ global_config(
 
 
 
-#### 压缩调试符号 ####
+#### 压缩调试符号
 
 可以尝试开启 GCC 的 [`-gz`](https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html) 选项，这个选项可以用于编译和链接阶段，
 如果只是想降低最终可执行文件的大小，只对链接启用即可，因为压缩和解压会降低构建速度。
@@ -296,12 +296,12 @@ cc_binary(
 
 需要注意[较新版本的 gdb 才支持读取压缩的调试符号](https://sourceware.org/gdb/current/onlinedocs/gdb/Requirements.html)，如果 gdb 版本过低或者没有开启，就可能无法正确读取调试符号信息。
 
-#### 分离调试符号 ####
+#### 分离调试符号
 
 降低调试符号级别或者用 strip 删除调试符号虽然能降低二进制文件的大小，但是也使得程序难以调试。
 通过[分离调试符号](https://sourceware.org/gdb/onlinedocs/gdb/Separate-Debug-Files.html)把调试符号拆分到单独的文件中，是一种折中的办法。
 
-#### 测试程序采用动态链接 ####
+#### 测试程序采用动态链接
 
 ```python
 cc_test_config(
@@ -311,7 +311,7 @@ cc_test_config(
 
 测试程序不会用来发布，动态链接可以减少大量的磁盘开销，如果某个具体的测试动态链接出错，可以单独为它指定 dynamic_link = False。
 
-#### 生成“thin”静态库 ####
+#### 生成“thin”静态库
 
 gnu ar 支持生成‘thin’类型的静态库，和常规的静态库把.o 打包进去不同，thin 静态库里只记录了.o 文件的路径，可以较大程度的减少空间占用。
 不过这种库是无法拿来做发布用的，还好在使用 blade 的场景下，静态库一般都是仅在构建系统内部使用的。
@@ -324,7 +324,7 @@ cc_library_config(
 )
 ```
 
-### cannot find -lstdc++ ###
+### cannot find -lstdc++
 
 需要安装 libstdc++的静态版本。如果包管理工具是 yum 的话，如下即可：
 
@@ -334,14 +334,14 @@ yum install libstdc++-static
 
 为了部署方便，blade 选择静态链接 libstdc++（以及 libgcc），这也是 golang 等新兴语言的选择。
 
-### g++: Fatal error:Killed signal terminated program cc1plus ###
+### g++: Fatal error:Killed signal terminated program cc1plus
 
 可能是开发机性能不足，不足以支持默认计算出来的并发构建任务数目，尝试用 `-j <小一点的数字>` 参数，比如在 8 核的机器上用 `blade build -j4`
 
-### No space left on device ###
+### No space left on device
 
 输出的目标磁盘满。除了构建输出目录外，有时候也可能会是临时目录满了，可以尝试清空或者通过修改[TMPDIR](https://gcc.gnu.org/onlinedocs/gcc/Environment-Variables.html) 环境变量更改临时目录。
 
-### 如何让 Blade 忽略某些目录下的 BUILD 文件（比如代码库中有用 bazel 构建的目录，它的构建文件也叫 BUILD） ###
+### 如何让 Blade 忽略某些目录下的 BUILD 文件（比如代码库中有用 bazel 构建的目录，它的构建文件也叫 BUILD）
 
 在目录下放一个空的 `.bladeskip` 文件即可，该目录及其子目录都会被跳过。

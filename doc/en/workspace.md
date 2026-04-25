@@ -1,4 +1,4 @@
-# Workspace #
+# Workspace
 
 Blade requires that the project source code have an explicit root directory. The #include path in C++ also needs to be written from this directory. This directory becomes a workspace, which has several advantages:
 

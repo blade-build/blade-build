@@ -1,13 +1,13 @@
-# Build Scala Targets ##
+# Build Scala Targets
 
-## Rules ##
+## Rules
 
 The `scala_library`, `scala_binary`, `scala_test` are similar to the java rules,
 the key difference is that the compiler is changed to scalac, and with the scala runtime.
 
 scala\_test using the [scalatest](https://www.scalatest.org) library.
 
-## Standard Runtime Library ##
+## Standard Runtime Library
 
 Scala targets always need the standard scala_library, it can be define by maven_jar:
 
@@ -27,7 +27,7 @@ java_library(
 )
 ```
 
-## interop between java and scala ##
+## interop between java and scala
 
 scala is also a JVM language like java, so scala target can depends on java targets, and vice versa.
 

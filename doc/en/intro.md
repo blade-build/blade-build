@@ -1,4 +1,4 @@
-# What is Blade #
+# What is Blade
 
 Software projects use a variety of tools to build code, the most common is probably GNU Make. However, although GNU Make has its own functions, it is difficult to use it directly.
 

@@ -1,6 +1,6 @@
-# 构建 lex 和 yacc #
+# 构建 lex 和 yacc
 
-## lex_yacc_library ##
+## lex_yacc_library
 
 用于定义 lex/yacc 目标，生成编译器所需的词法分析器与语法分析器。
 由于二者通常搭配使用，并且编译 lex 时，通常采用 yacc 生成的 yy.tab.h 来定义，而编译 yacc 生成的 yy.tab.cc 时，又会调用 lex 生成的 parse 函数，整体上形成相互依赖。

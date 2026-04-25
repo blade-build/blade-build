@@ -1,4 +1,4 @@
-# Features #
+# Features
 
 * Source file updates cause a rebuild. This gnu make can be solved very well.
 * The build command is complex, and the developer may need to understand the command line and various parameters.

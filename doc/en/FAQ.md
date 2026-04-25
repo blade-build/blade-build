@@ -1,8 +1,8 @@
-# Blade FAQ #
+# Blade FAQ
 
-## Running environment ##
+## Running environment
 
-### Why can't blade run on my platform ###
+### Why can't blade run on my platform
 
 description:
 Run blade and report syntax error.
@@ -14,7 +14,7 @@ Blade needs to run python 2.7 or python 3.6 or higher. Please use python -V to v
 - Installed python 2.7 or reported an error, confirm that ptyhon -V sees the new version, configure the PATH environment variable if necessary or log in again.
 - Use env python, which python and other commands to see which python command is used.
 
-### vim No syntax highlighting when editing BUILD files ###
+### vim No syntax highlighting when editing BUILD files
 
 - First confirm whether it is installed by install
 - Then check if ~/.vim/syntax/blade.vim exists and points to the correct file
@@ -22,7 +22,7 @@ Blade needs to run python 2.7 or python 3.6 or higher. Please use python -V to v
 
 If the problem has not been resolved, please contact us.
 
-### Why can't alt be used ###
+### Why can't alt be used
 
 description:
 Alt can't use
@@ -32,9 +32,9 @@ Solution process:
  1. Re-execute the install
  - Add ~/bin to the user profile and log in again
 
-## Building problem ##
+## Building problem
 
-### Why do the dependencies in the deps have different target sequences, and the compilation results are different ###
+### Why do the dependencies in the deps have different target sequences, and the compilation results are different
 
 description:
 //common/config/ini:ini The order of placement in a library's deps is different. It is not passed before, and passed to the back.
@@ -52,7 +52,7 @@ In conclusion:
 - It is recommended to compile the project as much as possible.
 - Reduce the prebuilt project, the prebuilt library tries to complete the dependent target.
 
-### ccache cached the error message, is there a problem with ccache ###
+### ccache cached the error message, is there a problem with ccache
 
 description:
 There is an error in the compile prompt. After re-compiling in the source file, there is still an error. Is ccache buffering the alarm or error message, and there is no update?
@@ -71,11 +71,11 @@ in conclusion:
 
  * Check include path.
 
-### I only have one library without source code, how to use it ###
+### I only have one library without source code, how to use it
 
 Please refer to [[#cc_library]] for the prebuilt part.
 
-### prebuilt library only .so files, I only need to compile the .so library ###
+### prebuilt library only .so files, I only need to compile the .so library
 
 description:
 The prebuilt library has only .so files, and I only need to compile the .so library.
@@ -90,7 +90,7 @@ in conclusion:
 - So the prebuilt library is best to provide static and dynamic libraries.
 - Upgrade to the latest blade.
 
-### There is only a static library of passive code, but we need to compile the dynamic library ###
+### There is only a static library of passive code, but we need to compile the dynamic library
 
 description:
 Only static libraries are provided, but do we need to compile dynamic libraries?
@@ -109,7 +109,7 @@ gcc -shared *.o -o mylib.so
 
 Conclusion: When it comes to passive code, it's best to get both dynamic and static libraries.
 
-### bladeSupport the gcc specified in the environment variable to compile the project ###
+### bladeSupport the gcc specified in the environment variable to compile the project
 
 description:
 I want to compile a project with a specific version of gcc.
@@ -122,7 +122,7 @@ in conclusion:
 
  * Upgrade to the latest blade and note that the configuration of the environment variables is the same, that is, use the same version of the compiler and linker.
 
-### My code has been modified, there is still a problem with blade compilation ###
+### My code has been modified, there is still a problem with blade compilation
 
 description:
 On the CI machine, the blade compiles with an error. After fixing the error, it is pulled from the svn, but it still prompts the same error.
@@ -137,7 +137,7 @@ Conclusion:
 
 - Pay attention to the owner of the file when switching permissions.
 
-### Compiled SO library with path information ###
+### Compiled SO library with path information
 
 Description:
 The `so` library compiled with Blade has path information, which is troublesome to use. Can you configure changes?
@@ -145,7 +145,7 @@ The `so` library compiled with Blade has path information, which is troublesome 
 In a large project, different sub-projects, the library may be completely re-named, if the problem is manually coordinated, it is obviously not worth mentioning.
 Therefore, when Blade uses the library, it always has path information, which fundamentally avoids this problem. You can also take the path when you use it.
 
-### Why does the new error flag of Blade not work ###
+### Why does the new error flag of Blade not work
 
 Description:
 Compiling the local project with the updated Blade found that the error flag didn't work?
@@ -160,7 +160,7 @@ Conclusion:
 
 - Upgrade gcc.
 
-### blade -c Can't clear files generated by the project ###
+### blade -c Can't clear files generated by the project
 
 Description:
 `blade clean` can't clear the files generated by the project
@@ -173,12 +173,12 @@ Conclusion:
 
 - Check the command.
 
-### How to display the command line of the build ###
+### How to display the command line of the build
 
 I want to see the complete command executed during the build process.
 The complete command line can be displayed by adding the --verbose parameter to the build.
 
-### How do I publish a precompiled library ###
+### How do I publish a precompiled library
 
 Some confidential code, I hope to release it as a library, but at the same time rely on non-confidential libraries (such as common), how to publish it?
 Such a library:
@@ -213,20 +213,20 @@ cc_library(
 At the same time, the external header file remains unchanged. According to the cc_library introduction, the prebuild requires the organization of the library.
 It's important to note that deps must remain the same, and don't publish libraries that are owned by you but not yours as pre-compiled libraries.
 
-### unrecognized options What does this mean ###
+### unrecognized options What does this mean
 
 For example unrecognized options {'link_all_symbols': 1}.
 Different targets have different option parameters, and this error is reported if a parameter that is not supported by the target is passed. Possible cause is misuse of other targets
 The parameters, or spelling errors, for the latter case, BLADE's vim syntax highlighting feature can help you see the error more easily.
 
-### Source file xxx.cc belongs to both xxx and yyy What does this mean ###
+### Source file xxx.cc belongs to both xxx and yyy What does this mean
 
 For example, Source file cp_test_config.cc belongs to both cc_test xcube/cp/jobcontrol:job_controller_test and cc_test xcube/cp/jobcontrol:job_context_test?
 
 In order to avoid unnecessary repetitive compilation and possible different compilation parameters, it violates C++'s [one-time definition rule](http://en.wikipedia.org/wiki/One_Definition_Rule).
 Usually each source file should belong to only one target. If a source file is used by multiple targets, it should be written as a separate cc_library and depend on this library in deps.
 
-### How to open C++11 ###
+### How to open C++11
 
 Edit the configuration file and add:
 
@@ -241,12 +241,12 @@ of GCC was released before C++11 stdndard，maybe you should use ”gnu++0x“ t
 
 For higher version GCC，such as GCC 6, C++14 is already the default std value, this configuration item maybe become unnecessnary.
 
-### Compiled results take up too much disk space ###
+### Compiled results take up too much disk space
 
 Projects built with blade are often large-scale projects, so the result files often take up more disk space. If it is a
 problem, you can try to optimize them in the following ways.
 
-#### Reduce debug information level ####
+#### Reduce debug information level
 
 Blade compiles the code with debugging symbols defaultly, so that when you use some tools such as gdb to debug, you can
 see the names of functions and variables, but the debugging symbols are usually the largest part of the binary file.
@@ -269,7 +269,7 @@ Description:
 
 The default value is `mid`.
 
-#### Enable DebugFission ####
+#### Enable DebugFission
 
 For DebugFission configuration details, please refer to:
 - [`cc_config.fission`](config.md#cc_config) - Enable DebugFission feature
@@ -277,7 +277,7 @@ For DebugFission configuration details, please refer to:
 - [Using dwp files in package](build_rules/cc.md#using-dwp-files) - How to include dwp files in deployment packages
 
 
-#### Compress debug information ####
+#### Compress debug information
 
 You can use the [`-gz`](https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html) option of GCC to compress debug information.
 This option can be used in both compile and link phases.
@@ -308,13 +308,13 @@ cc_binary(
 NOTE: Only [newer version of gdb supports reading compressed debugging symbols](https://sourceware.org/gdb/current/onlinedocs/gdb/Requirements.html),
 if the gdb version is too low or `zlib` is not configured, the debugging information cannot be read correctly.
 
-#### Separate Debugging Symbols ####
+#### Separate Debugging Symbols
 
 Lowering the level of debugging symbols or using strip to delete debugging symbols can reduce the size of the binary file,
 but it also makes the program difficult to debug.
 Splitting the debugging symbols into separate files through [Separated Debugging Symbols](https://sourceware.org/gdb/onlinedocs/gdb/Separate-Debug-Files.html) is a compromise.
 
-#### Link test programs dynamically ####
+#### Link test programs dynamically
 
 ```python
 cc_test_config(
@@ -324,7 +324,7 @@ cc_test_config(
 
 The test program is not used for publishing. Dynamic linking can reduce a lot of disk overhead. If a specific test dynamic link fails, you can specify `dynamic_link = False` for it separately.
 
-#### Generate "thin" static library ###
+#### Generate "thin" static library
 
 Gnu ar supports the generation of static libraries of type 'thin', which is different from regular static libraries. The thin static library only records the path of the .o file, which can reduce the space occupation to a large extent.
 However, this kind of library can't be used for publishing. Fortunately, in the scenario of using blade, static libraries are generally used only inside the build system.
@@ -337,7 +337,7 @@ cc_library_config(
 )
 ```
 
-### cannot find -lstdc++ ###
+### cannot find -lstdc++
 
 Maybe you need to install a static version of libstdc++:
 
@@ -345,14 +345,14 @@ Maybe you need to install a static version of libstdc++:
 yum install libstdc++-static
 ```
 
-### g++: Fatal error:Killed signal terminated program cc1plus ###
+### g++: Fatal error:Killed signal terminated program cc1plus
 
 Maybe your devbox is not powerful enough to support defaultly calculated number of jobs, retry with `-j <smaller-job-number>` parameter, such as using `blade build -j4` in a 8 cores machine.
 
-### No space left on device ###
+### No space left on device
 
 The output disk is full. Besides the output directory, the temporary directory is often a root cause, you can try to clean it or modify the [TMPDIR](https://gcc.gnu.org/onlinedocs/gcc/Environment-Variables.html) environment variable to change it.
 
-### How to skip some directories contains foreign `BUILD` files (such as from bazel) ###
+### How to skip some directories contains foreign `BUILD` files (such as from bazel)
 
 Place an empty `.bladeskip` file under this directory, it and its subdirectories will be skipped.

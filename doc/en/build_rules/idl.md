@@ -1,6 +1,6 @@
-# Build Protobuf and Thrift #
+# Build Protobuf and Thrift
 
-## proto_library ##
+## proto_library
 
 Build protobuf targets
 
@@ -59,7 +59,7 @@ proto_library(
 )
 ```
 
-## thrift_library ##
+## thrift_library
 
 Can be used to generate thrift C++ library
 deps is the other thrift_library which are imported.

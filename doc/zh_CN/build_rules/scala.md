@@ -1,11 +1,11 @@
-# 构建 Scala 目标 #
+# 构建 Scala 目标
 
-## 规则 ##
+## 规则
 
 scala_library scala_binary scala_test 用法类似 java，区别是编译器换成了 scalac。
 scala\_test 使用 [scalatest](https://www.scalatest.org) 库。
 
-## 标准库 ##
+## 标准库
 
 构建 Scala 目标总是离不开 scala 标准库，可以通过 maven_jar 来定义：
 
@@ -25,7 +25,7 @@ java_library(
 )
 ```
 
-## java 和 scala 互操作 ##
+## java 和 scala 互操作
 
 和 java 一样，scala 也是 JVM 上的语言，因此 scala 目标也可以依赖 java 库，反之亦然。
 

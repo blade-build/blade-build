@@ -1,4 +1,4 @@
-# Package Files #
+# Package Files
 
 Package file from source tree and build targets
 

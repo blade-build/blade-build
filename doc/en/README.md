@@ -1,4 +1,4 @@
-# Blade User Manual #
+# Blade User Manual
 
 [What is Blade](intro.md)
 

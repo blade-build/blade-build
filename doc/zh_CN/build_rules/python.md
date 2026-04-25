@@ -1,6 +1,6 @@
-# 构建 Python 目标 #
+# 构建 Python 目标
 
-## py_library ##
+## py_library
 
 把 py 源代码编译为库。
 
@@ -41,7 +41,7 @@ python_library(
 
 srcs 是 python 包的文件名，只能有一个文件，支持 whl 和 egg 两种格式
 
-## py_binary ##
+## py_binary
 
 把 py 源代码编译为可执行文件。
 
@@ -72,7 +72,7 @@ python_binary 也支持 base 属性
   exclusions = ['google/protobuf/*'],
   ```
 
-## py_test ##
+## py_test
 
 编译和运行 python 测试代码。
 
@@ -91,7 +91,7 @@ py_test(
 
 我们一般使用 unittest 库进行 python 单元测试。
 
-## 使用 protobuf ##
+## 使用 protobuf
 
 proto 文件首先需要用[proto_library](idl.md#proto_library)来描述，在 py_* 的 deps 中引入。
 blade build 时会自动生成相应的 python protobuf 编码解码库。

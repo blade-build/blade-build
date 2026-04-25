@@ -1,6 +1,6 @@
-# 构建 protobuf 和 thrift #
+# 构建 protobuf 和 thrift
 
-## proto_library ##
+## proto_library
 
 用于定义 protobuf 目标
 deps 为 import 所涉及的其他 proto_library
@@ -59,7 +59,7 @@ proto_library(
 )
 ```
 
-## thrift_library ##
+## thrift_library
 
 用于定义 thrift 库目标
 deps 为 import 所涉及的其他 thrift_library

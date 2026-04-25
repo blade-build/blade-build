@@ -1,8 +1,8 @@
-# Testing Support #
+# Testing Support
 
 Blade provides complete support for test-driven development, and can run multiple test programs automatically through command line.
 
-## Incremental Testing ##
+## Incremental Testing
 
 Blade test supports incremental testing defaultly to speed up the execution of tests.
 
@@ -21,7 +21,7 @@ Text expired time is 1 day.
 For any failed test, if it is the first time, it will run at the next time. but after the retry, it will not run again until it is rebuilt or expired.
 You can use `global_config.run_unchanged_tests` config item or `run-unchanged-tests` command line option to change the behavior.
 
-## Full Test ##
+## Full Test
 
 If you need to run the full test, use the --full-test option, such as blade test common/... --full-test, all tests will be run unconditionly.
 In addition, cc_test supports the `always_run` attribute, which is used to always run every time during incremental testing, regardless of the last execution result.
@@ -34,7 +34,7 @@ cc_test(
 )
 ```
 
-## Concurrent Testing ##
+## Concurrent Testing
 
 Blade test supports concurrent testing. The concurrent test runs the test that need to be run after build.
 You can use `-t` (or `--test-jobs N`) to set the number of concurrent tests. Blade will execute max N test processes concurrently.
@@ -45,7 +45,7 @@ Example:
 blade test //common... --test-jobs 8
 ```
 
-## Non-concurrent Testing ##
+## Non-concurrent Testing
 
 For some tests that may not run in concurrent because they may interfere with each other, you can add the `exclusive` attribute.
 
@@ -57,7 +57,7 @@ cc_test(
 )
 ```
 
-## Test Coverage ##
+## Test Coverage
 
 When building and running tests, with the `--coverage` option, blade will include coverage-related compile options, and collect coverage data after the tests finished, currently only support C++, Java and Scala.
 
@@ -77,7 +77,7 @@ The java/scala test coverage report will be generated into the `jacoco_coverage_
 
 If `global_config.debug_info_level` is `low` or lower, line coverage will not be generated. because `-g:line` is required.
 
-## Exclude Specified Tests ##
+## Exclude Specified Tests
 
 Blade supports explicitly excluding specified tests with the `--exclude-tests` parameter, which is useful when you need to run a large number of tests in batches and expect to exclude some ones. E.g:
 
