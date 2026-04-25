@@ -176,7 +176,7 @@ class _NinjaFileHeaderGenerator(object):
             cppflags.append('--coverage')
             linkflags.append('--coverage')
 
-        if hasattr(self.options, 'profile-generate') and not getattr(self.options, 'profile-generate') is None:
+        if hasattr(self.options, 'profile-generate') and getattr(self.options, 'profile-generate') is not None:
             pgo_gen_dir = getattr(self.options, 'profile-generate')
             if not pgo_gen_dir:
                 cppflags.append('-fprofile-generate')
@@ -186,7 +186,7 @@ class _NinjaFileHeaderGenerator(object):
                 linkflags.append('-fprofile-generate=' + pgo_gen_dir)
             cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
 
-        if hasattr(self.options, 'profile-use') and not getattr(self.options, 'profile-use') is None:
+        if hasattr(self.options, 'profile-use') and getattr(self.options, 'profile-use') is not None:
             pgo_use_dir = getattr(self.options, 'profile-use')
             if not pgo_use_dir:
                 cppflags.append('-fprofile-use')

@@ -99,15 +99,15 @@ class BinaryRunner(object):
 
         # Make symbolic links for shared libraries of the executable.
 
-        # For normal built shared libraries, their path has been writen in the executable.
-        # For example, `build64_release/common/crypto/hash/libhash.so`, we need put a symbolic
-        # link `build64_release` to the it's full path.
+        # For normal built shared libraries, their paths have been written into the executable.
+        # For example, `build64_release/common/crypto/hash/libhash.so`, we need to put a symbolic
+        # link `build64_release` pointing to its absolute path.
         build_dir_name = os.path.basename(self.build_dir)
         os.symlink(os.path.abspath(self.build_dir),
                    os.path.join(runfiles_dir, build_dir_name))
 
-        # For shared libraries with `soname`, their path were not been writen into the executable,
-        # they are always been searched from some given paths.
+        # For shared libraries with a `soname`, their paths are not written into the executable;
+        # they are always searched for in a set of configured directories.
         #
         # libcrypto.so.1.0.0 => /lib64/libcrypto.so.1.0.0 (0x00007f0705d9f000)
         for soname, full_path in self._get_shared_libraries_with_soname(target):
