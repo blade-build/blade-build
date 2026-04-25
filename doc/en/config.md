@@ -38,8 +38,8 @@ Global configuration:
   Backend build system, only `ninja` currently.
 
   [ninja](https://ninja-build.org/) is a lower-level system that focuses on building speeds.
-  We used to use scons as the backend, but ninja is much faster, so the we only use ninja as
-  backend, and the support for scons is removed.
+  We used to use SCons as the backend, but ninja is much faster, so the we only use ninja as
+  backend, and the support for SCons is removed.
 
 - `duplicated_source_action` : string = "warning"; ["warning", "error"]
 
@@ -248,8 +248,8 @@ C/C++ library configuration
 
   it also allow some variables which can be substituted:
 
-  - ${bits}  Target bits, such as 32，64。
-  - ${arch} Target CPU architecture name, such as i386, x86_64, etc。
+  - ${bits}  Target bits, such as 32,64.
+  - ${arch} Target CPU architecture name, such as i386, x86_64, etc.
   - ${profile} Build mode, can be `debug` or `release`.
 
   In this way, library files of multiple target platforms can be stored in different subdirectories

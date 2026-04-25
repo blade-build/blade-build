@@ -23,7 +23,7 @@ the root of the workspace, replace the `proto` suffix into `pb.h`.
 For example, the header file of `//common/base/string_test.proto` is "common/base/string_test.pb.h".
 
 When a java targets depends on a proto_library, the java relatived code will be generated automatically,
-it is also similar to other target languages，such as python. so we only need one proto_library for
+it is also similar to other target languages,such as python. so we only need one proto_library for
 multiple target languages.
 
 If you want to generate code for specified languages unconditionly, you can use the `target_languages` argument:

@@ -36,9 +36,9 @@ blade dump --config --to-file my.config
 
   Blade 所用的后端构建系统，只支持 `ninja`。
 
-  Blade 一开始依赖 scons 作为后端，但是后来由于优化的需要，发现 ninja 更合适。
+  Blade 一开始依赖 SCons 作为后端，但是后来由于优化的需要，发现 ninja 更合适。
   [ninja](https://ninja-build.org/)是一个专注构建速度的底层构建系统，经实测在构建大型项目时，
-  用 ninja 速度比 scons 快很多，因此我们淘汰了对 scons 的支持。
+  用 ninja 速度比 SCons 快很多，因此我们淘汰了对 SCons 的支持。
 
 - `duplicated_source_action` : string = 'warning' | ['warning', 'error']
 

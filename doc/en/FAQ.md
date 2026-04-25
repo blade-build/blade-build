@@ -11,7 +11,7 @@ Solution process:
 
 Blade needs to run python 2.7 or python 3.6 or higher. Please use python -V to view the python version.
 
-- Installed python 2.7 or reported an error, confirm that ptyhon -V sees the new version, configure the PATH environment variable if necessary or log in again.
+- Installed python 2.7 or reported an error, confirm that python -V sees the new version, configure the PATH environment variable if necessary or log in again.
 - Use env python, which python and other commands to see which python command is used.
 
 ### vim No syntax highlighting when editing BUILD files
@@ -236,10 +236,10 @@ cc_config(
 )
 ```
 
-See [GCC Online Documents](https://gcc.gnu.org/onlinedocs/gcc/C-Dialect-Options.html) to see other values。Some version
-of GCC was released before C++11 stdndard，maybe you should use ”gnu++0x“ to instead。
+See [GCC Online Documents](https://gcc.gnu.org/onlinedocs/gcc/C-Dialect-Options.html) to see other values. Some version
+of GCC was released before C++11 standard, maybe you should use "gnu++0x" instead.
 
-For higher version GCC，such as GCC 6, C++14 is already the default std value, this configuration item maybe become unnecessnary.
+For higher version GCC, such as GCC 6, C++14 is already the default std value, this configuration item maybe become unnecessary.
 
 ### Compiled results take up too much disk space
 

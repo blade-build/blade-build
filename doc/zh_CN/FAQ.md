@@ -10,7 +10,7 @@
 解决过程：
 
 - blade 运行需要 python 2.7 或 python 3.6 以上. 请使用 python -V 查看 python 版本。
-- 装了 python 2.7 还是报错，确认 ptyhon -V 看到的是新版本，必要时配置 PATH 环境变量或者重新登录。
+- 装了 python 2.7 还是报错，确认 python -V 看到的是新版本，必要时配置 PATH 环境变量或者重新登录。
 - 使用 env python, which python 等命令查看 python 命令到底用的是哪个。
 
 ### vim 编辑 BUILD 文件时没有语法高亮

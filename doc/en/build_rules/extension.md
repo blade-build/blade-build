@@ -51,7 +51,7 @@ the path of the relative workspace starting with `//`.
 
 Load extension and import symbols into current `BUILD` file.
 
-Prototype：
+Prototype:
 
 ```python
 def load(extension_label, *symbols, **aliases):
