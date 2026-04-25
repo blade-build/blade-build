@@ -104,6 +104,7 @@ $ blade dump --all-tags ...
 - --generate-dynamic   强制生成动态库
 - --generate-java      为proto_library 和 swig_library 生成java文件
 - --generate-php       为proto_library 和 swig_library 生成php文件
+- --generate-go        为proto_library 生成go文件
 - --gprof              支持 GNU gprof
 - --coverage           支持生成覆盖率，目前支持 GNU gcov 和Java jacoco
 

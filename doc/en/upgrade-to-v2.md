@@ -6,13 +6,13 @@ There are many improvement in V2, include performance，new features, code refac
 
 - Full functional java and scala building
 - Header files are included in dependency mangement.
-- Support describe libraries which built by other build systems such as Autotool and CMake by using the new `foegign_cc_library` rule
-- Support custom extensions. you can write you own extension and using `include` function to load it
+- Support describe libraries which built by other build systems such as Autotool and CMake by using the new `foreign_cc_library` rule
+- Support custom extensions. you can write you own extension and using the `load` function to load it
 - Many performance optimizations
 - Better diagnostic message include BUILD file path and line number, you can jump into BUILD files in editors now.
 - Support self profile and diagnostic
 - Support show slow build targets and tests
-- Support quiet mode (by the `--quite` option), just show progress bar when nothing is wrong.
+- Support quiet mode (by the `--quiet` option), just show progress bar when nothing is wrong.
 - Better `clean` sub command
 - Complete English documents.
 

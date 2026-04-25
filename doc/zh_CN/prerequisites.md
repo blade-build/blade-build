@@ -3,7 +3,7 @@
 Blade 运行时需要以下依赖：
 
 * Linux 或 Mac 操作系统
-* Python v2.7+
+* Python v2.7+ 或 Python v3.6+
 * Ninja v1.8+
 
 Blade还能和以下软件协作：

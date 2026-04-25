@@ -9,7 +9,7 @@ Run blade and report syntax error.
 
 Solution process:
 
-Blade needs to run python 2.7 or higher. Please use python -V to view the python version.
+Blade needs to run python 2.7 or python 3.6 or higher. Please use python -V to view the python version.
 
 - Installed python 2.7 or reported an error, confirm that ptyhon -V sees the new version, configure the PATH environment variable if necessary or log in again.
 - Use env python, which python and other commands to see which python command is used.
@@ -318,10 +318,11 @@ Splitting the debugging symbols into separate files through [Separated Debugging
 
 ```python
 cc_test_config(
-    dynamic_link = True
+    dynamic_link = True
 )
-The test program is not used for publishing. Dynamic linking can reduce a lot of disk overhead. If a specific test dynamic link fails, you can specify dynamic_link = False for it separately.
 ```
+
+The test program is not used for publishing. Dynamic linking can reduce a lot of disk overhead. If a specific test dynamic link fails, you can specify `dynamic_link = False` for it separately.
 
 #### Generate "thin" static library ###
 

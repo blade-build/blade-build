@@ -9,7 +9,7 @@
 
 解决过程：
 
-- blade 运行需要python 2.7 以上. 请使用python -V 查看python 版本。
+- blade 运行需要 python 2.7 或 python 3.6 以上. 请使用python -V 查看python 版本。
 - 装了python 2.7还是报错，确认 ptyhon -V 看到的是新版本，必要时配置PATH环境变量或者重新登录。
 - 使用env python, which python 等命令查看python命令到底用的是哪个。
 

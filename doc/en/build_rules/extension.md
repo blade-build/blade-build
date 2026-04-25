@@ -41,7 +41,7 @@ GTEST_LIBS = ["//thirdparty/gtest:gtest"]
 
 ## Use Extension
 
-We support 2 ways to load extensions into `BUILD` file, `load` and `incluce`.
+We support 2 ways to load extensions into `BUILD` file, `load` and `include`.
 In both ways, The loaded symbols are only **visible to current `BUILD` file**.
 
 These function supports the path of the subdirectory relative to the current directory and
@@ -63,11 +63,11 @@ Symbols beginning with an underscore will not be exported and therefore cannot b
 Use:
 
 ```python
-include('//common/awesome_build_rules.bld')
+load('//common/awesome_build_rules.bld', 'awesome_library')
 
 awesome_library(  # Use imported rule
-    name='awesome_lib',
-    srcs=['my.awesome', 'your.awesome'],
+    name='awesome_lib',
+    srcs=['my.awesome', 'your.awesome'],
 )
 ```
 
