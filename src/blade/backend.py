@@ -571,8 +571,6 @@ class _NinjaFileHeaderGenerator(object):
         java_config = config.get_section('java_config')
         self.generate_javac_rules(java_config)
         self.generate_java_resource_rules()
-        jar = self.get_java_command(java_config, 'jar')
-        args = '%s ${out} ${in}' % jar
         self.generate_java_jar_rules(java_config)
         self.generate_java_test_rules()
         self.generate_fatjar_rules(java_config)
