@@ -287,7 +287,8 @@ def eval_file(filepath):
     The string or node provided may only consist of the following Python literal structures:
     strings, bytes, numbers, tuples, lists, dicts, sets, booleans, and None.
     """
-    return ast.literal_eval(open(filepath).read())
+    with open(filepath) as f:
+        return ast.literal_eval(f.read())
 
 
 def source_location(filename):

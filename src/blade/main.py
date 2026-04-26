@@ -184,7 +184,7 @@ def main(blade_path, argv):
     except KeyboardInterrupt:
         console.error('KeyboardInterrupt')
         exit_code = -signal.SIGINT
-    except:  # pylint: disable=bare-except
+    except Exception:
         exit_code = 1
         console.error(traceback.format_exc())
     if exit_code != 0:

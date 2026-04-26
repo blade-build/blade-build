@@ -315,7 +315,7 @@ def __load_build_file(source_dir, blade):
                 return True
             except SystemExit:
                 console.fatal('%s: Fatal error' % build_file)
-            except:  # pylint: disable=bare-except
+            except Exception:
                 console.fatal('Parse error in %s\n%s' % (
                     build_file, traceback.format_exc()))
         else:
