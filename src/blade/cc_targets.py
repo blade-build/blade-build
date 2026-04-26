@@ -708,7 +708,7 @@ class CcTarget(Target):
         # Therefore, it is empty at the beginning, but is available before the second build.
         # If it is written in the same file as the previous information, unnecessary repeated
         # builds will be triggered.
-        # See https://github.com/chen3feng/blade-build/issues/1034
+        # See https://github.com/blade-build/blade-build/issues/1034
         #
         # This information is only a subset of the global file `inclusion_declaration.data` and is
         # passed to the inclusion_check as an optimization to avoid reading the larger global file.
