@@ -134,7 +134,7 @@ def get_cwd():
     So in practice we simply use system('pwd') to get current working directory.
 
     """
-    p = subprocess.Popen(['pwd'], stdout=subprocess.PIPE, shell=True)
+    p = subprocess.Popen(['pwd'], stdout=subprocess.PIPE)
     return to_string(p.communicate()[0].strip())
 
 
@@ -357,7 +357,7 @@ def open_zip_file_for_write(filename, compression_level):
 
 
 def which(cmd):
-    returncode, stdout, _ = run_command("which %s" % cmd, shell=True)
+    returncode, stdout, _ = run_command(['which', cmd])
     if returncode != 0:
         return None
     return stdout.strip()
