@@ -66,17 +66,15 @@ function _full_real_path() {
 }
 
 # Check the python version at first, exit blade when python
-# version is under 2.7 (for python2) or under 3.6 (for python3).
+# version is under 3.10.
 function _check_python() {
     local python=""
     if command -v python3 &> /dev/null; then
         python="python3"
     elif command -v python &> /dev/null; then
         python="python"
-    elif command -v python2 &> /dev/null; then
-        python="python2"
     else
-        _fatal "Please install python 2.7+ or 3.6+ in your system"
+        _fatal "Please install python 3.10+ in your system"
     fi
 
     local python_ver
@@ -87,14 +85,12 @@ function _check_python() {
 
     if ! [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]]; then
         _info "Python version in your machine: $python_ver"
-        _fatal "Cannot parse python version, please install python 2.7+ or 3.6+"
+        _fatal "Cannot parse python version, please install python 3.10+"
     fi
 
-    if (( major < 2 )) \
-        || (( major == 2 && minor < 7 )) \
-        || (( major == 3 && minor < 6 )); then
+    if (( major < 3 )) || (( major == 3 && minor < 10 )); then
         _info "Python version in your machine: $python_ver"
-        _fatal "Please upgrade your python version to 2.7+ or 3.6+"
+        _fatal "Please upgrade your python version to 3.10+"
     fi
     echo "$python"
 }
@@ -113,7 +109,10 @@ if [[ -e $blade_dir/blade_init ]]; then
     source $blade_dir/blade_init
 fi
 
-python=$(_check_python)
+# Note: _fatal inside _check_python runs in a command-substitution
+# sub-shell, so its `exit 1` only terminates the sub-shell. Propagate
+# the failure explicitly here.
+python=$(_check_python) || exit 1
 
 # Check ninja
 if ! command -v ninja &> /dev/null; then

@@ -1,11 +1,11 @@
 # Blade Build System
 
 [![license NewBSD](https://img.shields.io/badge/License-NewBSD-yellow.svg)](COPYING)
-[![Python](https://img.shields.io/badge/language-python2,3-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)](doc/en/prerequisites.md)
 
-![Blade Build](/image/blade-200x400.png "Blade Build")
+![Blade Build](image/blade-200x400.png "Blade Build")
 
 English | [简体中文](README-zh.md)
 
@@ -14,9 +14,8 @@ A modern, high-performance build system optimized for trunk-based development in
 ## Build Status
 
 [![Build Status](https://github.com/blade-build/blade-build/actions/workflows/python-package.yml/badge.svg)](https://github.com/blade-build/blade-build/actions/workflows/python-package.yml)
-[![codebeat badge](https://codebeat.co/badges/e0d861b7-47cc-4023-9784-7d54246a3576)](https://codebeat.co/projects/github-com-chen3feng-blade-build-master)
-[![Coverage](https://coveralls.io/repos/chen3feng/blade-build/badge.svg?branch=master)](https://coveralls.io/github/chen3feng/blade-build)
-[![Downloads](https://img.shields.io/github/downloads/chen3feng/blade-build/total.svg)](https://github.com/chen3feng/blade-build/releases)
+[![Coverage](https://coveralls.io/repos/blade-build/blade-build/badge.svg?branch=master)](https://coveralls.io/github/blade-build/blade-build)
+[![Downloads](https://img.shields.io/github/downloads/blade-build/blade-build/total.svg)](https://github.com/blade-build/blade-build/releases)
 
 ## Demo
 
@@ -32,7 +31,7 @@ We will release the verified version on the large-scale internal code base to th
 
 * Version 2.0 is now available with the following major enhancements:
 
-  * Minimum Python version requirement: 2.7, with full Python 3 support
+* Minimum Python version requirement: 3.10
   * Java and Scala build support
   * Comprehensive Python language support
   * Custom extension framework
@@ -52,7 +51,7 @@ Designed to enhance development productivity, Blade simplifies build configurati
 
 Blade is primarily positioned for large C++ projects on Linux, closely integrated with development workflows such as unit testing, continuous integration, and coverage statistics. Like Unix text filtering programs, it maintains relative independence and can run standalone. Currently, it focuses on supporting i386/x86_64 Linux, with potential future support for other Unix-like systems.
 
-During the development of [Tencent's "Typhoon" cloud computing platform](/doc/Hadoop-in-China-2011-Typhoon.mhtml), we identified significant challenges with GNU Make and Autotools in large-scale environments. Inspired by insights from [Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we engineered Blade as a declarative build system.
+During the development of [Tencent's "Typhoon" cloud computing platform](doc/Hadoop-in-China-2011-Typhoon.mhtml), we identified significant challenges with GNU Make and Autotools in large-scale environments. Inspired by insights from [Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we engineered Blade as a declarative build system.
 
 The system utilizes declarative build scripts where developers specify what to build (targets, sources, and direct dependencies) rather than how to build it. This approach dramatically reduces configuration complexity while significantly improving development efficiency and maintainability.
 

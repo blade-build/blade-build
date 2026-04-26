@@ -51,8 +51,8 @@ def _generate_scm_git():
         revision = out.strip()
     out = git(['git', 'remote', '-v'])
     # $ git remote -v
-    # origin  https://github.com/chen3feng/blade-build.git (fetch)
-    # origin  https://github.com/chen3feng/blade-build.git (push)
+    # origin  https://github.com/blade-build/blade-build.git (fetch)
+    # origin  https://github.com/blade-build/blade-build.git (push)
     if out:
         url = out.splitlines()[0].split()[1]
         # Remove userinfo (such as username and password) from url, if any.
