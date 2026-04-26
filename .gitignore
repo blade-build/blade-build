@@ -12,3 +12,7 @@ build64_*
 
 /.coverage*
 __pycache__
+
+# Local-only agent working area (scratch scripts, audit reports, PR body
+# drafts, etc.). See the agent-work-artifacts-layout skill.
+.agent/
