@@ -12,3 +12,15 @@ build64_*
 
 /.coverage*
 __pycache__
+
+# Local AI-agent working area. See .agent/README.md for the layout.
+# Default: everything under .agent/ is local-only. Tracked paths are
+# explicitly un-ignored below (order matters — blanket ignore first,
+# then reopens).
+/.agent/*
+!/.agent/README.md
+!/.agent/tools/
+/.agent/tools/*
+!/.agent/tools/*.py
+!/.agent/tools/*.sh
+!/.agent/tools/README.md
