@@ -27,10 +27,9 @@ Execute the installation script to install Blade under `~/bin`:
 ### Python Version Support
 
 **Supported Python Versions:**
-- **Python 2.7.x:** Legacy support (scheduled for deprecation)
-- **Python 3.6+:** Primary support (tested on 3.6, 3.9, and newer versions)
+- **Python 3.10+:** Required minimum version (tested on 3.10 through 3.14)
 
-**Migration Recommendation:** Transition to Python 3.x for long-term compatibility
+Older versions (Python 2.7 and Python 3.x prior to 3.10) are no longer supported by Blade v3. For legacy environments, use the `2.x` LTS branch.
 
 ## Post-Installation Verification
 
@@ -62,7 +61,7 @@ export PATH=~/bin:$PATH
 ### Required Dependencies
 
 - **Ninja Build System:** Required for backend build operations
-- **Python Interpreter:** Python 2.7.x or Python 3.6+
+- **Python Interpreter:** Python 3.10 or newer
 - **Development Tools:** Standard C/C++ toolchain (GCC/Clang)
 
 ### Optional Dependencies

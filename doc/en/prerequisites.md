@@ -9,7 +9,7 @@ Blade requires the following core dependencies for basic operation:
 - **macOS:** macOS 10.12+ with Xcode Command Line Tools
 
 ### Core Runtime Dependencies
-- **Python:** Version 2.7+ or Python 3.6+ (Python 3.x recommended)
+- **Python:** Version 3.10 or newer
 - **Ninja Build System:** Version 1.8+ (required as build backend)
 
 ## Optional Performance Enhancements
@@ -54,7 +54,7 @@ Blade integrates with the following tools for enhanced build performance:
 
 | Component | Minimum Version | Recommended Version | Notes |
 |-----------|-----------------|-------------------|--------|
-| Python | 2.7 / 3.6 | 3.8+ | Python 2.7 deprecated soon |
+| Python | 3.10 | 3.12+ | v3 requires Python 3.10 or newer |
 | Ninja | 1.8 | 1.10+ | Core build backend |
 | GCC | 4.0 | 7.0+ | Clang 6.0+ also supported |
 | JDK | 1.6 | 11+ | LTS versions recommended |

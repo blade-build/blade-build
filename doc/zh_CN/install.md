@@ -30,10 +30,9 @@ curl https://blade-build.github.io/install.sh | bash
 
 **支持的版本：**
 
-- **Python 2.7.x：** 保留支持（计划逐步停止）
-- **Python 3.6+：** 主要支持版本（在 3.6、3.9 及更新版本上测试）
+- **Python 3.10+：** 最低要求版本（在 3.10 到 3.14 上测试）
 
-**迁移建议：** 尽快切换到 Python 3.x，以获得长期兼容性
+更老的版本（Python 2.7 及 3.10 之前的 Python 3）Blade v3 已不再支持。如需在遗留环境中使用，请使用 `2.x` LTS 分支。
 
 ## 安装后验证
 
@@ -65,7 +64,7 @@ export PATH=~/bin:$PATH
 ### 必需依赖
 
 - **Ninja：** 用作构建后端
-- **Python 解释器：** Python 2.7.x 或 Python 3.6+
+- **Python 解释器：** Python 3.10 或更新版本
 - **开发工具链：** 标准 C/C++ 工具链（GCC 或 Clang）
 
 ### 可选依赖

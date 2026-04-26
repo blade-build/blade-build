@@ -8,7 +8,7 @@
 
 **Diagnostic Procedure:**
 
-Blade requires Python 2.7 or Python 3.6+. Verify your Python installation:
+Blade v3 requires Python 3.10 or newer. Verify your Python installation:
 
 ```bash
 python -V  # Check Python version
@@ -16,7 +16,7 @@ python -V  # Check Python version
 
 **Troubleshooting Steps:**
 
-1. **Version Verification:** If Python 2.7 is installed but errors persist, confirm `python -V` displays the expected version
+1. **Version Verification:** If an older Python is installed but errors persist, confirm `python -V` displays Python 3.10 or newer
 2. **PATH Environment:** Update your PATH environment variable if necessary, or restart your terminal session
 3. **Interpreter Identification:** Use `env python` or `which python` to identify the active Python interpreter
 

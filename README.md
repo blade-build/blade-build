@@ -1,7 +1,7 @@
 # Blade Build System
 
 [![license NewBSD](https://img.shields.io/badge/License-NewBSD-yellow.svg)](COPYING)
-[![Python](https://img.shields.io/badge/language-python2,3-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)](doc/en/prerequisites.md)
 
@@ -32,7 +32,7 @@ We will release the verified version on the large-scale internal code base to th
 
 * Version 2.0 is now available with the following major enhancements:
 
-  * Minimum Python version requirement: 2.7, with full Python 3 support
+* Minimum Python version requirement: 3.10
   * Java and Scala build support
   * Comprehensive Python language support
   * Custom extension framework

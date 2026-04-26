@@ -1,7 +1,7 @@
 # Blade Build System
 
 [![license NewBSD](https://img.shields.io/badge/License-NewBSD-yellow.svg)](COPYING)
-[![Python](https://img.shields.io/badge/language-python2,3-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)](doc/zh_CN/prerequisites.md)
 
@@ -30,7 +30,7 @@ Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based deve
 
 * Blade 2.0 现已发布，带来以下重要增强：
 
-  * 最低 Python 版本要求提升至 2.7，同时全面支持 Python 3
+* 最低 Python 版本要求：3.10
   * 完善的 Java 与 Scala 构建支持
   * 全面的 Python 语言构建支持
   * 自定义扩展机制

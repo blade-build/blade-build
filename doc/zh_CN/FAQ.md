@@ -8,7 +8,7 @@
 
 **排查流程：**
 
-Blade 运行需要 Python 2.7 或 Python 3.6+。请先确认 Python 安装：
+Blade v3 要求 Python 3.10 或更新版本。请先确认 Python 安装：
 
 ```bash
 python -V  # 查看 Python 版本
@@ -16,7 +16,7 @@ python -V  # 查看 Python 版本
 
 **排查步骤：**
 
-1. **版本确认：** 即便已安装 Python 2.7 仍然报错，先确认 `python -V` 实际看到的版本是否为预期版本
+1. **版本确认：** 若已安装旧版 Python 仍然报错，先确认 `python -V` 实际看到的版本是否为 3.10 或更新
 2. **PATH 环境：** 必要时调整 `PATH` 环境变量，或重新登录终端使配置生效
 3. **解释器定位：** 使用 `env python` 或 `which python` 查看当前实际调用的 Python 解释器
 

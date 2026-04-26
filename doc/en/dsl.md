@@ -15,8 +15,6 @@ Some builtin functions are restricted.
 To use some common additional functions, such as `os.path.join`, you need to use similar sub-modules in the `blade` module.
 If you want to add more appropriate modules, please make an Issue.
 
-Even if you use Python 2 to run Blade, you'd better to use the backported Python 3 syntax as much as possible.
-
 To allow unrestricted python in existing `BUILD` files, set the `global_config.unrestricted_dsl_dirs = [...]`,
 to disable DSL restriction globally, set the `global_config.restricted_dsl = False`.
 
