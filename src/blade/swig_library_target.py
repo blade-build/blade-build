@@ -84,11 +84,12 @@ class SwigLibrary(CcTarget):
 
     def _swig_extract_dependency_files(self, src):
         dep = []
-        for line in open(src):
-            if line.startswith('#include') or line.startswith('%include'):
-                line = line.split(' ')[1].strip("""'"\r\n""")
-                if not ('<' in line or line in dep):
-                    dep.append(line)
+        with open(src) as f:
+            for line in f:
+                if line.startswith('#include') or line.startswith('%include'):
+                    line = line.split(' ')[1].strip("""'"\r\n""")
+                    if not ('<' in line or line in dep):
+                        dep.append(line)
         return [i for i in dep if os.path.exists(i)]
 
     def generate(self):

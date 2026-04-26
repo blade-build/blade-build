@@ -39,7 +39,8 @@ class GlobalDeclaration(object):
         if self._initialized:
             return
         console.debug("Load global declaration file, " + reason)
-        declaration = pickle.load(open(self._declaration_file, 'rb'))
+        with open(self._declaration_file, 'rb') as f:
+            declaration = pickle.load(f)
         # pylint: disable=attribute-defined-outside-init
         self._hdr_targets_map = declaration['public_hdrs']
         self._hdr_dir_targets_map = declaration['public_incs']
@@ -407,7 +408,8 @@ class Checker(object):
 
 
 def check(target_check_info_file):
-    target = pickle.load(open(target_check_info_file, 'rb'))
+    with open(target_check_info_file, 'rb') as f:
+        target = pickle.load(f)
     extra_file = target_check_info_file + '.extra'
     if os.path.exists(extra_file):
         with open(extra_file, 'rb') as f:

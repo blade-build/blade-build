@@ -78,8 +78,7 @@ def _run_ninja_command(cmdstr):
     try:
         p.wait()
         return p.returncode
-    # pylint: disable=bare-except
-    except:  # KeyboardInterrupt
+    except KeyboardInterrupt:
         return 1
 
 

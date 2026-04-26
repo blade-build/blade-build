@@ -178,17 +178,18 @@ class BinaryRunner(object):
                                 '%s.testdata' % target.name)
         if os.path.isfile(testdata):
             runfiles_dir = self._runfiles_dir(target)
-            for line in open(testdata):
-                data = line.strip().split()
-                if len(data) == 1:
-                    src, dst = data[0], ''
-                else:
-                    src, dst = data[0], data[1]
-                dst = os.path.join(runfiles_dir, dst)
-                dst_dir = os.path.dirname(dst)
-                if not os.path.isdir(dst_dir):
-                    os.makedirs(dst_dir)
-                shutil.copy2(src, dst)
+            with open(testdata) as f:
+                for line in f:
+                    data = line.strip().split()
+                    if len(data) == 1:
+                        src, dst = data[0], ''
+                    else:
+                        src, dst = data[0], data[1]
+                    dst = os.path.join(runfiles_dir, dst)
+                    dst_dir = os.path.dirname(dst)
+                    if not os.path.isdir(dst_dir):
+                        os.makedirs(dst_dir)
+                    shutil.copy2(src, dst)
 
     def _clean_target(self, target):
         """Clean the executive environment."""

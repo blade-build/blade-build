@@ -118,7 +118,7 @@ class WorkerThread(threading.Thread):
                     self.cleanup_job()
                 finally:
                     self.job_lock.release()
-        except:  # pylint: disable=bare-except
+        except Exception:
             traceback.print_exc()
 
 

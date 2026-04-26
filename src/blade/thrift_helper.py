@@ -50,38 +50,39 @@ class ThriftParser(object):
         self._parse_file()
 
     def _parse_file(self):
-        for line in open(self.path):
-            line = line.strip()
-            if line.startswith('//') or line.startswith('#'):
-                continue
-            pos = line.find('//')
-            if pos != -1:
-                line = line[:pos]
-            pos = line.find('#')
-            if pos != -1:
-                line = line[:pos]
+        with open(self.path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('//') or line.startswith('#'):
+                    continue
+                pos = line.find('//')
+                if pos != -1:
+                    line = line[:pos]
+                pos = line.find('#')
+                if pos != -1:
+                    line = line[:pos]
 
-            matched = re.match('^namespace ([0-9_a-zA-Z]+) ([0-9_a-zA-Z.]+)', line)
-            if matched:
-                lang, package = matched.groups()
-                self.package_name[lang] = package
-                continue
+                matched = re.match('^namespace ([0-9_a-zA-Z]+) ([0-9_a-zA-Z.]+)', line)
+                if matched:
+                    lang, package = matched.groups()
+                    self.package_name[lang] = package
+                    continue
 
-            matched = re.match('(const|struct|service|enum|exception) ([0-9_a-zA-Z]+)', line)
-            if not matched:
-                continue
+                matched = re.match('(const|struct|service|enum|exception) ([0-9_a-zA-Z]+)', line)
+                if not matched:
+                    continue
 
-            kw, name = matched.groups()
-            if kw == 'const':
-                self.has_constants = True
-            elif kw == 'struct':
-                self.structs.append(name)
-            elif kw == 'service':
-                self.services.append(name)
-            elif kw == 'enum':
-                self.enums.append(name)
-            elif kw == 'exception':
-                self.exceptions.append(name)
+                kw, name = matched.groups()
+                if kw == 'const':
+                    self.has_constants = True
+                elif kw == 'struct':
+                    self.structs.append(name)
+                elif kw == 'service':
+                    self.services.append(name)
+                elif kw == 'enum':
+                    self.enums.append(name)
+                elif kw == 'exception':
+                    self.exceptions.append(name)
 
         if self.has_constants or self.structs or self.enums or \
                 self.exceptions or self.services:

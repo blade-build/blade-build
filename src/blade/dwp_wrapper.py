@@ -165,7 +165,8 @@ def run_dwp(output_path, dwo_files, dwp_tool='dwp'):
     if not dwo_files:
         console.warning("Warning: No .dwo files found, skipping dwp generation")
         # Create an empty file to satisfy ninja
-        open(output_path, 'w').close()
+        with open(output_path, 'w'):
+            pass
         return 0
 
     # Use a response file if there are many .dwo files
@@ -187,7 +188,7 @@ def run_dwp(output_path, dwo_files, dwp_tool='dwp'):
             # Clean up response file
             try:
                 os.unlink(rsp_path)
-            except:  # pylint: disable=bare-except
+            except OSError:
                 pass
     else:
         # Call dwp directly with all .dwo files

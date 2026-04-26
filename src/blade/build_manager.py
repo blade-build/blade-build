@@ -283,15 +283,17 @@ class Blade(object):
             output_file = sys.stdout
             console.info('Query result:')
 
-        output_format = self.__options.output_format
-        if output_format == 'dot':
-            self.query_dependency_dot(output_file)
-        elif output_format == 'tree':
-            self.query_dependency_tree(output_file)
-        else:
-            self.query_dependency_plain(output_file)
-        if output_file_name:
-            output_file.close()
+        try:
+            output_format = self.__options.output_format
+            if output_format == 'dot':
+                self.query_dependency_dot(output_file)
+            elif output_format == 'tree':
+                self.query_dependency_tree(output_file)
+            else:
+                self.query_dependency_plain(output_file)
+        finally:
+            if output_file_name:
+                output_file.close()
         return 0
 
     def query_dependency_plain(self, output_file):
