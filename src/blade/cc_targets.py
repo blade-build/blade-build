@@ -619,7 +619,7 @@ class CcTarget(Target):
 
     def _soname_of(self, so_path):
         """Get the `soname` of a shared library."""
-        returncode, output, unused_stderr = run_command('objdump -p %s' % so_path, shell=True)
+        returncode, output, unused_stderr = run_command(['objdump', '-p', so_path])
         if returncode != 0:
             return None
         for line in output.splitlines():

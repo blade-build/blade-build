@@ -122,7 +122,7 @@ class ToolChain(object):
 
     def _get_cc_version(self):
         version = ''
-        returncode, stdout, stderr = run_command(self.cc + ' -dumpversion', shell=True)
+        returncode, stdout, stderr = run_command([self.cc, '-dumpversion'])
         if returncode == 0:
             version = stdout.strip()
         if not version:
@@ -133,7 +133,7 @@ class ToolChain(object):
     def get_cc_target_arch():
         """Get the cc target architecture."""
         cc = ToolChain._get_cc_command('CC', 'gcc')
-        returncode, stdout, stderr = run_command(cc + ' -dumpmachine', shell=True)
+        returncode, stdout, stderr = run_command([cc, '-dumpmachine'])
         if returncode == 0:
             return stdout.strip()
         return ''

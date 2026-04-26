@@ -85,7 +85,7 @@ class GoTarget(Target):
     def _init_go_environment(self):
         if GoTarget._go_os is None and GoTarget._go_arch is None:
             go = config.get_item('go_config', 'go')
-            returncode, stdout, stderr = run_command('%s env' % go, shell=True)
+            returncode, stdout, stderr = run_command([go, 'env'])
             if returncode != 0:
                 self.error('Failed to initialize go environment: %s' % stderr)
                 return

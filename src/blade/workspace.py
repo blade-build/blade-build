@@ -22,7 +22,7 @@ from blade import util
 
 def _generate_scm_svn():
     url = revision = 'unknown'
-    returncode, stdout, stderr = util.run_command('svn info', shell=True)
+    returncode, stdout, stderr = util.run_command(['svn', 'info'])
     if returncode != 0:
         console.debug('Failed to generate svn scm: %s' % stderr)
     else:
@@ -40,16 +40,16 @@ def _generate_scm_git():
     url = revision = 'unknown'
 
     def git(cmd):
-        returncode, stdout, stderr = util.run_command(cmd, shell=True)
+        returncode, stdout, stderr = util.run_command(cmd)
         if returncode != 0:
             console.debug('Failed to generate git scm: %s' % stderr)
             return ''
         return stdout
 
-    out = git('git rev-parse HEAD')
+    out = git(['git', 'rev-parse', 'HEAD'])
     if out:
         revision = out.strip()
-    out = git('git remote -v')
+    out = git(['git', 'remote', '-v'])
     # $ git remote -v
     # origin  https://github.com/chen3feng/blade-build.git (fetch)
     # origin  https://github.com/chen3feng/blade-build.git (push)
