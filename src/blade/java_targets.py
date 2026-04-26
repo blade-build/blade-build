@@ -399,7 +399,8 @@ class JavaTargetMixIn(object):
         if not os.path.isfile(file_name):
             return ''
         package_pattern = r'^\s*package\s+([\w.]+)'
-        content = open(file_name).read()
+        with open(file_name) as f:
+            content = f.read()
         m = re.search(package_pattern, content, re.MULTILINE)
         if m:
             return m.group(1)

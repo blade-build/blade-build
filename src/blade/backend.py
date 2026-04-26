@@ -803,6 +803,5 @@ class NinjaFileGenerator(object):
     def generate_build_script(self):
         """Generate build script for underlying build system."""
         code = self.generate_build_code()
-        script = open(self.script_path, 'w')
-        script.writelines(code)
-        script.close()
+        with open(self.script_path, 'w') as script:
+            script.writelines(code)

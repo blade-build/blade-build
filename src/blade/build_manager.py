@@ -168,7 +168,7 @@ class Blade(object):
         with open(inclusion_declaration_file, 'wb') as f:
             pickle.dump(cc_targets.inclusion_declaration(), f)
 
-    def _write_build_stamp_fime(self, start_time, exit_code):
+    def _write_build_stamp_file(self, start_time, exit_code):
         """Record some useful data for other tools."""
         stamp_data = {
             'start_time': start_time,
@@ -205,7 +205,7 @@ class Blade(object):
             self.build_jobs_num(),
             targets='',  # FIXME: because not all targets has a targets
             options=self.__options)
-        self._write_build_stamp_fime(start_time, returncode)
+        self._write_build_stamp_file(start_time, returncode)
         if returncode != 0:
             console.error('Build failure.')
         else:
