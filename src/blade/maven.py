@@ -156,23 +156,27 @@ class MavenCache(object):
         if classifier:
             id = '%s:%s' % (id, classifier)
         target.info('Downloading maven_jar %s' % id)
-        cmd = ' '.join([self.__maven,
-                        'dependency:get',
-                        '-DgroupId=%s' % group,
-                        '-DartifactId=%s' % artifact,
-                        '-Dversion=%s' % version])
+        cmd = [self.__maven,
+               'dependency:get',
+               '-DgroupId=%s' % group,
+               '-DartifactId=%s' % artifact,
+               '-Dversion=%s' % version]
         if classifier:
-            cmd += ' -Dclassifier=%s' % classifier
-        cmd += ' -e -X'  # More detailed debug message
-        target.debug(cmd)
-        if subprocess.call('%s > %s' % (cmd, log_path), shell=True) != 0:
+            cmd.append('-Dclassifier=%s' % classifier)
+        cmd += ['-e', '-X']  # More detailed debug message
+        target.debug(subprocess.list2cmdline(cmd))
+        with open(log_path, 'w') as logf:
+            rc = subprocess.call(cmd, stdout=logf)
+        if rc != 0:
             message = ('Error downloading maven_jar %s, see "%s" for details.' % (id, log_path))
             # Rertry without transitive
-            cmd += ' -Dtransitive=false'
+            cmd.append('-Dtransitive=false')
             with open(log_path, 'a') as f:
                 f.write('\n\nBlade: Retry without transitive dependencies\n\n')
 
-            if subprocess.call('%s >> %s' % (cmd, log_path), shell=True) != 0:
+            with open(log_path, 'a') as logf:
+                rc = subprocess.call(cmd, stdout=logf)
+            if rc != 0:
                 target.error(message)
                 return False
             target.warning('Downloaded maven_jar %s, but without its transitive dependencies.' % id)
@@ -206,14 +210,17 @@ class MavenCache(object):
         target.info('Querying dependencies for maven_jar %s' % id)
         classpath_tmp = classpath + '.tmp'
         pom = os.path.join(artifact_dir, artifact + '-' + version + '.pom')
-        cmd = ' '.join([self.__maven,
-                        'dependency:build-classpath',
-                        '-DincludeScope=runtime',
-                        '-Dmdep.outputFile=%s' % classpath_tmp])
-        cmd += ' -e -X -f %s > %s' % (pom, log)
+        cmd = [self.__maven,
+               'dependency:build-classpath',
+               '-DincludeScope=runtime',
+               '-Dmdep.outputFile=%s' % classpath_tmp,
+               '-e', '-X',
+               '-f', pom]
         classpath = os.path.join(artifact_dir, classpath)
         classpath_tmp = os.path.join(artifact_dir, classpath_tmp)
-        if subprocess.call(cmd, shell=True) != 0:
+        with open(log, 'w') as logf:
+            rc = subprocess.call(cmd, stdout=logf)
+        if rc != 0:
             target.warning('Failed to query dependencies of %s , see "%s" for details.' % (id, log))
             try:
                 os.remove(classpath_tmp)

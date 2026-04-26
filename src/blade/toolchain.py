@@ -14,6 +14,7 @@ from __future__ import print_function
 
 import os
 import re
+import subprocess
 import tempfile
 
 from blade import console
@@ -164,17 +165,28 @@ class ToolChain(object):
         # with status 1 which makes '--coverage' unsupported
         # echo "int main() { return 0; }" | gcc -o /dev/null -c -x c --coverage - > /dev/null 2>&1
         fd, obj = tempfile.mkstemp('.o', 'filter_cc_flags_test')
-        cmd = ('export LC_ALL=C; echo "int main() { return 0; }" | '
-               '%s -o %s -c -x %s -Werror %s -' % (
-                   self.cc, obj, language, ' '.join(flag_list)))
-        returncode, _, stderr = run_command(cmd, shell=True)
-
+        # Force C locale so we can reliably match the error messages below.
+        env = os.environ.copy()
+        env['LC_ALL'] = 'C'
+        argv = [self.cc, '-o', obj, '-c', '-x', language, '-Werror'] + list(flag_list) + ['-']
         try:
-            # In case of error, the `.o` file will be deleted by the compiler
-            os.remove(obj)
-        except OSError:
-            pass
-        os.close(fd)
+            proc = subprocess.Popen(
+                argv,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env)
+            _, stderr = proc.communicate(input=b'int main() { return 0; }\n')
+            returncode = proc.returncode
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode('utf-8', errors='replace')
+        finally:
+            try:
+                # In case of error, the `.o` file will be deleted by the compiler
+                os.remove(obj)
+            except OSError:
+                pass
+            os.close(fd)
 
         if returncode == 0:
             return flag_list
