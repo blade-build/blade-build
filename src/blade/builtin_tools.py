@@ -560,8 +560,16 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
         zip_content = f.read()
     # Insert bootstrap before zip, it is also a valid zip file.
     # unzip will seek actually start until meet the zip magic number.
+    #
+    # The interpreter defaults to python3 because many modern systems
+    # (macOS, recent Debian/Ubuntu) ship only `python3` and not a bare
+    # `python`. BLADE_PYTHON_INTERPRETER, if set, wins — it's the same
+    # escape hatch the top-level blade launcher honours when the host's
+    # default python3 is too old (see blade._check_python).
     bootstrap = ('#!/bin/sh\n\n'
-                 'PYTHONPATH="$0:$PYTHONPATH" exec python -m "%s" "$@"\n') % mainentry
+                 'PYTHONPATH="$0:$PYTHONPATH" '
+                 'exec "${BLADE_PYTHON_INTERPRETER:-python3}" '
+                 '-m "%s" "$@"\n') % mainentry
     with open(pybin, 'wb') as f:
         f.write(bootstrap.encode('utf-8'))
         f.write(zip_content)
