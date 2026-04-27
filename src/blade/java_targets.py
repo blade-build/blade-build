@@ -869,6 +869,35 @@ class JavaTest(JavaBinary):
         self.type = 'java_test'
         self.attr['testdata'] = var_to_list(testdata)
         self._add_tags('type:test')
+        self._apply_junit_libs_from_config()
+
+    def _apply_junit_libs_from_config(self):
+        """Auto-inject the JUnit runtime declared by the workspace's
+        ``java_test_config(junit_libs=[...])``.
+
+        This mirrors what cc_test does with ``cc_test_config.dynamic_link``
+        + gtest, and what scala_test already does with
+        ``scala_test_config.scalatest_libs`` (see scala_targets.py).
+
+        Until this hook was added, ``junit_libs`` was a well-known but
+        inert config key: accepted by the schema in config.py but
+        consumed nowhere, forcing every ``java_test`` BUILD file to
+        repeat the junit dep by hand.
+
+        Kept as its own method, rather than inlined into ``__init__``,
+        so unit tests can exercise the three branches (configured /
+        empty / missing) without having to construct a full
+        ``JavaTest`` instance against the build manager.
+        """
+        junit_libs = config.get_item('java_test_config', 'junit_libs')
+        if junit_libs:
+            self._add_implicit_library(junit_libs)
+        else:
+            self.warning(
+                'Config: "java_test_config.junit_libs" is not configured; '
+                'java_test targets must list their JUnit runtime in `deps` '
+                'explicitly. See `blade dump --config` for the current value.'
+            )
 
     def _java_test_vars(self):
         vars = {
