@@ -13,6 +13,7 @@ of all of the cc targets, like cc_library, cc_binary.
 
 
 import os
+import sys
 from string import Template
 
 from blade import build_manager
@@ -433,10 +434,24 @@ class CcTarget(Target):
         return linkflags
 
     def _generate_link_all_symbols_link_flags(self, libs):
-        """Generate link flags for libraries which should be linked with all symbols."""
-        if libs:
-            return ['-Wl,--whole-archive'] + libs + ['-Wl,--no-whole-archive']
-        return []
+        """Generate link flags for libraries which should be linked with all symbols.
+
+        Platform-aware because the GNU ld spelling
+        ``-Wl,--whole-archive ... --no-whole-archive`` is rejected by Apple's
+        ld64 / ld-prime with ``ld: unknown option: --whole-archive``. macOS
+        uses Mach-O rather than ELF and has no GNU-ld port (Homebrew's
+        binutils formula explicitly doesn't install ``ld`` on Darwin), so
+        every Mac toolchain — Apple Clang, Homebrew GCC, Homebrew LLVM's
+        default driver — eventually hands off to ld64. Emit the Apple
+        equivalent ``-Wl,-force_load,<archive>`` once per archive on Darwin
+        instead; leave all other platforms (Linux with GNU ld / gold / lld /
+        mold, *BSD, etc.) on the original spelling.
+        """
+        if not libs:
+            return []
+        if sys.platform == 'darwin':
+            return ['-Wl,-force_load,' + lib for lib in libs]
+        return ['-Wl,--whole-archive'] + libs + ['-Wl,--no-whole-archive']
 
     def _dynamic_dependencies(self):
         """
