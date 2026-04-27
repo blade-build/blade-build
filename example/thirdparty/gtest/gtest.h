@@ -1,5 +1,0 @@
-#ifndef THIRDPARTY_GTEST_GTEST_H_
-#define THIRDPARTY_GTEST_GTEST_H_
-#pragma once
-
-#endif  // THIRDPARTY_GTEST_GTEST_H_

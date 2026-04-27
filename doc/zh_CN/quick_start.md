@@ -151,16 +151,16 @@ Blade(info): Build success.
 $ blade run :hello-world
 Blade(info): Building...
 Blade(info): Build success.
-Blade(info): Run['/data1/code/blade-build/example/quick-start/build64_release/hello-world']
+Blade(info): Run['~/quick-start/build64_release/hello-world']
 Hello, World!
 ```
 
-## 完整示例参考
+## 更多示例
 
-完整可运行的示例请参考：
-
-- [quick-start](../../example/quick-start) 目录
-- [example](../../example) 目录结构
+想了解覆盖 C/C++、Python、Java、Proto、Thrift 等更多语言特性的完整可运行示例，请参考独立维护的回归测试工作区
+[blade-build/blade-test](https://github.com/blade-build/blade-test)。
+该仓库 `suites/` 目录下每个子目录都是一个可直接 `blade test //...` 的
+示例工程，同时也是 blade 本身的端到端冒烟测试源。
 
 **学习收获：**
 

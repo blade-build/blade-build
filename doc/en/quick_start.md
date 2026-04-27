@@ -148,15 +148,18 @@ Blade(info): Build success.
 $ blade run :hello-world
 Blade(info): Building...
 Blade(info): Build success.
-Blade(info): Run['/data1/code/blade-build/example/quick-start/build64_release/hello-world']
+Blade(info): Run['~/quick-start/build64_release/hello-world']
 Hello, World!
 ```
 
-## Complete Example Reference
+## More Examples
 
-For the complete working example, refer to:
-- [quick-start](../../example/quick-start) directory
-- [example](../../example) directory structure
+For complete, runnable examples covering C/C++, Python, Java, Proto, Thrift
+and other language features, see the dedicated regression workspace
+[blade-build/blade-test](https://github.com/blade-build/blade-test). Each
+subdirectory under `suites/` is a standalone project that you can build and
+test with `blade test //...`, and also serves as the end-to-end smoke test
+source for blade itself.
 
 **Learning Outcomes:**
 - Understanding Blade's declarative build configuration
