@@ -98,6 +98,15 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y ninja-build
+    - name: Install e2e toolchain (flex/bison/protoc)
+      # Pre-install toolchains required by the upcoming blade-test suites
+      # migrated from blade-build/example/: lex_yacc needs flex + bison,
+      # proto_basic needs protoc + libprotobuf-dev, py_proto additionally
+      # needs python3-protobuf at runtime. These packages are idempotent
+      # no-ops for suites that do not consume them, so installing them
+      # ahead of the suite PRs keeps later commits focused.
+      run: |
+        sudo apt-get install -y flex bison protobuf-compiler libprotobuf-dev python3-protobuf
     - name: Install googletest at BLADE_ROOT-expected prefix
       # blade-test/BLADE_ROOT points cc search paths at
       # /usr/local/opt/googletest/{include,lib} on Linux. Ubuntu's
