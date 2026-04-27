@@ -69,3 +69,45 @@ jobs:
     - name: Run pyright
       run: |
         pyright
+
+  e2e-smoke:
+    # Cross-repo smoke: drive the real build/test loop against the
+    # blade-build/blade-test fixtures. Blocking — first run was fully
+    # green in under a minute, so this gate protects the v3 → blade-test
+    # contract. If host-toolchain flakes emerge, reintroduce
+    # `continue-on-error: true` as a temporary circuit breaker rather
+    # than leaving it on by default.
+    name: E2E smoke (blade-test)
+    needs: [integration-tests, unit-tests, pyright]
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout blade-build
+      uses: actions/checkout@v6
+      with:
+        path: blade-build
+    - name: Checkout blade-test (sibling)
+      uses: actions/checkout@v6
+      with:
+        repository: blade-build/blade-test
+        path: blade-test
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+    - name: Install ninja
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build
+    - name: Install googletest at BLADE_ROOT-expected prefix
+      # blade-test/BLADE_ROOT points cc search paths at
+      # /usr/local/opt/googletest/{include,lib} on Linux. Ubuntu's
+      # libgtest-dev ships sources only, so build and stage them there.
+      run: |
+        sudo apt-get install -y libgtest-dev libgmock-dev cmake
+        sudo cmake -S /usr/src/googletest -B /tmp/gtest-build \
+          -DCMAKE_INSTALL_PREFIX=/usr/local/opt/googletest
+        sudo cmake --build /tmp/gtest-build --target install -j
+    - name: Run blade-test suites
+      working-directory: blade-test
+      run: |
+        ./blade.sh test //suites/...
