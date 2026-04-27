@@ -200,6 +200,12 @@ class BladeConfig(object):
             'java_test_config': {
                 '__help__': 'Java Test Configuration',
                 'junit_libs': [],
+                'junit_libs__help__':
+                    'Labels of the JUnit runtime libraries to auto-inject '
+                    'into every java_test target (mirrors cc_test_config '
+                    'gtest_libs / scala_test_config scalatest_libs). Empty '
+                    'list means "no auto-injection"; each java_test must '
+                    'then list its JUnit runtime in `deps` explicitly.',
                 'jacoco_home': '',
             },
 
