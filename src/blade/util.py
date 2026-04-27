@@ -129,7 +129,7 @@ def find_file_bottom_up(name, from_dir=None):
     """
     if from_dir is None:
         from_dir = get_cwd()
-    finding_dir = os.path.abspath(from_dir)
+    finding_dir = os.path.abspath(from_dir)  # pyright: ignore[reportCallIssue, reportArgumentType]
     while True:
         path = os.path.join(finding_dir, name)
         if os.path.exists(path):

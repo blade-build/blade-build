@@ -437,7 +437,7 @@ def _compile_filter(blade):
 
     filter_function, error = target_tags.compile_filter(expr)
     if error:
-        console.error('Invalid "--tags-filter" expression: ' + error)
+        console.error('Invalid "--tags-filter" expression: ' + error)  # pyright: ignore[reportOperatorIssue]
     return filter_function
 
 

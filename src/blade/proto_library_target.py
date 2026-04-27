@@ -322,7 +322,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         if cache_key in self.data:
             return self.data[cache_key][:]
         self_protos = self.attr.get('public_protos')
-        protos = self_protos[:] if len(self_protos) > 1 else []
+        protos = self_protos[:] if len(self_protos) > 1 else []  # pyright: ignore[reportArgumentType, reportOptionalSubscript]
         genrule_outputs = []
         for key in self.deps:
             dep = self.target_database[key]

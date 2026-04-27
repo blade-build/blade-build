@@ -118,7 +118,7 @@ class ToolChain(object):
     def _get_cc_command(env, default):
         """Get a cc command.
         """
-        return os.path.join(os.environ.get('TOOLCHAIN_DIR', ''), os.environ.get(env, default))
+        return os.path.join(os.environ.get('TOOLCHAIN_DIR', ''), os.environ.get(env, default))  # pyright: ignore[reportCallIssue, reportArgumentType]
 
     def _get_cc_version(self):
         version = ''

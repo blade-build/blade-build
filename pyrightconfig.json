@@ -1,0 +1,16 @@
+{
+  "include": [
+    "src/blade",
+    "src/tests/unit"
+  ],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.10",
+  "pythonPlatform": "All",
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "none",
+  "reportAttributeAccessIssue": "warning",
+  "reportOptionalIterable": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportOptionalSubscript": "warning",
+  "reportFunctionMemberAccess": "warning"
+}

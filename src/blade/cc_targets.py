@@ -643,7 +643,7 @@ class CcTarget(Target):
         if cmd:
             vars['cmd'] = cmd
         extra_linkflags = ['-l%s' % lib for lib in sys_libs]
-        extra_linkflags += self.attr.get('extra_linkflags')
+        extra_linkflags += self.attr.get('extra_linkflags')  # pyright: ignore[reportOperatorIssue]
         if implicit_deps is None:
             implicit_deps = []
         if linker_scripts:
