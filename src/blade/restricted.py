@@ -122,11 +122,12 @@ def _make_forbidden_wrapper(name):
 
 def _open(name, mode=None, buffering=None):
     """A Readonly open function"""
-    if mode is None and buffering is None:
-        return open(name)
-    if mode:
-        if 'w' in mode or 'a' in mode:
-            raise ValueError('"open" only allow readonly mode')
+    if mode is None:
+        if buffering is None:
+            return open(name)
+        return open(name, buffering=buffering)
+    if 'w' in mode or 'a' in mode:
+        raise ValueError('"open" only allow readonly mode')
     if buffering is None:
         return open(name, mode)
     return open(name, mode, buffering)
