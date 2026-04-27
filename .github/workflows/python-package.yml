@@ -1,17 +1,17 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# This workflow will install Python dependencies, run tests and type-check with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
 name: Python package
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, v3 ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, v3 ]
 
 jobs:
-  build:
-
+  integration-tests:
+    name: Integration tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -28,6 +28,44 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install coverage coveralls ninja
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Run tests
+    - name: Run integration tests
       run: |
         src/test/runall.sh
+
+  unit-tests:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements-dev.txt
+    - name: Run unit tests
+      run: |
+        PYTHONPATH=src python -m pytest src/tests/unit -v
+
+  pyright:
+    name: Type check (pyright)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+    - name: Install pyright
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements-dev.txt
+    - name: Run pyright
+      run: |
+        pyright
