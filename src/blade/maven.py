@@ -9,8 +9,6 @@ This is the maven module which manages jar files downloaded
 from maven repository.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 import shutil
@@ -18,10 +16,7 @@ import subprocess
 import threading
 import time
 
-try:
-    import queue
-except ImportError:
-    import Queue as queue  # pyright: reportMissingImports=false, for python2
+import queue
 
 from blade import config
 from blade import console

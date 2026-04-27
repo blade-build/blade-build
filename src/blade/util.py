@@ -12,9 +12,6 @@
 This is the util module which provides some helper functions.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
-
 import ast
 import errno
 import fcntl
@@ -22,23 +19,11 @@ import hashlib
 import inspect
 import json
 import os
+import pickle  # pylint: disable=unused-import
 import signal
-import string
 import subprocess
 import sys
 import zipfile
-
-
-_IN_PY3 = sys.version_info[0] == 3
-
-
-# In python 2, cPickle is much faster than pickle, but in python 3, pickle is
-# reimplemented in C extension and then the standalone cPickle is removed.
-if _IN_PY3:
-    import pickle  # pylint: disable=unused-import
-else:
-    # pyright: reportMissingImports=false
-    import cPickle as pickle  # pylint: disable=import-error, unused-import
 
 
 def md5sum_bytes(content):
@@ -211,13 +196,8 @@ def run_command(args, **kwargs):
     kwargs.setdefault('stdout', subprocess.PIPE)
     kwargs.setdefault('stderr', subprocess.PIPE)
 
-    if _IN_PY3:
-        r = subprocess.run(args, universal_newlines=True, **kwargs)
-        return r.returncode, r.stdout, r.stderr
-    else:
-        p = subprocess.Popen(args, universal_newlines=True, **kwargs)
-        stdout, stderr = p.communicate()
-        return p.returncode, stdout, stderr
+    r = subprocess.run(args, universal_newlines=True, **kwargs)
+    return r.returncode, r.stdout, r.stderr
 
 
 def load_scm(build_dir):
@@ -247,25 +227,11 @@ def cpu_count():
         return int(os.sysconf('SC_NPROCESSORS_ONLN'))
 
 
-_TRANS_TABLE = (str if _IN_PY3 else string).maketrans(',-/:.+*', '_______')
-
+_TRANS_TABLE = str.maketrans(',-/:.+*', '_______')
 
 def regular_variable_name(name):
     """convert some name to a valid identifier name"""
     return name.translate(_TRANS_TABLE)
-
-# Some python 2/3 compatibility helpers.
-if _IN_PY3:
-    def iteritems(d):
-        return d.items()
-    def itervalues(d):
-        return d.values()
-else:
-    def iteritems(d):
-        return d.iteritems()
-    def itervalues(d):
-        return d.itervalues()
-
 
 def exec_file_content(filename, content, globals, locals):
     """Execute code content as filename"""
@@ -348,11 +314,6 @@ def parse_command_line(argv):
 def open_zip_file_for_write(filename, compression_level):
     """Open a zip file for writing with specified compression level."""
     compression = zipfile.ZIP_DEFLATED
-    if sys.version_info.major < 3 or sys.version_info.major == 3 and sys.version_info.minor < 7:
-        if compression_level == "0":
-            compression = zipfile.ZIP_STORED
-        return zipfile.ZipFile(filename, 'w', compression, allowZip64=True)
-    # pylint: disable=unexpected-keyword-arg
     return zipfile.ZipFile(filename, 'w', compression, compresslevel=int(compression_level), allowZip64=True)
 
 

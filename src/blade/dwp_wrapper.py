@@ -24,15 +24,12 @@ The script will:
 5. Call dwp tool to generate the final .dwp file
 """
 
-from __future__ import print_function
 import os
 import sys
 import tempfile
 
 from blade import console
 from blade import util
-
-_IN_PY3 = sys.version_info[0] == 3
 
 
 def expand_response_files(args):
@@ -80,8 +77,6 @@ def extract_objects_from_archive(archive_path):
     returncode, stdout, stderr = util.run_command(['ar', 't', archive_path])
     if returncode != 0:
         console.fatal("Error: Failed to extract objects from %s with '%s'" % (archive_path, stderr))
-    if _IN_PY3:
-        stdout = stdout.decode('utf-8')
 
     object_files = []
     for line in stdout.strip().splitlines():

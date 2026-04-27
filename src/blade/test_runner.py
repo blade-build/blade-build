@@ -12,8 +12,6 @@
 This module executes the test programs.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import datetime
 import json
@@ -30,7 +28,7 @@ from blade import target_pattern
 from blade.test_scheduler import TestScheduler
 # pylint: disable=unused-import
 from blade.test_scheduler import TestRunResult  # Used by eval
-from blade.util import md5sum, iteritems
+from blade.util import md5sum
 
 
 # Used by eval when loading test history
@@ -131,7 +129,7 @@ class TestRunner(binary_runner.BinaryRunner):
                 console.notice('Old environments: %s' % old)
 
         self.test_history['env'] = new_env
-        self.env_md5 = md5sum(str(sorted(iteritems(new_env))))
+        self.env_md5 = md5sum(str(sorted(new_env.items())))
 
     def _save_test_history(self, passed_run_results, failed_run_results):
         """update test history and save it to file."""
@@ -170,7 +168,7 @@ class TestRunner(binary_runner.BinaryRunner):
 
     def _merge_passed_run_results_to_history(self, run_results):
         history_items = self.test_history['items']
-        for key, run_result in iteritems(run_results):
+        for key, run_result in run_results.items():
             old = history_items.get(key)
             if old and old.result.exit_code != 0:
                 self.repaired_tests.append(key)
@@ -182,7 +180,7 @@ class TestRunner(binary_runner.BinaryRunner):
 
     def _merge_failed_run_results_to_history(self, run_results):
         history_items = self.test_history['items']
-        for key, run_result in iteritems(run_results):
+        for key, run_result in run_results.items():
             old = history_items.get(key)
             if old:
                 first_fail_time = old.first_fail_time or run_result.start_time
@@ -348,7 +346,7 @@ class TestRunner(binary_runner.BinaryRunner):
     def _show_run_results(self, run_results, is_error=False):
         """Show the tests detail after scheduling them."""
         tests = []
-        for key, result in iteritems(run_results):
+        for key, result in run_results.items():
             reason = self.test_jobs[key].reason
             tests.append((key, result.cost_time, reason, result.exit_code))
         tests.sort(key=lambda x: x[1])
@@ -373,7 +371,7 @@ class TestRunner(binary_runner.BinaryRunner):
         console.error('You can specify --run-unrepaired-tests to run them', prefix=False)
 
     def _collect_slow_tests(self, run_results):
-        return [(result.cost_time, key) for key, result in iteritems(run_results)
+        return [(result.cost_time, key) for key, result in run_results.items()
                 if result.cost_time > self.options.show_tests_slower_than]
 
     def _show_slow_tests(self, passed_run_results, failed_run_results):

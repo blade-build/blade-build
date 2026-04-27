@@ -10,8 +10,6 @@
 Implement java_library, java_binary, java_test and java_fat_library.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import collections
 import os
@@ -23,7 +21,6 @@ from blade import config
 from blade import maven
 from blade.target import Target, LOCATION_RE
 from blade.util import var_to_list
-from blade.util import iteritems
 from blade.version import LooseVersion
 
 
@@ -312,7 +309,7 @@ class JavaTargetMixIn(object):
 
         maven_dep_ids = self._get_maven_dep_ids()
         jars = []
-        for (group, artifact), versions in iteritems(maven_jar_versions):
+        for (group, artifact), versions in maven_jar_versions.items():
             if len(versions) == 1:
                 picked_version = versions[0]
             else:
