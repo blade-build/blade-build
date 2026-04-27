@@ -9,8 +9,6 @@
 This module deals with the build toolchains.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 import re
@@ -18,7 +16,7 @@ import subprocess
 import tempfile
 
 from blade import console
-from blade.util import var_to_list, iteritems, run_command
+from blade.util import var_to_list, run_command
 
 # example: Cuda compilation tools, release 11.0, V11.0.194
 _nvcc_version_re = re.compile(r'V(\d+\.\d+\.\d+)')
@@ -73,7 +71,7 @@ class BuildArchitecture(object):
     def get_canonical_architecture(arch):
         """Get the canonical architecture from the specified arch."""
         canonical_arch = None
-        for k, v in iteritems(BuildArchitecture._build_architecture):
+        for k, v in BuildArchitecture._build_architecture.items():
             if arch == k or arch in v['alias']:
                 canonical_arch = k
                 break

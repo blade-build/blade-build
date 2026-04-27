@@ -14,11 +14,9 @@ from BUILD files and will find all of the targets needed by the target and
 add extra options according to different target types.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 from blade import console
-from blade.util import iteritems, itervalues
+
 
 
 def analyze_deps(related_targets):
@@ -44,7 +42,7 @@ def analyze_deps(related_targets):
     """
     _expand_deps(related_targets)
     _expand_dependents(related_targets)
-    for target in itervalues(related_targets):
+    for target in related_targets.values():
         target.check_visibility()
     # The topological sort is very important because even if ninja doesn't require the order of build statements,
     # but when generating code, dependents may access dependency's generated file information, which requires generation
@@ -115,7 +113,7 @@ def _expand_dependents(related_targets):
     Args:
         related_targets: dict{target_key, target} to be built
     """
-    for target_key, target in iteritems(related_targets):
+    for target_key, target in related_targets.items():
         for depkey in target.deps:
             related_targets[depkey].dependents.add(target_key)
         for depkey in target.expanded_deps:
@@ -132,7 +130,7 @@ def _topological_sort(related_targets):
     """
     numpreds = {}  # elt -> # of predecessors
     q = []
-    for target_key, target in iteritems(related_targets):
+    for target_key, target in related_targets.items():
         dep_len = len(target.deps)
         numpreds[target_key] = dep_len
         if dep_len == 0:

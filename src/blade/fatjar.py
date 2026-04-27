@@ -9,8 +9,6 @@ This is the fatjar module which packages multiple jar files
 into a single fatjar file.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 import sys

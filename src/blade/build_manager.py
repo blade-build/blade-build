@@ -10,8 +10,6 @@ This is the blade module which mainly holds the global database and
 do the coordination work between classes.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import json
 import os

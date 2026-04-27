@@ -8,8 +8,6 @@
 Define proto_library target.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 import re
@@ -20,7 +18,7 @@ from blade import config
 from blade import console
 from blade import java_targets
 from blade.cc_targets import CcTarget
-from blade.util import var_to_list, iteritems
+from blade.util import var_to_list
 
 
 class ProtocPlugin(object):
@@ -43,7 +41,7 @@ class ProtocPlugin(object):
         self.path = path
         assert isinstance(code_generation, dict)
         self.code_generation = {}
-        for language, v in iteritems(code_generation):
+        for language, v in code_generation.items():
             if language not in self.__languages:
                 console.error('%s: Language %s is invalid. '
                               'Protoc plugins in %s are supported by blade currently.' % (
@@ -208,7 +206,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
                 continue
             p = protoc_plugin_config[plugin]
             protoc_plugins.append(p)
-            for language, v in iteritems(p.code_generation):
+            for language, v in p.code_generation.items():
                 for key in v['deps']:
                     if key not in self.deps:
                         self.deps.append(key)

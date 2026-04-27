@@ -10,8 +10,6 @@ a simple wrapper function go_package wrapping all sorts of go tar-
 gets totally.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 import re

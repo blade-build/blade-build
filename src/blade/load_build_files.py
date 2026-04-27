@@ -14,8 +14,6 @@ This is the CmdOptions module which parses the users'
 input and provides hint for users.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 import traceback
@@ -29,7 +27,7 @@ from blade import dsl_api
 from blade import restricted
 from blade import target_tags
 
-from blade.pathlib import Path
+from pathlib import Path
 from blade.util import path_under_dir, var_to_list, exec_file, source_location
 
 

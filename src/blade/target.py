@@ -9,8 +9,6 @@
 This is the target module which is the super class of all of the targets.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 import re
@@ -19,7 +17,7 @@ from blade import config
 from blade import console
 from blade import target_pattern
 from blade import target_tags
-from blade.util import var_to_list, iteritems, source_location, md5sum
+from blade.util import var_to_list, source_location, md5sum
 
 
 def _is_likely_concatenated_filenames(string, exts):
@@ -668,7 +666,7 @@ class Target(object):
         """
         self.get_build_code()  # Ensure rules were generated
         results = set()
-        for k, v in iteritems(self.__targets):
+        for k, v in self.__targets.items():
             if k in exclude_labels:
                 continue
             results.add(v)
@@ -732,7 +730,7 @@ class Target(object):
 
         if variables:
             assert isinstance(variables, dict)
-            for name, v in iteritems(variables):
+            for name, v in variables.items():
                 assert v is not None
                 if v:
                     self._write_rule('  %s = %s' % (name, v))
