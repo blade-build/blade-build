@@ -112,6 +112,7 @@ class ToolChain(object):
         self.ld = self._get_cc_command('LD', 'g++')
         self.cc_version = self._get_cc_version()
         self.ar = self._get_cc_command('AR', 'ar')
+        self._cc_vendor = self._detect_cc_vendor()
 
     @staticmethod
     def _get_cc_command(env, default):
@@ -127,6 +128,36 @@ class ToolChain(object):
         if not version:
             console.fatal('Failed to obtain cc toolchain.')
         return version
+
+    def _detect_cc_vendor(self):
+        """Identify the cc vendor by querying the compiler itself.
+
+        Returns one of:
+          - 'clang'        : LLVM/Clang (including Apple Clang that masquerades as
+                             /usr/bin/gcc on macOS).
+          - 'gcc'          : Real GNU GCC.
+          - 'unknown'      : Detection failed. Callers treating a specific vendor
+                             as a precondition should take the conservative path.
+
+        Rationale: Relying on substring matching against the `cc` command name is
+        unreliable. On macOS `gcc` is typically an alias for Apple Clang, and
+        user-set CC/CXX may be an absolute path or a wrapper whose name reveals
+        nothing about the underlying vendor.
+        """
+        returncode, stdout, stderr = run_command([self.cc, '--version'])
+        if returncode != 0:
+            return 'unknown'
+        # `--version` output typically goes to stdout, but some wrappers emit on
+        # stderr. Concatenate both and lower-case for robust matching.
+        text = ((stdout or '') + '\n' + (stderr or '')).lower()
+        if 'clang' in text:
+            return 'clang'
+        # Match 'gcc ', '(gcc)', 'gnu c' etc., but only after we've ruled out
+        # clang (Apple Clang banner contains neither, upstream Clang shows
+        # 'clang version ...').
+        if 'gcc' in text or 'free software foundation' in text:
+            return 'gcc'
+        return 'unknown'
 
     @staticmethod
     def get_cc_target_arch():
@@ -150,8 +181,12 @@ class ToolChain(object):
         return self.ar
 
     def cc_is(self, vendor):
-        """Is cc is used for C/C++ compilation match vendor."""
-        return vendor in self.cc
+        """Return whether the detected cc vendor equals the given vendor.
+
+        The comparison is an exact match against the result of
+        `_detect_cc_vendor()` (one of 'clang', 'gcc', 'unknown').
+        """
+        return vendor == self._cc_vendor
 
     def filter_cc_flags(self, flag_list, language='c'):
         """Filter out the unrecognized compilation flags."""

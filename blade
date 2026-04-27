@@ -65,9 +65,49 @@ function _full_real_path() {
     return 0
 }
 
+# Return 0 and echo the interpreter if "$1" is a single executable on PATH
+# whose `-V` reports Python >= 3.10. Return 1 otherwise (silently).
+# Multi-word values (e.g. "python -m coverage run ...") are intentionally
+# rejected so that the full-command form stays routed through the final
+# ${BLADE_PYTHON_INTERPRETER:-$python} fallback at the bottom of this
+# script rather than being executed with a bare `-V`.
+function _probe_python() {
+    local candidate="$1"
+    [ -n "$candidate" ] || return 1
+    # Single-word check: reject if the value contains whitespace.
+    case "$candidate" in
+        *[[:space:]]*) return 1 ;;
+    esac
+    command -v "$candidate" &> /dev/null || return 1
+
+    local ver major rest minor
+    ver=$("$candidate" -V 2>&1 | sed 's/Python //g')
+    major=${ver%%.*}
+    rest=${ver#*.}
+    minor=${rest%%.*}
+    [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+    if (( major > 3 )) || (( major == 3 && minor >= 10 )); then
+        echo "$candidate"
+        return 0
+    fi
+    return 1
+}
+
 # Check the python version at first, exit blade when python
 # version is under 3.10.
 function _check_python() {
+    # Honor BLADE_PYTHON_INTERPRETER when it names a single executable that
+    # already satisfies the version requirement. This lets users point blade
+    # at e.g. /opt/homebrew/bin/python3.12 without having to shadow the
+    # system python3 on PATH. Multi-word values (coverage wrappers etc.)
+    # silently fall through to auto-detection and are re-applied at the
+    # final `${BLADE_PYTHON_INTERPRETER:-$python}` invocation below.
+    local override
+    if override=$(_probe_python "${BLADE_PYTHON_INTERPRETER:-}"); then
+        echo "$override"
+        return 0
+    fi
+
     local python=""
     if command -v python3 &> /dev/null; then
         python="python3"
