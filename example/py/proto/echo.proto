@@ -1,5 +1,0 @@
-import "py/proto/address_book.proto";
-
-service EchoService {
-    rpc Echo(tutorial.AddressBook) returns (tutorial.AddressBook);
-}
