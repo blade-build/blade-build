@@ -84,11 +84,17 @@ class WorkerThread(threading.Thread):
         This method simply checks job timeout and returns immediately.
         The caller should invoke this method repeatedly so that a job
         which takes a very long time would be timeout sooner or later.
+
+        A `job_timeout` of 0 (or any non-positive value) means *unlimited*,
+        matching the documented semantics of `global_config.test_timeout`.
+        Without this guard the expression `start_time + 0 < now` is true on
+        every tick after the first second, which would SIGTERM every running
+        test as soon as the scheduler's 1s polling loop wakes up.
         """
         try:
             self.job_lock.acquire()
             if (not self.job_is_timeout and self.job_start_time and
-                    self.job_timeout is not None and
+                    self.job_timeout is not None and self.job_timeout > 0 and
                     self.job_name and self.job_process is not None):
                 if self.job_start_time + self.job_timeout < now:
                     self.job_is_timeout = True
@@ -255,7 +261,13 @@ class TestScheduler(object):
                 dead_threads = []
                 for t in threads:
                     if t.is_alive():
-                        if test_timeout is not None:
+                        # 0 (or any non-positive value) means "unlimited",
+                        # matching the documented semantics of
+                        # global_config.test_timeout. The inner check in
+                        # check_job_timeout is also guarded, but skipping the
+                        # call here avoids touching the per-thread lock on
+                        # every tick when no timeout is configured.
+                        if test_timeout is not None and test_timeout > 0:
                             t.check_job_timeout(now)
                     else:
                         dead_threads.append(t)

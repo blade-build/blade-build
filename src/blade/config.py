@@ -51,7 +51,9 @@ class BladeConfig(object):
                 'duplicated_source_action': 'warning',
                 'duplicated_source_action__help__': "Can be 'warning', 'error', 'none'",
                 'test_timeout': 0,
-                'test_timeout__help__': 'In seconds',
+                'test_timeout__help__':
+                    'Per-test timeout in seconds. 0 (default) or any '
+                    'non-positive value means unlimited.',
                 'test_related_envs__help__':
                     'Environment variables which need to see whether changed before incremental '
                     'testing. regex is allowed',
