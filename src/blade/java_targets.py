@@ -876,8 +876,10 @@ class JavaTest(JavaBinary):
         ``java_test_config(junit_libs=[...])``.
 
         This mirrors what cc_test does with ``cc_test_config.dynamic_link``
-        + gtest, and what scala_test already does with
-        ``scala_test_config.scalatest_libs`` (see scala_targets.py).
+        + gtest, and what scala_test does with
+        ``scala_test_config.scalatest_libs`` (see
+        ``ScalaTest._apply_scalatest_libs_from_config`` in
+        ``scala_targets.py``).
 
         Until this hook was added, ``junit_libs`` was a well-known but
         inert config key: accepted by the schema in config.py but

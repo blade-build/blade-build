@@ -14,7 +14,6 @@ import os
 from blade import build_manager
 from blade import build_rules
 from blade import config
-from blade import console
 from blade.java_targets import JavaTargetMixIn
 from blade.target import Target
 from blade.util import var_to_list
@@ -225,11 +224,43 @@ class ScalaTest(ScalaFatLibrary):
         if not self.srcs:
             self.warning('Empty scala test sources.')
 
+        self._apply_scalatest_libs_from_config()
+
+    def _apply_scalatest_libs_from_config(self):
+        """Auto-inject the ScalaTest runtime declared by the workspace's
+        ``scala_test_config(scalatest_libs=[...])``.
+
+        Symmetric to ``JavaTest._apply_junit_libs_from_config`` in
+        ``java_targets.py``; the two hooks exist for the same reason
+        (turn a well-known config key into real implicit-deps
+        injection so BUILD files don't have to repeat the runtime
+        dep on every test target) and share the same three-branch
+        contract:
+
+        * ``scalatest_libs`` non-empty → forward the list as a whole
+          to ``Target._add_implicit_library``, which handles label
+          unification and dedup against the target's own ``deps``.
+        * ``scalatest_libs`` is ``[]`` or missing (``None``) → emit
+          one target-attributed warning pointing at the config key,
+          and make no implicit-library call. Workspaces that prefer
+          per-target explicit ``deps`` keep working, and users see
+          an actionable message for the misconfiguration case.
+
+        Kept as its own method, rather than inlined into ``__init__``,
+        so unit tests can cover all three branches without having to
+        construct a full ``ScalaTest`` instance against the build
+        manager, and so a future ``gtest_libs`` / similar helper has
+        an obvious template to copy.
+        """
         scalatest_libs = config.get_item('scala_test_config', 'scalatest_libs')
         if scalatest_libs:
             self._add_implicit_library(scalatest_libs)
         else:
-            console.warning('Config: "scala_test_config.scalatest_libs" is not configured')
+            self.warning(
+                'Config: "scala_test_config.scalatest_libs" is not configured; '
+                'scala_test targets must list their ScalaTest runtime in `deps` '
+                'explicitly. See `blade dump --config` for the current value.'
+            )
 
     def generate(self):
         if not self.srcs:
