@@ -72,7 +72,7 @@ class GenRuleTarget(Target):
         # self._check_path_list(outs, "outs", must_exist=False)
         outs = [os.path.normpath(o) for o in outs]
 
-        self.attr['outs'] = outs
+        self.attr['outs'] = var_to_list(outs)
         self.attr['outputs'] = [self._target_file_path(o) for o in self.attr['outs']]
         self.attr['locations'] = []
         self.attr['cmd'] = LOCATION_RE.sub(self._process_location_reference, cmd)
@@ -186,20 +186,20 @@ class GenRuleTarget(Target):
 
 def gen_rule(
         name,
-        srcs=[],
-        src_exts=[],
-        deps=[],
+        srcs=None,
+        src_exts=None,
+        deps=None,
         visibility=None,
-        tags=[],
-        outs=[],
+        tags=None,
+        outs=None,
         cmd='',
         cmd_name='COMMAND',
         generated_hdrs=None,
         generated_incs=None,
-        export_incs=[],
-        cleans=[],
+        export_incs=None,
+        cleans=None,
         heavy=False,
-        exclude_dep_labels=["dwp"],
+        exclude_dep_labels=None,
         **kwargs):
     """General Build Rule
     Args:
@@ -223,6 +223,8 @@ def gen_rule(
         heavy: bool, Whether this target is a heavy target, which means to build it will cost many
             cpu/memory.
     """
+    if exclude_dep_labels is None:
+        exclude_dep_labels = ["dwp"]
     gen_rule_target = GenRuleTarget(
             name=name,
             srcs=srcs,

@@ -71,7 +71,7 @@ class CuTarget(CcTarget):
                 src_exts=_SOURCE_FILE_EXTS,
                 cmd='')
         self.cuda_path = self._get_cuda_path(cuda_path)
-        self.attr['extra_cuflags'] = extra_cuflags
+        self.attr['extra_cuflags'] = var_to_list(extra_cuflags)
         cmd = os.environ.get('NVCC')
         if self.cuda_path:
             cmd = os.path.join(self.cuda_path, 'bin/nvcc')
@@ -231,19 +231,19 @@ class CuLibrary(CuTarget):
 
 
 def cu_library(name=None,
-               srcs=[],
+               srcs=None,
                hdrs=None,
                cuda_path=None,
-               deps=[],
+               deps=None,
                visibility=None,
-               tags=[],
+               tags=None,
                warning='yes',
-               defs=[],
-               incs=[],
+               defs=None,
+               incs=None,
                link_all_symbols=False,
-               extra_cppflags=[],
-               extra_cuflags=[],
-               extra_linkflags=[],
+               extra_cppflags=None,
+               extra_cuflags=None,
+               extra_linkflags=None,
                **kwargs):
     target = CuLibrary(
             name,
@@ -348,17 +348,17 @@ class CuBinary(CuTarget):
 
 
 def cu_binary(name=None,
-              srcs=[],
+              srcs=None,
               cuda_path=None,
-              deps=[],
+              deps=None,
               visibility=None,
-              tags=[],
+              tags=None,
               warning='yes',
-              defs=[],
-              incs=[],
-              extra_cppflags=[],
-              extra_cuflags=[],
-              extra_linkflags=[],
+              defs=None,
+              incs=None,
+              extra_cppflags=None,
+              extra_cuflags=None,
+              extra_linkflags=None,
               **kwargs):
     target = CuBinary(
             name=name,
@@ -435,18 +435,18 @@ class CuTest(CuBinary):
 
 def cu_test(
         name,
-        srcs=[],
+        srcs=None,
         cuda_path=None,
-        deps=[],
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         warning='yes',
-        defs=[],
-        incs=[],
-        extra_cppflags=[],
-        extra_cuflags=[],
-        extra_linkflags=[],
-        testdata=[],
+        defs=None,
+        incs=None,
+        extra_cppflags=None,
+        extra_cuflags=None,
+        extra_linkflags=None,
+        testdata=None,
         always_run=False,
         exclusive=False,
         **kwargs):

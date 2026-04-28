@@ -83,6 +83,8 @@ def var_to_list(var):
         return var[:]
     if var is None:
         return []
+    if isinstance(var, (tuple, set, frozenset)):
+        return list(var)
     return [var]
 
 

@@ -89,11 +89,11 @@ class FBThriftLibrary(CcTarget):
 
 
 def fbthrift_library(name=None,
-                     srcs=[],
-                     deps=[],
+                     srcs=None,
+                     deps=None,
                      optimize=None,
                      visibility=None,
-                     tags=[],
+                     tags=None,
                      deprecated=False,
                      **kwargs):
     """fbthrift_library target."""

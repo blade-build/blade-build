@@ -192,10 +192,10 @@ class PackageTarget(Target):
 
 
 def package(name=None,
-            srcs=[],
-            deps=[],
+            srcs=None,
+            deps=None,
             visibility=None,
-            tags=[],
+            tags=None,
             type='tar',
             out=None,
             shell=False,

@@ -275,15 +275,15 @@ class ScalaTest(ScalaFatLibrary):
 
 
 def scala_library(name=None,
-                  srcs=[],
-                  deps=[],
-                  resources=[],
+                  srcs=None,
+                  deps=None,
+                  resources=None,
                   visibility=None,
-                  tags=[],
+                  tags=None,
                   source_encoding=None,
                   warnings=None,
-                  exported_deps=[],
-                  provided_deps=[],
+                  exported_deps=None,
+                  provided_deps=None,
                   coverage=True,
                   **kwargs):
     """Define scala_library target."""
@@ -304,14 +304,14 @@ def scala_library(name=None,
 
 
 def scala_fat_library(name=None,
-                      srcs=[],
-                      deps=[],
-                      resources=[],
+                      srcs=None,
+                      deps=None,
+                      resources=None,
                       visibility=None,
-                      tags=[],
+                      tags=None,
                       source_encoding=None,
                       warnings=None,
-                      exclusions=[],
+                      exclusions=None,
                       **kwargs):
     """Define scala_fat_library target."""
     target = ScalaFatLibrary(
@@ -330,14 +330,14 @@ def scala_fat_library(name=None,
 
 def scala_test(name=None,
                srcs=None,
-               deps=[],
-               resources=[],
+               deps=None,
+               resources=None,
                visibility=None,
-               tags=[],
+               tags=None,
                source_encoding=None,
                warnings=None,
-               exclusions=[],
-               testdata=[],
+               exclusions=None,
+               testdata=None,
                **kwargs):
     """Build a scala test target
     Args:

@@ -141,10 +141,10 @@ class PrebuiltPythonLibrary(PythonTarget):
 
 
 def py_library(name=None,
-               srcs=[],
-               deps=[],
+               srcs=None,
+               deps=None,
                visibility=None,
-               tags=[],
+               tags=None,
                base=None,
                prebuilt=None,
                **kwargs):
@@ -212,7 +212,7 @@ class PythonBinary(PythonLibrary):
             self.error(
                 'The entry file must be specified by the "main" '
                 'argument if there are more than one srcs')
-        self.attr['exclusions'] = exclusions
+        self.attr['exclusions'] = var_to_list(exclusions)
         self._add_tags('type:binary')
 
     def _get_entry(self):
@@ -241,13 +241,13 @@ class PythonBinary(PythonLibrary):
 
 
 def py_binary(name=None,
-              srcs=[],
-              deps=[],
+              srcs=None,
+              deps=None,
               visibility=None,
-              tags=[],
+              tags=None,
               main=None,
               base=None,
-              exclusions=[],
+              exclusions=None,
               **kwargs):
     """python binary."""
     target = PythonBinary(
@@ -293,18 +293,18 @@ class PythonTest(PythonBinary):
                 exclusions=[],
                 kwargs=kwargs)
         self.type = 'py_test'
-        self.attr['testdata'] = testdata
+        self.attr['testdata'] = var_to_list(testdata)
         self._add_tags('type:test')
 
 
 def py_test(name=None,
-            srcs=[],
-            deps=[],
+            srcs=None,
+            deps=None,
             visibility=None,
-            tags=[],
+            tags=None,
             main=None,
             base=None,
-            testdata=[],
+            testdata=None,
             **kwargs):
     """python test."""
     target = PythonTest(
