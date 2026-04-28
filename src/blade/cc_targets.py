@@ -1536,30 +1536,47 @@ class CcPlugin(CcTarget):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 warning,
-                 defs,
-                 incs,
-                 optimize,
-                 prefix,
-                 suffix,
-                 linkflags,
-                 extra_cppflags,
-                 extra_linkflags,
-                 linker_scripts,
-                 version_scripts,
-                 allow_undefined,
-                 strip,
-                 kwargs):
+                 name: 'str | None',
+                 srcs: 'StrOrListOpt',
+                 deps: 'StrOrListOpt',
+                 visibility: 'StrOrListOpt',
+                 tags: 'StrOrListOpt',
+                 warning: str,
+                 defs: 'StrOrListOpt',
+                 incs: 'StrOrListOpt',
+                 optimize: 'StrOrListOpt',
+                 prefix: 'str | None',
+                 suffix: 'str | None',
+                 linkflags: 'StrOrListOpt',
+                 extra_cppflags: 'StrOrListOpt',
+                 extra_linkflags: 'StrOrListOpt',
+                 linker_scripts: 'StrOrListOpt',
+                 version_scripts: 'StrOrListOpt',
+                 allow_undefined: bool,
+                 strip: bool,
+                 kwargs: 'dict[str, object]'):
         """Init method.
 
         Init the cc plugin target.
 
         """
+        # Normalize the BUILD-file-friendly StrOrList unions once, right at
+        # the rule boundary, so everything downstream sees list[str].
+        # `visibility`, `optimize` and `linkflags` keep None-sentinel
+        # semantics and are handled via var_to_list_or_none to match
+        # CcTarget.__init__.
+        srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        defs = var_to_list(defs)
+        incs = var_to_list(incs)
+        extra_cppflags = var_to_list(extra_cppflags)
+        extra_linkflags = var_to_list(extra_linkflags)
+        linker_scripts = var_to_list(linker_scripts)
+        version_scripts = var_to_list(version_scripts)
+        visibility = var_to_list_or_none(visibility)
+        optimize = var_to_list_or_none(optimize)
+        linkflags = var_to_list_or_none(linkflags)
         super().__init__(
                   name=name,
                   type='cc_plugin',
@@ -1580,8 +1597,8 @@ class CcPlugin(CcTarget):
         self.suffix = suffix
         self.attr['allow_undefined'] = allow_undefined
         self.attr['strip'] = strip
-        self.attr['lds_fullpath'] = self._fullpath_sources(var_to_list(linker_scripts))
-        self.attr['vers_fullpath'] = self._fullpath_sources(var_to_list(version_scripts))
+        self.attr['lds_fullpath'] = self._fullpath_sources(linker_scripts)
+        self.attr['vers_fullpath'] = self._fullpath_sources(version_scripts)
         self._add_tags('lang:cc', 'type:plugin')
 
     def _before_generate(self):  # override
@@ -1619,25 +1636,25 @@ class CcPlugin(CcTarget):
 
 
 def cc_plugin(
-        name,
-        srcs=None,
-        deps=None,
-        visibility=None,
-        tags=None,
-        warning='yes',
-        defs=None,
-        incs=None,
-        optimize=None,
-        prefix=None,
-        suffix=None,
-        linkflags=None,
-        extra_cppflags=None,
-        extra_linkflags=None,
-        linker_scripts=None,
-        version_scripts=None,
-        allow_undefined=True,
-        strip=False,
-        **kwargs):
+        name: 'str | None' = None,
+        srcs: 'StrOrListOpt' = None,
+        deps: 'StrOrListOpt' = None,
+        visibility: 'StrOrListOpt' = None,
+        tags: 'StrOrListOpt' = None,
+        warning: str = 'yes',
+        defs: 'StrOrListOpt' = None,
+        incs: 'StrOrListOpt' = None,
+        optimize: 'StrOrListOpt' = None,
+        prefix: 'str | None' = None,
+        suffix: 'str | None' = None,
+        linkflags: 'StrOrListOpt' = None,
+        extra_cppflags: 'StrOrListOpt' = None,
+        extra_linkflags: 'StrOrListOpt' = None,
+        linker_scripts: 'StrOrListOpt' = None,
+        version_scripts: 'StrOrListOpt' = None,
+        allow_undefined: bool = True,
+        strip: bool = False,
+        **kwargs: object):
     """cc_plugin target."""
     target = CcPlugin(
             name=name,
