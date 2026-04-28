@@ -29,8 +29,6 @@ Layering
 `StrOrList` should therefore only appear in rule-entry function signatures.
 """
 
-from __future__ import annotations
-
 from typing import Optional, Union
 
 # A BUILD-file-friendly string-or-list-of-strings union.
