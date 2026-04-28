@@ -72,7 +72,7 @@ class GenRuleTarget(Target):
         # self._check_path_list(outs, "outs", must_exist=False)
         outs = [os.path.normpath(o) for o in outs]
 
-        self.attr['outs'] = outs
+        self.attr['outs'] = var_to_list(outs)
         self.attr['outputs'] = [self._target_file_path(o) for o in self.attr['outs']]
         self.attr['locations'] = []
         self.attr['cmd'] = LOCATION_RE.sub(self._process_location_reference, cmd)

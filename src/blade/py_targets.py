@@ -212,7 +212,7 @@ class PythonBinary(PythonLibrary):
             self.error(
                 'The entry file must be specified by the "main" '
                 'argument if there are more than one srcs')
-        self.attr['exclusions'] = exclusions
+        self.attr['exclusions'] = var_to_list(exclusions)
         self._add_tags('type:binary')
 
     def _get_entry(self):
@@ -293,7 +293,7 @@ class PythonTest(PythonBinary):
                 exclusions=[],
                 kwargs=kwargs)
         self.type = 'py_test'
-        self.attr['testdata'] = testdata
+        self.attr['testdata'] = var_to_list(testdata)
         self._add_tags('type:test')
 
 

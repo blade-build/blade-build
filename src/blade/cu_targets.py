@@ -71,7 +71,7 @@ class CuTarget(CcTarget):
                 src_exts=_SOURCE_FILE_EXTS,
                 cmd='')
         self.cuda_path = self._get_cuda_path(cuda_path)
-        self.attr['extra_cuflags'] = extra_cuflags
+        self.attr['extra_cuflags'] = var_to_list(extra_cuflags)
         cmd = os.environ.get('NVCC')
         if self.cuda_path:
             cmd = os.path.join(self.cuda_path, 'bin/nvcc')

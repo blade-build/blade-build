@@ -14,6 +14,7 @@ import os
 from blade import build_manager
 from blade import build_rules
 from blade.cc_targets import CcTarget
+from blade.util import var_to_list
 
 
 class SwigLibrary(CcTarget):
@@ -50,7 +51,7 @@ class SwigLibrary(CcTarget):
         self.attr['cpperraswarn'] = warning
         self.attr['java_package'] = java_package
         self.attr['java_lib_packed'] = java_lib_packed
-        self.attr['extra_swigflags'] = extra_swigflags
+        self.attr['extra_swigflags'] = var_to_list(extra_swigflags)
         self._add_tags('lang:swig', 'type:library')
 
     def _expand_deps_generation(self):
