@@ -1334,50 +1334,65 @@ class CcBinary(CcTarget):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 warning,
-                 defs,
-                 incs,
-                 embed_version,
-                 optimize,
-                 dynamic_link,
-                 linkflags,
-                 extra_cppflags,
-                 extra_linkflags,
-                 linker_scripts,
-                 version_scripts,
-                 export_dynamic,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 warning: str,
+                 defs: StrOrListOpt,
+                 incs: StrOrListOpt,
+                 embed_version: bool,
+                 optimize: StrOrListOpt,
+                 dynamic_link: bool,
+                 linkflags: StrOrListOpt,
+                 extra_cppflags: StrOrListOpt,
+                 extra_linkflags: StrOrListOpt,
+                 linker_scripts: StrOrListOpt,
+                 version_scripts: StrOrListOpt,
+                 export_dynamic: bool,
+                 kwargs: dict[str, object]):
         """Init method.
 
         Init the cc binary.
 
         """
         # pylint: disable=too-many-locals
+        # Normalize list-ish entry params to list[str] once so the forward to
+        # super() and the rest of the body can work on a uniform shape.
+        # `optimize` / `linkflags` / `visibility` keep None-sentinel semantics.
+        srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        defs = var_to_list(defs)
+        incs = var_to_list(incs)
+        extra_cppflags = var_to_list(extra_cppflags)
+        extra_linkflags = var_to_list(extra_linkflags)
+        linker_scripts = var_to_list(linker_scripts)
+        version_scripts = var_to_list(version_scripts)
+        visibility_list = var_to_list_or_none(visibility)
+        optimize_list = var_to_list_or_none(optimize)
+        linkflags_list = var_to_list_or_none(linkflags)
         super().__init__(
                 name=name,
                 type='cc_binary',
                 srcs=srcs,
                 deps=deps,
-                visibility=visibility,
+                visibility=visibility_list,
                 tags=tags,
                 warning=warning,
                 defs=defs,
                 incs=incs,
                 export_incs=[],
-                optimize=optimize,
-                linkflags=linkflags,
+                optimize=optimize_list,
+                linkflags=linkflags_list,
                 extra_cppflags=extra_cppflags,
                 extra_linkflags=extra_linkflags,
                 kwargs=kwargs)
         self.attr['embed_version'] = embed_version
         self.attr['dynamic_link'] = dynamic_link
-        self.attr['lds_fullpath'] = self._fullpath_sources(var_to_list(linker_scripts))
-        self.attr['vers_fullpath'] = self._fullpath_sources(var_to_list(version_scripts))
+        self.attr['lds_fullpath'] = self._fullpath_sources(linker_scripts)
+        self.attr['vers_fullpath'] = self._fullpath_sources(version_scripts)
         self.attr['export_dynamic'] = export_dynamic
         self.attr['dwp'] = is_fission() and need_dwp()
         self._add_tags('lang:cc', 'type:binary')
@@ -1480,24 +1495,24 @@ class CcBinary(CcTarget):
         self._cc_binary(objs, inclusion_check_result, self.attr['dynamic_link'])
 
 
-def cc_binary(name=None,
-              srcs=None,
-              deps=None,
-              visibility=None,
-              tags=None,
-              warning='yes',
-              defs=None,
-              incs=None,
-              embed_version=True,
-              optimize=None,
-              dynamic_link=False,
-              linkflags=None,
-              extra_cppflags=None,
-              extra_linkflags=None,
-              linker_scripts=None,
-              version_scripts=None,
-              export_dynamic=False,
-              **kwargs):
+def cc_binary(name: str,
+              srcs: StrOrListOpt = None,
+              deps: StrOrListOpt = None,
+              visibility: StrOrListOpt = None,
+              tags: StrOrListOpt = None,
+              warning: str = 'yes',
+              defs: StrOrListOpt = None,
+              incs: StrOrListOpt = None,
+              embed_version: bool = True,
+              optimize: StrOrListOpt = None,
+              dynamic_link: bool = False,
+              linkflags: StrOrListOpt = None,
+              extra_cppflags: StrOrListOpt = None,
+              extra_linkflags: StrOrListOpt = None,
+              linker_scripts: StrOrListOpt = None,
+              version_scripts: StrOrListOpt = None,
+              export_dynamic: bool = False,
+              **kwargs: object):
     """cc_binary target."""
     cc_binary_target = CcBinary(
             name=name,
@@ -1525,8 +1540,8 @@ build_rules.register_function(cc_binary)
 
 
 def cc_benchmark(
-        name: 'str | None' = None,
-        deps: 'StrOrListOpt' = None,
+        name: str,
+        deps: StrOrListOpt = None,
         **kwargs: Any):
     """cc_benchmark target."""
     cc_config = config.get_section('cc_config')
