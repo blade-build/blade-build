@@ -151,15 +151,14 @@ class TestScheduler:
         result = 'SUCCESS'
         if returncode != 0:
             result = _SIGNAL_MAP.get(returncode, 'FAILED')
-            result = '{}:{}'.format(result, returncode)
+            result = f'{result}:{returncode}'
         return result
 
     def _progress(self, done=0):
-        return '[{}/{}/{}]'.format(self.num_of_finished_tests + done,
-                               self.num_of_running_tests - done, len(self.tests_list))
+        return f'[{self.num_of_finished_tests + done}/{self.num_of_running_tests - done}/{len(self.tests_list)}]'
 
     def _show_progress(self, cmd):
-        console.info('{} Start {}'.format(self._progress(), cmd))
+        console.info(f'{self._progress()} Start {cmd}')
         if console.verbosity_le('quiet'):
             console.show_progress_bar(self.num_of_finished_tests, len(self.tests_list))
 
@@ -183,8 +182,7 @@ class TestScheduler:
         job_thread.set_job_data(p, test_name, timeout)
         stdout = p.communicate()[0]
         result = self._get_result(p.returncode)
-        msg = 'Output of //{}:\n{}{} Test //{} finished: {}\n'.format(
-            test_name, stdout, self._progress(done=1), test_name, result)
+        msg = f'Output of //{test_name}:\n{stdout}{self._progress(done=1)} Test //{test_name} finished: {result}\n'
         if console.verbosity_le('quiet') and p.returncode != 0:
             console.error(msg, prefix=False)
         else:
@@ -206,7 +204,7 @@ class TestScheduler:
         job_thread.set_job_data(p, test_name, timeout)
         p.wait()
         result = self._get_result(p.returncode)
-        console.info('{} Test //{} finished : {}\n'.format(self._progress(done=1), test_name, result))
+        console.info(f'{self._progress(done=1)} Test //{test_name} finished : {result}\n')
 
         return p.returncode
 

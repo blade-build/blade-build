@@ -20,13 +20,12 @@ def _split(target):
     """Split target patten into path and name."""
     if ':' in target:
         path, name = target.rsplit(':', 1)
+    elif target.endswith('...'):
+        path = target[:-3]
+        name = '...'
     else:
-        if target.endswith('...'):
-            path = target[:-3]
-            name = '...'
-        else:
-            path = target
-            name = '*'
+        path = target
+        name = '*'
     path = os.path.normpath(path)
     if path == '.':
         path = ''
@@ -47,11 +46,10 @@ def normalize(target, working_dir):
     elif target.startswith('/'):
         console.error('Invalid target "%s" starting from root path.' % target)
         target = target[1:]  # Try correct to keep going
-    else:  # Relative path
-        if working_dir != '.':
-            target = os.path.join(working_dir, target)
+    elif working_dir != '.':
+        target = os.path.join(working_dir, target)
     path, name = _split(target)
-    return '{}:{}'.format(path, name)
+    return f'{path}:{name}'
 
 
 def normalize_list(targets, working_dir):

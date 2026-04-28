@@ -68,7 +68,7 @@ class JacocoReporter:
         """
         for cls in classes:
             if cls in checked_classes:
-                console.warning('Conflict: {}/{} already existed in {}'.format(classes_path, cls, checked_classes[cls]))
+                console.warning(f'Conflict: {classes_path}/{cls} already existed in {checked_classes[cls]}')
                 return True
             checked_classes[cls] = classes_path
         return False
@@ -160,7 +160,7 @@ class JacocoReporter:
         with open(report_dir + '.packages.csv', 'w') as f:
             f.write('package_name,source_path\r\n')
             for package, path in mapping.items():
-                f.write('{},{}\r\n'.format(package, path))
+                f.write(f'{package},{path}\r\n')
 
     def generate(self):
         """Run jacococli to generate coverage report"""

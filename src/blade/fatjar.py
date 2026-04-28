@@ -86,10 +86,7 @@ def generate_fat_jar(output, conflict_severity, compression_level, args):
                 else:
                     if name.endswith('/'):
                         continue
-                    message = ('{}: Duplicate path {} found in {{{}, {}}}'.format(
-                        target, name,
-                        os.path.basename(path_jar_dict[name]),
-                        os.path.basename(dep_jar)))
+                    message = (f'{target}: Duplicate path {name} found in {{{os.path.basename(path_jar_dict[name])}, {os.path.basename(dep_jar)}}}')
                     # Always log all conflicts for diagnosis
                     console.debug(message)
                     if '/.m2/repository/' not in dep_jar:
@@ -126,7 +123,7 @@ def main():
         options, args = util.parse_command_line(sys.argv[1:])
         generate_fat_jar(args=args, **options)
     except Exception as e:  # pylint: disable=broad-except
-        console.error('fatjar error: {} {}'.format(str(e), traceback.format_exc()))
+        console.error(f'fatjar error: {e!s} {traceback.format_exc()}')
         sys.exit(1)
 
 

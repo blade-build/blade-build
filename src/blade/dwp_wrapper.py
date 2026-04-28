@@ -75,7 +75,7 @@ def extract_objects_from_archive(archive_path):
     # Use 'ar t' to list contents of the archive, 'ar t' outputs full paths
     returncode, stdout, stderr = util.run_command(['ar', 't', archive_path])
     if returncode != 0:
-        console.fatal("Error: Failed to extract objects from {} with '{}'".format(archive_path, stderr))
+        console.fatal(f"Error: Failed to extract objects from {archive_path} with '{stderr}'")
 
     object_files = []
     for line in stdout.strip().splitlines():

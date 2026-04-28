@@ -156,7 +156,7 @@ class GoLibrary(GoTarget):
         """Return package object path according to the standard go directory layout."""
         go_home = config.get_item('go_config', 'go_home')
         return os.path.join(go_home, 'pkg',
-                            '{}_{}'.format(GoTarget._go_os, GoTarget._go_arch),
+                            f'{GoTarget._go_os}_{GoTarget._go_arch}',
                             '%s.a' % self.attr['go_package'])
 
 

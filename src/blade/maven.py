@@ -149,7 +149,7 @@ class MavenCache:
             return True
 
         if classifier:
-            id = '{}:{}'.format(id, classifier)
+            id = f'{id}:{classifier}'
         target.info('Downloading maven_jar %s' % id)
         cmd = [self.__maven,
                'dependency:get',
@@ -163,7 +163,7 @@ class MavenCache:
         with open(log_path, 'w') as logf:
             rc = subprocess.call(cmd, stdout=logf)
         if rc != 0:
-            message = ('Error downloading maven_jar {}, see "{}" for details.'.format(id, log_path))
+            message = (f'Error downloading maven_jar {id}, see "{log_path}" for details.')
             # Rertry without transitive
             cmd.append('-Dtransitive=false')
             with open(log_path, 'a') as f:
@@ -216,7 +216,7 @@ class MavenCache:
         with open(log, 'w') as logf:
             rc = subprocess.call(cmd, stdout=logf)
         if rc != 0:
-            target.warning('Failed to query dependencies of {} , see "{}" for details.'.format(id, log))
+            target.warning(f'Failed to query dependencies of {id} , see "{log}" for details.')
             try:
                 os.remove(classpath_tmp)
             except OSError:

@@ -259,7 +259,7 @@ class Blade:
         for key in self.__expanded_command_targets:
             target = self.__build_targets[key]
             clean_list = target.get_clean_list()
-            console.debug('Cleaning {}: {}'.format(target.fullname, clean_list))
+            console.debug(f'Cleaning {target.fullname}: {clean_list}')
             # Batch removing is much faster than one by one
             paths += clean_list
             if len(paths) > 10000:  # Avoid 'Argument list too long' error.
@@ -313,7 +313,7 @@ class Blade:
                     print('%s' % d, file=output_file)
 
     def print_dot_node(self, output_file, node):
-        print('"{}" [label = "{}"]'.format(node, node), file=output_file)
+        print(f'"{node}" [label = "{node}"]', file=output_file)
 
     def print_dot_deps(self, output_file, node, target_set):
         targets = self.__build_targets
@@ -321,7 +321,7 @@ class Blade:
         for i in deps:
             if i not in target_set:
                 continue
-            print('"{}" -> "{}"'.format(node, i), file=output_file)
+            print(f'"{node}" -> "{i}"', file=output_file)
 
     def __print_dot_graph(self, attr_name, output_file):
         # Collect all related nodes
@@ -361,8 +361,7 @@ class Blade:
                 self.__options.query_path_to.split(','),
                 self.__working_dir):
             if id not in self.__target_database:
-                console.fatal('Invalid argument: "--path-to={}", target "{}" does not exist'.format(
-                        self.__options.query_path_to, id))
+                console.fatal(f'Invalid argument: "--path-to={self.__options.query_path_to}", target "{id}" does not exist')
             result.add(id)
         return result
 
@@ -486,7 +485,7 @@ class Blade:
         key = target.key
         # Check whether there is already a key in database
         if key in self.__target_database:
-            console.fatal('Target {} is duplicate in //{}/BUILD'.format(target.name, target.path))
+            console.fatal(f'Target {target.name} is duplicate in //{target.path}/BUILD')
         self.__target_database[key] = target
 
     def _read_fingerprint(self, ninja_file):
@@ -506,7 +505,7 @@ class Blade:
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)
         with open(ninja_file, 'w') as f:
-            f.write('{}{}\n\n'.format(_NINJA_FILE_FINGERPRINT_START, fingerprint))
+            f.write(f'{_NINJA_FILE_FINGERPRINT_START}{fingerprint}\n\n')
             f.writelines(code)
 
     def _find_or_generate_target_ninja_file(self, target):

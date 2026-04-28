@@ -62,7 +62,7 @@ class BinaryRunner:
             else:
                 long_path, short_path = item_norm, dest_norm
             if long_path.startswith(short_path) and long_path[len(short_path)] == '/':
-                target.error('"{}" could not exist with "{}" in testdata'.format(dest, item))
+                target.error(f'"{dest}" could not exist with "{item}" in testdata')
 
     def _prepare_env(self, target):
         """Prepare the running environment."""

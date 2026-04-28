@@ -313,7 +313,7 @@ class _NinjaFileHeaderGenerator:
         arflags = ''.join(config.get_item('cc_library_config', 'arflags'))
         ar = self.build_accelerator.get_ar_command()
         self.generate_rule(name='ar',
-                           command='rm -f $out; {} {} $out $in'.format(ar, arflags),
+                           command=f'rm -f $out; {ar} {arflags} $out $in',
                            description='AR ${out}')
 
     def _generate_cc_link_rules(self, ld, linkflags):
@@ -367,8 +367,7 @@ class _NinjaFileHeaderGenerator:
 
         if _shell_support_pipefail():
             # Use `pipefail` to ensure that the exit code is correct.
-            template = 'export LC_ALL=C; set -o pipefail; %s {} 2>&1 | {} > {}'.format(
-                print_header_option, _INCLUSION_STACK_SPLITTER, inclusion_stack_file)
+            template = f'export LC_ALL=C; set -o pipefail; %s {print_header_option} 2>&1 | {_INCLUSION_STACK_SPLITTER} > {inclusion_stack_file}'
         else:
             # Some shell such as Ubuntu's `dash` doesn't support pipefail, make a workaround.
             template = ('export LC_ALL=C; %%s %s 2> ${out}.err; ec=$$?; %s < ${out}.err > %s ; '
@@ -498,7 +497,7 @@ class _NinjaFileHeaderGenerator:
     def generate_java_jar_rules(self, java_config):
         jar = self.get_java_command(java_config, 'jar')
         level = config.get_item('java_config', 'jar_compression_level')
-        args = '{} --compression_level={} ${{out}} ${{in}}'.format(jar, level)
+        args = f'{jar} --compression_level={level} ${{out}} ${{in}}'
         self.generate_rule(name='javajar',
                            command=self._builtin_command('java_jar', args),
                            description='JAVA JAR ${out}')
@@ -514,8 +513,7 @@ class _NinjaFileHeaderGenerator:
     def generate_fatjar_rules(self, java_config):
         conflict_severity = java_config.get('fat_jar_conflict_severity', 'warning')
         compression_level = java_config.get('fat_jar_compression_level')
-        args = '--output=${{out}} --compression_level={} --conflict_severity={} ${{in}}'.format(
-            compression_level, conflict_severity)
+        args = f'--output=${{out}} --compression_level={compression_level} --conflict_severity={conflict_severity} ${{in}}'
         self.generate_rule(name='fatjar',
                            command=self._builtin_command('java_fatjar', args),
                            description='FAT JAR ${out}')
@@ -618,24 +616,21 @@ class _NinjaFileHeaderGenerator:
                 prefix = go
                 if go_module_relpath:
                     relative_prefix = os.path.relpath(prefix, go_module_relpath)
-                    prefix = "cd {go_module_relpath} && {relative_prefix}".format(
-                        go_module_relpath=go_module_relpath,
-                        relative_prefix=relative_prefix,
-                    )
+                    prefix = f"cd {go_module_relpath} && {relative_prefix}"
                     # add slash to the end of the relpath
                     out_relative = os.path.join(os.path.relpath("./", go_module_relpath), "")
             else:
-                prefix = 'GOPATH={} {}'.format(go_path, go)
+                prefix = f'GOPATH={go_path} {go}'
             self.generate_rule(name='gopackage',
                                command='%s install ${extra_goflags} ${package}' % prefix,
                                description='GO INSTALL ${package}',
                                pool=go_pool)
             self.generate_rule(name='gocommand',
-                               command='{} build -o {}${{out}} ${{extra_goflags}} ${{package}}'.format(prefix, out_relative),
+                               command=f'{prefix} build -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
                                description='GO BUILD ${package}',
                                pool=go_pool)
             self.generate_rule(name='gotest',
-                               command='{} test -c -o {}${{out}} ${{extra_goflags}} ${{package}}'.format(prefix, out_relative),
+                               command=f'{prefix} test -c -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
                                description='GO TEST ${package}',
                                pool=go_pool)
 
@@ -685,7 +680,7 @@ class _NinjaFileHeaderGenerator:
                   url = %s
                   profile = %s
                   compiler = %s
-                ''') % (scm, revision, url, self.options.profile, '{} {}'.format(cc, cc_version)))
+                ''') % (scm, revision, url, self.options.profile, f'{cc} {cc_version}'))
         self._add_line(textwrap.dedent('''\
                 build %s: cxx %s
                   cppflags = -w -O2
@@ -743,7 +738,7 @@ class _NinjaFileHeaderGenerator:
     def _builtin_command(self, builder, args=''):
         cmd = ['PYTHONPATH=%s:$$PYTHONPATH' % self.blade_path]
         python = os.environ.get('BLADE_PYTHON_INTERPRETER') or sys.executable
-        cmd.append('{} -m blade.builtin_tools {}'.format(python, builder))
+        cmd.append(f'{python} -m blade.builtin_tools {builder}')
         if args:
             cmd.append(args)
         else:

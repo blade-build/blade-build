@@ -86,7 +86,7 @@ class ShellTest(Target):
         for key, type, dst in self.attr['locations']:
             path = targets[key]._get_target_file(type)
             if not path:
-                self.warning('Location {} {} is missing. Ignored.'.format(key, type))
+                self.warning(f'Location {key} {type} is missing. Ignored.')
             else:
                 inputs.append(path)
                 if not dst:
