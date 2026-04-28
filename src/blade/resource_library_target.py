@@ -36,7 +36,7 @@ class ResourceLibrary(cc_targets.CcTarget):
                 name=name,
                 type='resource_library',
                 srcs=srcs,
-                src_exts=None,
+                src_exts=[],
                 deps=deps,
                 visibility=visibility,
                 tags=tags,

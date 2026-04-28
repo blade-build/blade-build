@@ -22,7 +22,9 @@ from blade.util import var_to_list
 
 
 # See https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#supported-input-file-suffixes
-_SOURCE_FILE_EXTS = {'cu', 'c', 'cc', 'cxx', 'cpp', 'ptx'}
+# Tuple (not set) for the same reason as cc_targets._SOURCE_FILE_EXTS: used
+# only as the resolved default for CcTarget's `src_exts=` parameter.
+_SOURCE_FILE_EXTS: 'tuple[str, ...]' = ('cu', 'c', 'cc', 'cxx', 'cpp', 'ptx')
 
 
 class CuTarget(CcTarget):
@@ -68,7 +70,7 @@ class CuTarget(CcTarget):
                 extra_cppflags=extra_cppflags,
                 extra_linkflags=extra_linkflags,
                 kwargs=kwargs,
-                src_exts=_SOURCE_FILE_EXTS,
+                src_exts=list(_SOURCE_FILE_EXTS),
                 cmd='')
         self.cuda_path = self._get_cuda_path(cuda_path)
         self.attr['extra_cuflags'] = var_to_list(extra_cuflags)

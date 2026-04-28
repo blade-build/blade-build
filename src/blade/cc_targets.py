@@ -34,7 +34,12 @@ from blade.version import LooseVersion as version_parse
 
 
 # See https://gcc.gnu.org/onlinedocs/gcc/Overall-Options.html#Overall-Options
-_SOURCE_FILE_EXTS = {'c', 'cc', 'cp', 'cxx', 'cpp', 'CPP', 'c++', 'C', 's', 'S', 'asm'}
+# _SOURCE_FILE_EXTS is a tuple (not a set) so it fits the Sequence[str] shape
+# callers expect; it is only ever consumed as the resolved default for the
+# `src_exts=` parameter, and ordering has no semantic effect.
+_SOURCE_FILE_EXTS: 'tuple[str, ...]' = ('c', 'cc', 'cp', 'cxx', 'cpp', 'CPP', 'c++', 'C', 's', 'S', 'asm')
+# _HEADER_FILE_EXTS stays a set because it is consumed by `in` membership
+# checks in :func:`is_header_file`, which benefit from O(1) lookup.
 _HEADER_FILE_EXTS = {'h', 'hh', 'H', 'hp', 'hpp', 'hxx', 'HPP', 'h++', 'inc', 'inl', 'tcc'}
 
 
@@ -160,23 +165,23 @@ class CcTarget(Target):
     """
 
     def __init__(self,
-                 name,
-                 type,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 warning,
-                 defs,
-                 incs,
-                 export_incs,
-                 optimize,
-                 linkflags,
-                 extra_cppflags,
-                 extra_linkflags,
-                 kwargs,
-                 src_exts=_SOURCE_FILE_EXTS,
-                 cmd=''):
+                 name: str,
+                 type: str,
+                 srcs: 'list[str]',
+                 deps: 'list[str]',
+                 visibility: 'list[str] | None',
+                 tags: 'list[str]',
+                 warning: str,
+                 defs: 'list[str]',
+                 incs: 'list[str]',
+                 export_incs: 'list[str]',
+                 optimize: 'list[str] | None',
+                 linkflags: 'list[str] | None',
+                 extra_cppflags: 'list[str]',
+                 extra_linkflags: 'list[str]',
+                 kwargs: 'dict[str, object]',
+                 src_exts: 'list[str] | None' = None,
+                 cmd: str = ''):
         """Init method.
 
         Init the cc target.
@@ -196,6 +201,14 @@ class CcTarget(Target):
         srcs = [src for src in srcs if not is_header_file(src)]
         deps = var_to_list(deps)
         self.cmd = cmd
+
+        # src_exts=None means "caller did not override" and we fall back to
+        # the cc source-extension set. Rule entries that deliberately want an
+        # empty extension list (e.g. resource_library, which synthesizes its
+        # own .c/.h) should pass src_exts=None explicitly; passing a real list
+        # overrides the default (see cu_targets.CuTarget).
+        if src_exts is None:
+            src_exts = list(_SOURCE_FILE_EXTS)
 
         super().__init__(
                 name=name,
