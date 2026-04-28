@@ -165,7 +165,7 @@ class CcTarget(Target):
     """
 
     def __init__(self,
-                 name: str,
+                 name: 'str | None',
                  type: str,
                  srcs: 'list[str]',
                  deps: 'list[str]',

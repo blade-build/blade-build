@@ -17,6 +17,10 @@ import datetime
 import os
 import sys
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import NoReturn
 
 ##############################################################################
 # Color and screen
@@ -233,7 +237,7 @@ def error(msg, prefix=True):
     _error_count += 1
 
 
-def fatal(msg, code=1, prefix=True):
+def fatal(msg: str, code: int = 1, prefix: bool = True) -> 'NoReturn':
     """dump error message and exit."""
     error(msg, prefix=prefix)
     sys.exit(code)

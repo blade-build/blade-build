@@ -12,26 +12,36 @@ Define resource_library target.
 from blade import build_manager
 from blade import build_rules
 from blade import cc_targets
-from blade.util import regular_variable_name
+from blade.blade_types import StrOrList, StrOrListOpt
+from blade.util import regular_variable_name, var_to_list, var_to_list_or_none
 
 
 class ResourceLibrary(cc_targets.CcTarget):
     """This class is used to generate C/C++ resource library rules."""
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 optimize,
-                 extra_cppflags,
-                 kwargs):
+                 name: 'str | None',
+                 srcs: 'StrOrListOpt',
+                 deps: 'StrOrListOpt',
+                 visibility: 'StrOrListOpt',
+                 tags: 'StrOrListOpt',
+                 optimize: 'StrOrListOpt',
+                 extra_cppflags: 'StrOrListOpt',
+                 kwargs: 'dict[str, object]'):
         """Init method.
 
         Init the cc target.
 
         """
+        # Normalize the BUILD-file-friendly StrOrList unions once, right at
+        # the top; everything below (including CcTarget.__init__) sees the
+        # layer-2 `list[str]` / `list[str] | None` shape.
+        srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        extra_cppflags = var_to_list(extra_cppflags)
+        visibility = var_to_list_or_none(visibility)
+        optimize = var_to_list_or_none(optimize)
         super().__init__(
                 name=name,
                 type='resource_library',
@@ -77,14 +87,14 @@ class ResourceLibrary(cc_targets.CcTarget):
         self._cc_library(objs)
 
 
-def resource_library(name=None,
-                     srcs=None,
-                     deps=None,
-                     visibility=None,
-                     tags=None,
-                     optimize=None,
-                     extra_cppflags=None,
-                     **kwargs):
+def resource_library(name: 'str | None' = None,
+                     srcs: 'StrOrListOpt' = None,
+                     deps: 'StrOrListOpt' = None,
+                     visibility: 'StrOrListOpt' = None,
+                     tags: 'StrOrListOpt' = None,
+                     optimize: 'StrOrListOpt' = None,
+                     extra_cppflags: 'StrOrListOpt' = None,
+                     **kwargs: object) -> None:
     """resource_library."""
     target = ResourceLibrary(
             name,
