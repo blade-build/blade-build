@@ -160,6 +160,16 @@ def need_dwp():
     return config.get_item('cc_config', 'dwp')
 
 
+def _cc_plugin_default_prefix_suffix() -> tuple[str, str]:
+    """Default (prefix, suffix) for cc_plugin output file names.
+
+    Currently fixed to ('lib', '.so') because blade only supports Linux as a
+    build target. When cross-platform support lands, derive these from the
+    active toolchain (macOS: ('lib', '.dylib'); Windows: ('', '.dll')).
+    """
+    return ('lib', '.so')
+
+
 class CcTarget(Target):
     """
     This class is derived from Target and it is the base class
@@ -1536,7 +1546,7 @@ class CcPlugin(CcTarget):
     """
 
     def __init__(self,
-                 name: 'str | None',
+                 name: str,
                  srcs: 'StrOrListOpt',
                  deps: 'StrOrListOpt',
                  visibility: 'StrOrListOpt',
@@ -1545,8 +1555,8 @@ class CcPlugin(CcTarget):
                  defs: 'StrOrListOpt',
                  incs: 'StrOrListOpt',
                  optimize: 'StrOrListOpt',
-                 prefix: 'str | None',
-                 suffix: 'str | None',
+                 prefix: str | None,
+                 suffix: str | None,
                  linkflags: 'StrOrListOpt',
                  extra_cppflags: 'StrOrListOpt',
                  extra_linkflags: 'StrOrListOpt',
@@ -1593,8 +1603,23 @@ class CcPlugin(CcTarget):
                   extra_cppflags=extra_cppflags,
                   extra_linkflags=extra_linkflags,
                   kwargs=kwargs)
-        self.prefix = prefix
-        self.suffix = suffix
+        # Soft-deprecation: before this change, `cc_plugin(name='foo.so')` was
+        # the only way to override the 'lib%s.so' output basename (because
+        # prefix/suffix were silently ignored). Now that prefix/suffix are
+        # honored, a name ending in a shared-library extension is ambiguous:
+        # under the new rules it would produce e.g. 'libfoo.so.so'. Warn the
+        # user so they can switch to the documented `prefix=''` / `suffix=''`
+        # spelling instead.
+        if (name.endswith(('.so', '.dylib', '.dll'))
+                and prefix is None and suffix is None):
+            self.warning(
+                f"cc_plugin name='{name}' ends in a shared-library extension; "
+                "the historical auto-strip behavior has been removed. "
+                "Pass prefix='' and suffix='<ext>' explicitly, or rename the "
+                "target, to control the output file name."
+            )
+        self.attr['prefix'] = prefix
+        self.attr['suffix'] = suffix
         self.attr['allow_undefined'] = allow_undefined
         self.attr['strip'] = strip
         self.attr['lds_fullpath'] = self._fullpath_sources(linker_scripts)
@@ -1614,10 +1639,14 @@ class CcPlugin(CcTarget):
         if link_all_symbols_libs:
             target_linkflags += self._generate_link_all_symbols_link_flags(link_all_symbols_libs)
 
-        if self.name.endswith('.so'):
-            output = self._target_file_path(self.name)
-        else:
-            output = self._target_file_path('lib%s.so' % self.name)
+        # Honor user-supplied prefix / suffix; fall back to the current
+        # toolchain defaults when either is left as None. See
+        # :func:`_cc_plugin_default_prefix_suffix` for the cross-platform
+        # TODO.
+        default_prefix, default_suffix = _cc_plugin_default_prefix_suffix()
+        prefix = default_prefix if self.attr['prefix'] is None else self.attr['prefix']
+        suffix = default_suffix if self.attr['suffix'] is None else self.attr['suffix']
+        output = self._target_file_path(f'{prefix}{self.name}{suffix}')
         if self.srcs or self.expanded_deps:
             if inclusion_check_result:
                 incchk_deps.append(inclusion_check_result)
@@ -1636,7 +1665,7 @@ class CcPlugin(CcTarget):
 
 
 def cc_plugin(
-        name: 'str | None' = None,
+        name: str,
         srcs: 'StrOrListOpt' = None,
         deps: 'StrOrListOpt' = None,
         visibility: 'StrOrListOpt' = None,
@@ -1645,8 +1674,8 @@ def cc_plugin(
         defs: 'StrOrListOpt' = None,
         incs: 'StrOrListOpt' = None,
         optimize: 'StrOrListOpt' = None,
-        prefix: 'str | None' = None,
-        suffix: 'str | None' = None,
+        prefix: str | None = None,
+        suffix: str | None = None,
         linkflags: 'StrOrListOpt' = None,
         extra_cppflags: 'StrOrListOpt' = None,
         extra_linkflags: 'StrOrListOpt' = None,
