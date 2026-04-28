@@ -32,7 +32,7 @@ class MavenJar(Target):
                 name=name,
                 type='maven_jar',
                 srcs=[],
-                src_exts=None,
+                src_exts=[],
                 deps=[],
                 visibility=visibility,
                 tags=tags,

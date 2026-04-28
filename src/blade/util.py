@@ -24,6 +24,10 @@ import signal
 import subprocess
 import sys
 import zipfile
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from blade.blade_types import StrOrListOpt  # noqa: F401 (used in annotations)
 
 
 def md5sum_bytes(content):
@@ -77,8 +81,21 @@ def unlock_file(fd):
         pass
 
 
-def var_to_list(var):
-    """Normalize a singlar or list to list."""
+def var_to_list(var: 'StrOrListOpt | tuple[str, ...] | set[str] | frozenset[str]') -> list[str]:
+    """Normalize a singular, iterable, or None into a fresh ``list[str]``.
+
+    This is the canonical normalization helper for rule-entry parameters.
+
+    Accepted inputs:
+
+    - ``None``                               -> ``[]`` (treated as "no values")
+    - ``list``                               -> shallow copy (caller-safe)
+    - ``tuple`` / ``set`` / ``frozenset``    -> materialized into a list
+    - any other scalar (typically ``str``)   -> wrapped as ``[var]``
+
+    The returned list is always a fresh object, so callers may mutate it
+    without affecting the input.
+    """
     if isinstance(var, list):
         return var[:]
     if var is None:
@@ -88,8 +105,13 @@ def var_to_list(var):
     return [var]
 
 
-def var_to_list_or_none(var):
-    """Similar to var_to_list but keeps the None unchanged"""
+def var_to_list_or_none(var: 'StrOrListOpt') -> 'list[str] | None':
+    """Like :func:`var_to_list`, but preserves ``None`` as a distinct sentinel.
+
+    Use this when the parameter has a meaningful "not configured" state that
+    must not collapse into an empty list (for instance, default visibility
+    vs. explicit "visible to nobody").
+    """
     if var is None:
         return var
     return var_to_list(var)

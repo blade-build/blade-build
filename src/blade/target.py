@@ -105,23 +105,27 @@ class Target:
     """
 
     def __init__(self,
-                 name,
-                 type,
-                 srcs,
-                 src_exts,
-                 deps,
-                 visibility,
-                 tags,
-                 kwargs,
-                 cmd=''):
+                 name: str,
+                 type: str,
+                 srcs: 'list[str]',
+                 src_exts: 'list[str]',
+                 deps: 'list[str]',
+                 visibility: 'list[str] | None',
+                 tags: 'list[str]',
+                 kwargs: 'dict[str, object]',
+                 cmd: str = ''):
         """Init method.
 
         Init the target.
 
         """
-        # Defensive normalization: rule entries may pass None for these
-        # list-ish params (B006 fix: mutable defaults replaced with None).
-        # Keeping this central lets upstream call sites stay simple.
+        # Defensive normalization. The signature declares list[str], but some
+        # callers (rule-entry helpers that haven't been updated yet, plus any
+        # out-of-tree rule extensions) may still hand in raw str / None /
+        # tuple / set. Centralizing the coercion here means new call sites
+        # can freely pass None as "unset" without crashing downstream
+        # iterators. Candidate for removal in v4 once every rule-entry
+        # function has been audited.
         srcs = var_to_list(srcs)
         src_exts = var_to_list(src_exts)
         deps = var_to_list(deps)
