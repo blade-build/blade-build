@@ -96,15 +96,15 @@ class SwigLibrary(CcTarget):
 
 def swig_library(
         name,
-        srcs=[],
-        deps=[],
+        srcs=None,
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         warning='',
         java_package='',
         java_lib_packed=False,
         optimize=None,
-        extra_swigflags=[],
+        extra_swigflags=None,
         **kwargs):
     """swig_library target."""
     target = SwigLibrary(

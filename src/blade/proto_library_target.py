@@ -466,18 +466,18 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
 
 def proto_library(
         name,
-        srcs=[],
-        deps=[],
+        srcs=None,
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         optimize=None,
         deprecated=False,
         generate_descriptors=False,
         target_languages=None,
-        plugins=[],
+        plugins=None,
         source_encoding='iso-8859-1',
-        cpp_outs=[".pb"],
-        plugin_opts={},
+        cpp_outs=None,
+        plugin_opts=None,
         **kwargs):
     """proto_library target.
     Args:
@@ -486,6 +486,8 @@ def proto_library(
             `java`, `python`, see protoc's `--xx_out`s.
             NOTE: The `cpp` target code is always generated.
     """
+    if cpp_outs is None:
+        cpp_outs = [".pb"]
     proto_library_target = ProtoLibrary(
             name=name,
             srcs=srcs,

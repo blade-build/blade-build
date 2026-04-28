@@ -101,10 +101,10 @@ class ShellTest(Target):
 
 def sh_test(name=None,
             srcs=None,
-            deps=[],
+            deps=None,
             visibility=None,
-            tags=[],
-            testdata=[],
+            tags=None,
+            testdata=None,
             **kwargs):
     build_manager.instance.register_target(ShellTest(
             name=name,

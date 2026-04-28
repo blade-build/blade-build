@@ -183,6 +183,14 @@ class CcTarget(Target):
 
         """
         # pylint: disable=too-many-locals
+        # Defensive normalization: entry points may pass None as default for
+        # these list-ish params (B006 fix). `optimize`/`linkflags` intentionally
+        # keep None-sentinel semantics and are handled via var_to_list_or_none.
+        defs = var_to_list(defs)
+        incs = var_to_list(incs)
+        export_incs = var_to_list(export_incs)
+        extra_cppflags = var_to_list(extra_cppflags)
+        extra_linkflags = var_to_list(extra_linkflags)
         srcs = var_to_list(srcs)
         private_hdrs = [src for src in srcs if is_header_file(src)]
         srcs = [src for src in srcs if not is_header_file(src)]
@@ -1029,10 +1037,10 @@ class PrebuiltCcLibrary(CcTarget):
 
 def prebuilt_cc_library(
         name,
-        deps=[],
+        deps=None,
         visibility=None,
-        tags=[],
-        export_incs=[],
+        tags=None,
+        export_incs=None,
         hdrs=None,
         libpath_pattern=None,
         link_all_symbols=False,
@@ -1058,15 +1066,15 @@ def prebuilt_cc_library(
 
 def cc_library(
         name,
-        srcs=[],
+        srcs=None,
         hdrs=None,
-        deps=[],
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         warning='yes',
-        defs=[],
-        incs=[],
-        export_incs=[],
+        defs=None,
+        incs=None,
+        export_incs=None,
         optimize=None,
         always_optimize=False,
         pre_build=False,
@@ -1076,8 +1084,8 @@ def cc_library(
         binary_link_only=False,
         deprecated=False,
         linkflags=None,
-        extra_cppflags=[],
-        extra_linkflags=[],
+        extra_cppflags=None,
+        extra_linkflags=None,
         allow_undefined=False,
         secret=False,
         secret_revision_file=None,
@@ -1233,15 +1241,15 @@ def foreign_cc_library(
         name,
         install_dir='',
         lib_dir='lib',
-        hdrs=[],
+        hdrs=None,
         hdr_dir='',
-        export_incs=[],
-        deps=[],
+        export_incs=None,
+        deps=None,
         has_dynamic=False,
         link_all_symbols=False,
         binary_link_only=False,
         visibility=None,
-        tags=[],
+        tags=None,
         deprecated=False,
         **kwargs):
     """Similar to a prebuilt cc_library, but it is built by a foreign build system,
@@ -1432,21 +1440,21 @@ class CcBinary(CcTarget):
 
 
 def cc_binary(name=None,
-              srcs=[],
-              deps=[],
+              srcs=None,
+              deps=None,
               visibility=None,
-              tags=[],
+              tags=None,
               warning='yes',
-              defs=[],
-              incs=[],
+              defs=None,
+              incs=None,
               embed_version=True,
               optimize=None,
               dynamic_link=False,
               linkflags=None,
-              extra_cppflags=[],
-              extra_linkflags=[],
-              linker_scripts=[],
-              version_scripts=[],
+              extra_cppflags=None,
+              extra_linkflags=None,
+              linker_scripts=None,
+              version_scripts=None,
               export_dynamic=False,
               **kwargs):
     """cc_binary target."""
@@ -1475,7 +1483,7 @@ def cc_binary(name=None,
 build_rules.register_function(cc_binary)
 
 
-def cc_benchmark(name=None, deps=[], **kwargs):
+def cc_benchmark(name=None, deps=None, **kwargs):
     """cc_benchmark target."""
     cc_config = config.get_section('cc_config')
     benchmark_libs = cc_config['benchmark_libs']
@@ -1578,21 +1586,21 @@ class CcPlugin(CcTarget):
 
 def cc_plugin(
         name,
-        srcs=[],
-        deps=[],
+        srcs=None,
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         warning='yes',
-        defs=[],
-        incs=[],
+        defs=None,
+        incs=None,
         optimize=None,
         prefix=None,
         suffix=None,
         linkflags=None,
-        extra_cppflags=[],
-        extra_linkflags=[],
-        linker_scripts=[],
-        version_scripts=[],
+        extra_cppflags=None,
+        extra_linkflags=None,
+        linker_scripts=None,
+        version_scripts=None,
         allow_undefined=True,
         strip=False,
         **kwargs):
@@ -1710,20 +1718,20 @@ class CcTest(CcBinary):
 
 
 def cc_test(name=None,
-            srcs=[],
-            deps=[],
+            srcs=None,
+            deps=None,
             visibility=None,
-            tags=[],
+            tags=None,
             warning='yes',
-            defs=[],
-            incs=[],
+            defs=None,
+            incs=None,
             embed_version=False,
             optimize=None,
             dynamic_link=None,
-            testdata=[],
+            testdata=None,
             linkflags=None,
-            extra_cppflags=[],
-            extra_linkflags=[],
+            extra_cppflags=None,
+            extra_linkflags=None,
             export_dynamic=False,
             always_run=False,
             exclusive=False,

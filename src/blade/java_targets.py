@@ -919,23 +919,23 @@ class JavaTest(JavaBinary):
         self.generate_build('javatest', output, inputs=[jar] + dep_jars + maven_jars, variables=vars)
 
 
-def maven_jar(name=None, id=None, classifier='', transitive=True, visibility=None, tags=[]):
+def maven_jar(name=None, id=None, classifier='', transitive=True, visibility=None, tags=None):
     target = MavenJar(name, id, classifier, transitive, visibility, tags)
     build_manager.instance.register_target(target)
 
 
 def java_library(name=None,
-                 srcs=[],
-                 deps=[],
+                 srcs=None,
+                 deps=None,
                  visibility=None,
-                 tags=[],
-                 resources=[],
+                 tags=None,
+                 resources=None,
                  source_encoding=None,
                  warnings=None,
                  prebuilt=False,
                  binary_jar='',
-                 exported_deps=[],
-                 provided_deps=[],
+                 exported_deps=None,
+                 provided_deps=None,
                  coverage=True,
                  **kwargs):
     """Define java_library target.
@@ -964,14 +964,14 @@ def java_library(name=None,
 
 def java_binary(name=None,
                 main_class='',
-                srcs=[],
-                deps=[],
+                srcs=None,
+                deps=None,
                 visibility=None,
-                tags=[],
-                resources=[],
+                tags=None,
+                resources=None,
                 source_encoding=None,
                 warnings=None,
-                exclusions=[],
+                exclusions=None,
                 **kwargs):
     """Define java_binary target."""
     target = JavaBinary(
@@ -991,15 +991,15 @@ def java_binary(name=None,
 
 def java_test(name=None,
               srcs=None,
-              deps=[],
+              deps=None,
               visibility=None,
-              tags=[],
-              resources=[],
+              tags=None,
+              resources=None,
               source_encoding=None,
               warnings=None,
               main_class='org.junit.runner.JUnitCore',
-              exclusions=[],
-              testdata=[],
+              exclusions=None,
+              testdata=None,
               target_under_test=None,
               **kwargs):
     """Build a java test target"""
@@ -1021,14 +1021,14 @@ def java_test(name=None,
 
 
 def java_fat_library(name=None,
-                     srcs=[],
-                     deps=[],
+                     srcs=None,
+                     deps=None,
                      visibility=None,
-                     tags=[],
-                     resources=[],
+                     tags=None,
+                     resources=None,
                      source_encoding=None,
                      warnings=None,
-                     exclusions=[],
+                     exclusions=None,
                      **kwargs):
     """Define java_fat_library target."""
     target = JavaFatLibrary(

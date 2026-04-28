@@ -141,10 +141,10 @@ class PrebuiltPythonLibrary(PythonTarget):
 
 
 def py_library(name=None,
-               srcs=[],
-               deps=[],
+               srcs=None,
+               deps=None,
                visibility=None,
-               tags=[],
+               tags=None,
                base=None,
                prebuilt=None,
                **kwargs):
@@ -241,13 +241,13 @@ class PythonBinary(PythonLibrary):
 
 
 def py_binary(name=None,
-              srcs=[],
-              deps=[],
+              srcs=None,
+              deps=None,
               visibility=None,
-              tags=[],
+              tags=None,
               main=None,
               base=None,
-              exclusions=[],
+              exclusions=None,
               **kwargs):
     """python binary."""
     target = PythonBinary(
@@ -298,13 +298,13 @@ class PythonTest(PythonBinary):
 
 
 def py_test(name=None,
-            srcs=[],
-            deps=[],
+            srcs=None,
+            deps=None,
             visibility=None,
-            tags=[],
+            tags=None,
             main=None,
             base=None,
-            testdata=[],
+            testdata=None,
             **kwargs):
     """python test."""
     target = PythonTest(

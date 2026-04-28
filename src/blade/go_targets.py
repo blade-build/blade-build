@@ -199,10 +199,10 @@ class GoTest(GoTarget):
 def go_library(
         name,
         srcs,
-        deps=[],
+        deps=None,
         extra_goflags=None,
         visibility=None,
-        tags=[],
+        tags=None,
         **kwargs):
     build_manager.instance.register_target(GoLibrary(
         name=name,
@@ -217,9 +217,9 @@ def go_library(
 def go_binary(
         name,
         srcs,
-        deps=[],
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         extra_goflags=None,
         **kwargs):
     build_manager.instance.register_target(GoBinary(
@@ -235,10 +235,10 @@ def go_binary(
 def go_test(
         name,
         srcs,
-        deps=[],
+        deps=None,
         visibility=None,
-        tags=[],
-        testdata=[],
+        tags=None,
+        testdata=None,
         extra_goflags=None,
         **kwargs):
     build_manager.instance.register_target(GoTest(
@@ -276,8 +276,8 @@ def extract_go_package(path):
 
 def go_package(
         name,
-        deps=[],
-        testdata=[],
+        deps=None,
+        testdata=None,
         visibility=None,
         extra_goflags=None):
     path = build_manager.instance.get_current_source_path()

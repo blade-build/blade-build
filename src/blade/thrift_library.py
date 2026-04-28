@@ -112,10 +112,10 @@ class ThriftLibrary(CcTarget):
 
 def thrift_library(
         name,
-        srcs=[],
-        deps=[],
+        srcs=None,
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         optimize=None,
         deprecated=False,
         **kwargs):

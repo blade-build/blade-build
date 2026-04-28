@@ -154,20 +154,20 @@ class LexYaccLibrary(CcTarget):
 
 def lex_yacc_library(
         name,
-        srcs=[],
-        deps=[],
+        srcs=None,
+        deps=None,
         visibility=None,
-        tags=[],
+        tags=None,
         warning='yes',
-        defs=[],
-        incs=[],
+        defs=None,
+        incs=None,
         extra_cppflags=None,
         extra_linkflags=None,
         allow_undefined=False,
         recursive=False,
         prefix=None,
-        lexflags=[],
-        yaccflags=[],
+        lexflags=None,
+        yaccflags=None,
         **kwargs):
     """lex_yacc_library."""
     target = LexYaccLibrary(

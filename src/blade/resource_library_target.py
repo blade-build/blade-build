@@ -78,12 +78,12 @@ class ResourceLibrary(cc_targets.CcTarget):
 
 
 def resource_library(name=None,
-                     srcs=[],
-                     deps=[],
+                     srcs=None,
+                     deps=None,
                      visibility=None,
-                     tags=[],
+                     tags=None,
                      optimize=None,
-                     extra_cppflags=[],
+                     extra_cppflags=None,
                      **kwargs):
     """resource_library."""
     target = ResourceLibrary(

@@ -119,6 +119,17 @@ class Target:
         Init the target.
 
         """
+        # Defensive normalization: rule entries may pass None for these
+        # list-ish params (B006 fix: mutable defaults replaced with None).
+        # Keeping this central lets upstream call sites stay simple.
+        srcs = var_to_list(srcs)
+        src_exts = var_to_list(src_exts)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        # Note: `visibility` stays as-is; _init_visibility already handles None
+        # and distinguishes it from an empty list (default visibility vs
+        # explicitly "visible to nobody").
+
         from blade import build_manager  # pylint: disable=import-outside-toplevel
         self.blade = build_manager.instance
         self.target_database = self.blade.get_target_database()
@@ -657,12 +668,14 @@ class Target:
             return self.__targets.get(label, '')
         return self.__default_target
 
-    def _get_target_files(self, exclude_labels=[]):
+    def _get_target_files(self, exclude_labels=None):
         """
         Returns
         -----------
         All the target files built by the target itself
         """
+        if exclude_labels is None:
+            exclude_labels = ()
         self.get_build_code()  # Ensure rules were generated
         results = set()
         for k, v in self.__targets.items():
