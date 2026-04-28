@@ -840,47 +840,61 @@ class CcLibrary(CcTarget):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 hdrs,
-                 deps,
-                 visibility,
-                 tags,
-                 warning,
-                 defs,
-                 incs,
-                 export_incs,
-                 optimize,
-                 always_optimize,
-                 link_all_symbols,
-                 binary_link_only,
-                 deprecated,
-                 linkflags,
-                 extra_cppflags,
-                 extra_linkflags,
-                 allow_undefined,
-                 secret,
-                 secret_revision_file,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 hdrs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 warning: str,
+                 defs: StrOrListOpt,
+                 incs: StrOrListOpt,
+                 export_incs: StrOrListOpt,
+                 optimize: StrOrListOpt,
+                 always_optimize: bool,
+                 link_all_symbols: bool,
+                 binary_link_only: bool,
+                 deprecated: bool,
+                 linkflags: StrOrListOpt,
+                 extra_cppflags: StrOrListOpt,
+                 extra_linkflags: StrOrListOpt,
+                 allow_undefined: bool,
+                 secret: bool,
+                 secret_revision_file: str | None,
+                 kwargs: dict[str, object]):
         """Init method.
 
         Init the cc library.
 
         """
         # pylint: disable=too-many-locals
+        # Normalize list-ish entry params to list[str] once so the forward to
+        # super() and the rest of the body can work on a uniform shape.
+        # `optimize` / `linkflags` / `visibility` keep None-sentinel semantics.
+        srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        defs = var_to_list(defs)
+        incs = var_to_list(incs)
+        export_incs = var_to_list(export_incs)
+        extra_cppflags = var_to_list(extra_cppflags)
+        extra_linkflags = var_to_list(extra_linkflags)
+        visibility_list = var_to_list_or_none(visibility)
+        optimize_list = var_to_list_or_none(optimize)
+        linkflags_list = var_to_list_or_none(linkflags)
         super().__init__(
                 name=name,
                 type='cc_library',
                 srcs=srcs,
                 deps=deps,
-                visibility=visibility,
+                visibility=visibility_list,
                 tags=tags,
                 warning=warning,
                 defs=defs,
                 incs=incs,
                 export_incs=export_incs,
-                optimize=optimize,
-                linkflags=linkflags,
+                optimize=optimize_list,
+                linkflags=linkflags_list,
                 extra_cppflags=extra_cppflags,
                 extra_linkflags=extra_linkflags,
                 kwargs=kwargs)
@@ -1068,7 +1082,7 @@ class PrebuiltCcLibrary(CcTarget):
 
 
 def prebuilt_cc_library(
-        name: 'str | None' = None,
+        name: str,
         deps: 'StrOrListOpt' = None,
         visibility: 'StrOrListOpt' = None,
         tags: 'StrOrListOpt' = None,
@@ -1097,32 +1111,32 @@ def prebuilt_cc_library(
 
 
 def cc_library(
-        name,
-        srcs=None,
-        hdrs=None,
-        deps=None,
-        visibility=None,
-        tags=None,
-        warning='yes',
-        defs=None,
-        incs=None,
-        export_incs=None,
-        optimize=None,
-        always_optimize=False,
-        pre_build=False,
-        prebuilt=False,
-        prebuilt_libpath_pattern=None,
-        link_all_symbols=False,
-        binary_link_only=False,
-        deprecated=False,
-        linkflags=None,
-        extra_cppflags=None,
-        extra_linkflags=None,
-        allow_undefined=False,
-        secret=False,
-        secret_revision_file=None,
-        secure=False,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt = None,
+        hdrs: StrOrListOpt = None,
+        deps: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        warning: str = 'yes',
+        defs: StrOrListOpt = None,
+        incs: StrOrListOpt = None,
+        export_incs: StrOrListOpt = None,
+        optimize: StrOrListOpt = None,
+        always_optimize: bool = False,
+        pre_build: bool = False,
+        prebuilt: bool = False,
+        prebuilt_libpath_pattern: str | None = None,
+        link_all_symbols: bool = False,
+        binary_link_only: bool = False,
+        deprecated: bool = False,
+        linkflags: StrOrListOpt = None,
+        extra_cppflags: StrOrListOpt = None,
+        extra_linkflags: StrOrListOpt = None,
+        allow_undefined: bool = False,
+        secret: bool = False,
+        secret_revision_file: str | None = None,
+        secure: bool = False,
+        **kwargs: object):
     """cc_library target.
 
     Args:
