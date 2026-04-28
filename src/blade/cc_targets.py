@@ -20,6 +20,7 @@ from blade import build_manager
 from blade import build_rules
 from blade import config
 from blade import inclusion_check
+from blade.blade_types import StrOrListOpt
 from blade.constants import HEAP_CHECK_VALUES
 from blade.target import Target
 from blade.util import (
@@ -907,19 +908,26 @@ class PrebuiltCcLibrary(CcTarget):
     """
 
     def __init__(self,
-                 name,
-                 deps,
-                 hdrs,
-                 visibility,
-                 tags,
-                 export_incs,
-                 libpath_pattern,
-                 link_all_symbols,
-                 binary_link_only,
-                 deprecated,
-                 kwargs):
+                 name: 'str | None',
+                 deps: 'StrOrListOpt',
+                 hdrs: 'StrOrListOpt',
+                 visibility: 'StrOrListOpt',
+                 tags: 'StrOrListOpt',
+                 export_incs: 'StrOrListOpt',
+                 libpath_pattern: 'str | None',
+                 link_all_symbols: bool,
+                 binary_link_only: bool,
+                 deprecated: bool,
+                 kwargs: 'dict[str, object]'):
         """Init method."""
         # pylint: disable=too-many-locals
+        # Normalize the BUILD-file-friendly StrOrList unions once, right at
+        # the top; everything below (including CcTarget.__init__) sees the
+        # layer-2 `list[str]` / `list[str] | None` shape.
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        export_incs = var_to_list(export_incs)
+        visibility = var_to_list_or_none(visibility)
         super().__init__(
                 name=name,
                 type='prebuilt_cc_library',
@@ -1049,17 +1057,17 @@ class PrebuiltCcLibrary(CcTarget):
 
 
 def prebuilt_cc_library(
-        name,
-        deps=None,
-        visibility=None,
-        tags=None,
-        export_incs=None,
-        hdrs=None,
-        libpath_pattern=None,
-        link_all_symbols=False,
-        binary_link_only=False,
-        deprecated=False,
-        **kwargs):
+        name: 'str | None' = None,
+        deps: 'StrOrListOpt' = None,
+        visibility: 'StrOrListOpt' = None,
+        tags: 'StrOrListOpt' = None,
+        export_incs: 'StrOrListOpt' = None,
+        hdrs: 'StrOrListOpt' = None,
+        libpath_pattern: 'str | None' = None,
+        link_all_symbols: bool = False,
+        binary_link_only: bool = False,
+        deprecated: bool = False,
+        **kwargs: object):
     """prebuilt_cc_library rule"""
     target = PrebuiltCcLibrary(
             name=name,
