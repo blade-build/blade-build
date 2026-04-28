@@ -1173,22 +1173,31 @@ class ForeignCcLibrary(CcTarget):
     """
 
     def __init__(self,
-                 name,
-                 deps,
-                 install_dir,
-                 hdrs,
-                 hdr_dir,
-                 visibility,
-                 tags,
-                 export_incs,
-                 lib_dir,
-                 has_dynamic,
-                 link_all_symbols,
-                 binary_link_only,
-                 deprecated,
-                 kwargs):
+                 name: 'str | None',
+                 deps: 'StrOrListOpt',
+                 install_dir: str,
+                 hdrs: 'StrOrListOpt',
+                 hdr_dir: str,
+                 visibility: 'StrOrListOpt',
+                 tags: 'StrOrListOpt',
+                 export_incs: 'StrOrListOpt',
+                 lib_dir: str,
+                 has_dynamic: bool,
+                 link_all_symbols: bool,
+                 binary_link_only: bool,
+                 deprecated: bool,
+                 kwargs: 'dict[str, object]'):
         """Init method."""
         # pylint: disable=too-many-locals
+        # Normalize the BUILD-file-friendly StrOrList unions once, right at
+        # the top; everything below (including CcTarget.__init__ and the
+        # hdrs-branch further down) sees layer-2 `list[str]` /
+        # `list[str] | None`.
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        export_incs = var_to_list(export_incs)
+        hdrs = var_to_list(hdrs)
+        visibility = var_to_list_or_none(visibility)
         super().__init__(
                 name=name,
                 type='foreign_cc_library',
@@ -1213,7 +1222,7 @@ class ForeignCcLibrary(CcTarget):
         self._add_tags('lang:cc', 'type:library', 'type:foreign')
 
         if hdrs:
-            hdrs = [os.path.join(install_dir, h) for h in var_to_list(hdrs)]
+            hdrs = [os.path.join(install_dir, h) for h in hdrs]
             declare_hdrs(self, hdrs)
             hdrs = [self._target_file_path(os.path.join(install_dir, h)) for h in hdrs]
             self.attr['generated_hdrs'] = hdrs
@@ -1259,20 +1268,20 @@ class ForeignCcLibrary(CcTarget):
 
 
 def foreign_cc_library(
-        name,
-        install_dir='',
-        lib_dir='lib',
-        hdrs=None,
-        hdr_dir='',
-        export_incs=None,
-        deps=None,
-        has_dynamic=False,
-        link_all_symbols=False,
-        binary_link_only=False,
-        visibility=None,
-        tags=None,
-        deprecated=False,
-        **kwargs):
+        name: 'str | None' = None,
+        install_dir: str = '',
+        lib_dir: str = 'lib',
+        hdrs: 'StrOrListOpt' = None,
+        hdr_dir: str = '',
+        export_incs: 'StrOrListOpt' = None,
+        deps: 'StrOrListOpt' = None,
+        has_dynamic: bool = False,
+        link_all_symbols: bool = False,
+        binary_link_only: bool = False,
+        visibility: 'StrOrListOpt' = None,
+        tags: 'StrOrListOpt' = None,
+        deprecated: bool = False,
+        **kwargs: object):
     """Similar to a prebuilt cc_library, but it is built by a foreign build system,
     such as autotools, cmake, etc.
 
