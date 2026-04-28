@@ -58,7 +58,10 @@ class ScalaTarget(Target, JavaTargetMixIn):
                 visibility=visibility,
                 tags=tags,
                 kwargs=kwargs)
+        # If the resource is a directory, the change in resource content will not update the
+        # ninja.build cache. So we need to expand all resources in the directory ahead of time.
         self._process_resources(resources)
+        self.attr['expended_resources'] = self._process_regular_resources(self.attr['resources'])
         if source_encoding:
             self.attr['source_encoding'] = source_encoding
         if warnings:
