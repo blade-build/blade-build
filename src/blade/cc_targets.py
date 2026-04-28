@@ -1734,32 +1734,32 @@ class CcTest(CcBinary):
 
     def __init__(
             self,
-            name,
-            srcs,
-            deps,
-            visibility,
-            tags,
-            warning,
-            defs,
-            incs,
-            embed_version,
-            optimize,
-            dynamic_link,
-            testdata,
-            linkflags,
-            extra_cppflags,
-            extra_linkflags,
-            export_dynamic,
-            always_run,
-            exclusive,
-            heap_check,
-            heap_check_debug,
-            kwargs):
+            name: str | None,
+            srcs: StrOrListOpt,
+            deps: StrOrListOpt,
+            visibility: StrOrListOpt,
+            tags: StrOrListOpt,
+            warning: str,
+            defs: StrOrListOpt,
+            incs: StrOrListOpt,
+            embed_version: bool,
+            optimize: StrOrListOpt,
+            dynamic_link: bool | None,
+            testdata: StrOrListOpt,
+            linkflags: StrOrListOpt,
+            extra_cppflags: StrOrListOpt,
+            extra_linkflags: StrOrListOpt,
+            export_dynamic: bool,
+            always_run: bool,
+            exclusive: bool,
+            heap_check: str | None,
+            heap_check_debug: bool,
+            kwargs: dict[str, object]):
         """Init method."""
         # pylint: disable=too-many-locals
         cc_test_config = config.get_section('cc_test_config')
         if dynamic_link is None:
-            dynamic_link = cc_test_config['dynamic_link']
+            dynamic_link = bool(cc_test_config['dynamic_link'])
 
         super().__init__(
                 name=name,
@@ -1812,27 +1812,27 @@ class CcTest(CcBinary):
             self._add_implicit_library(perftools_lib_list)
 
 
-def cc_test(name=None,
-            srcs=None,
-            deps=None,
-            visibility=None,
-            tags=None,
-            warning='yes',
-            defs=None,
-            incs=None,
-            embed_version=False,
-            optimize=None,
-            dynamic_link=None,
-            testdata=None,
-            linkflags=None,
-            extra_cppflags=None,
-            extra_linkflags=None,
-            export_dynamic=False,
-            always_run=False,
-            exclusive=False,
-            heap_check=None,
-            heap_check_debug=False,
-            **kwargs):
+def cc_test(name: str,
+            srcs: StrOrListOpt = None,
+            deps: StrOrListOpt = None,
+            visibility: StrOrListOpt = None,
+            tags: StrOrListOpt = None,
+            warning: str = 'yes',
+            defs: StrOrListOpt = None,
+            incs: StrOrListOpt = None,
+            embed_version: bool = False,
+            optimize: StrOrListOpt = None,
+            dynamic_link: bool | None = None,
+            testdata: StrOrListOpt = None,
+            linkflags: StrOrListOpt = None,
+            extra_cppflags: StrOrListOpt = None,
+            extra_linkflags: StrOrListOpt = None,
+            export_dynamic: bool = False,
+            always_run: bool = False,
+            exclusive: bool = False,
+            heap_check: str | None = None,
+            heap_check_debug: bool = False,
+            **kwargs: object):
     """cc_test target."""
     # pylint: disable=too-many-locals
     cc_test_target = CcTest(
