@@ -479,8 +479,8 @@ cc_plugin(
 
 Attributes:
 
-- `prefix`: str = 'lib', the file name prefix of the generated dynamic library, the default is `lib`
-- `suffix`: str = '.so', the file name prefix of the generated dynamic library, the default is `.so`
+- `prefix`: str | None = None, the file name prefix of the generated dynamic library. The default `None` means "use the current toolchain's platform default" (`lib` on Linux/macOS, empty on Windows).
+- `suffix`: str | None = None, the file name suffix of the generated dynamic library. The default `None` means "use the current toolchain's platform default" (`.so` on Linux, `.dylib` on macOS, `.dll` on Windows).
 - `allow_undefined`: bool = False, whether undefined symbols are allowed when linking. Because many plug-in libraries depend on the symbol names provided by the
   host process at runtime, the definition of these symbols does not exist in the link phase.
 - `strip`: bool = False, whether to remove the debugging symbol information. If enabled, the size of the generated library can be reduced, but symbolic debugging
@@ -495,8 +495,8 @@ Attributes:
   The linker version script is used to control the version and visibility of the symbol, if no version id is specified, it only to control the visibility of the symbol.
   Linker version script files usually have the extension `exp`, `sym`, `.ver` or `.map`.
 
-`prefix` and `suffix` control the file name of the generated dynamic library, assuming `name='file'`, the default generated library is `libfile.so`,
-set `prefix=''`, then it becomes `file.so`.
+`prefix` and `suffix` control the file name of the generated dynamic library. Assuming `name='file'`, on a Linux toolchain the default output is `libfile.so`;
+setting `prefix=''` makes it `file.so`. Passing a `name` that already carries a shared-library extension (e.g. `name='file.so'`) is no longer implicitly treated as "the full output file name"; to fully customize the output name, pass `prefix=''` and `suffix='.so'` explicitly.
 
 ### Controlling the visibility of symbols in dynamic libraries
 

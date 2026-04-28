@@ -469,8 +469,8 @@ cc_plugin(
 
 属性：
 
-- `prefix`: str, 生成的动态库的文件名前缀，默认为 `lib`
-- `suffix`: str，生成的动态库的文件名后缀，默认为 `.so`
+- `prefix`: str | None, 生成的动态库的文件名前缀。默认为 `None`，表示沿用当前工具链的平台默认前缀（Linux/macOS 为 `lib`，Windows 为空）。
+- `suffix`: str | None, 生成的动态库的文件名后缀。默认为 `None`，表示沿用当前工具链的平台默认后缀（Linux 为 `.so`，macOS 为 `.dylib`，Windows 为 `.dll`）。
 - `allow_undefined`: bool, 链接时是否允许未定义的符号。因为很多插件库运行时依赖宿主进程提供的符号名，链接阶段并不存在这些符号的定义。
 - `strip`: bool, 是否去除调试符号信息，开启后可以减少生成的库的大小，但是无法进行符号化调试。
 - `linker_scripts`: list(string)，使用链接器脚本。
@@ -483,7 +483,7 @@ cc_plugin(
   链接器版本脚本用来控制符号的版本及可见性，内容仅限于完整的链接脚本里 `VERSION {};` 内的部分，如果不指定版本号，那么可以只用来控制符号的可见性。
   链接器版本脚本文件的扩展名一般为 `exp`、`sym`、`.ver` 或者 `.map`。
 
-`prefix` 和 `suffix` 控制生成的动态库的文件名，假设 `name='file'`，默认生成的库为 `libfile.so`，设置`prefix=''`，则变为 `file.so`。
+`prefix` 和 `suffix` 控制生成的动态库的文件名。假设 `name='file'`，在 Linux 工具链上默认生成 `libfile.so`；设置 `prefix=''` 则变为 `file.so`。传入已带共享库后缀的 `name`（如 `name='file.so'`）不再被隐式识别为"输出文件全名"，如需完全自定义输出文件名，请改用 `prefix=''` 与 `suffix='.so'` 显式表达。
 
 ### 控制动态库中符号的可见性
 
