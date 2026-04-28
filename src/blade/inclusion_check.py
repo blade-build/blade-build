@@ -29,7 +29,7 @@ def find_libs_by_header(hdr, hdr_targets_map, hdr_dir_targets_map):
             return set()
 
 
-class GlobalDeclaration(object):
+class GlobalDeclaration:
     """Global inclusion dependenct relationship declaration."""
     def __init__(self, declaration_file):
         self._declaration_file = declaration_file
@@ -124,7 +124,7 @@ def _parse_inclusion_stacks(path, build_dir):
                 break
             level, hdr = _parse_hdr_level_line(line)
             if level == -1:
-                console.log('%s: Unrecognized line %s' % (path, line))
+                console.log('{}: Unrecognized line {}'.format(path, line))
                 break
             if level == 1 and not hdr.startswith('/'):
                 direct_hdrs.append(_remove_build_dir_prefix(os.path.normpath(hdr), build_dir))
@@ -181,7 +181,7 @@ def _remove_build_dir_prefix(path, build_dir):
     return path
 
 
-class Checker(object):
+class Checker:
     """C/C++ Header file inclusion dependency checker"""
 
     def __init__(self, target):
@@ -248,7 +248,7 @@ class Checker(object):
             if not libs:
                 libs = self.find_targets_by_private_hdr(hdr)
                 if libs and self.key not in libs:
-                    msg.append('    "%s" is a private header file of %s' % (
+                    msg.append('    "{}" is a private header file of {}'.format(
                             hdr, self._or_joined_libs(libs)))
                     continue
                 console.diagnose(self.source_location, 'debug', '"%s" is an undeclared header' % hdr)
@@ -303,7 +303,7 @@ class Checker(object):
             libs = self.find_libs_by_header(hdr)
         if not libs:
             return '"%s"' % hdr
-        return '"%s", which belongs to %s' % (hdr, self._or_joined_libs(libs))
+        return '"{}", which belongs to {}'.format(hdr, self._or_joined_libs(libs))
 
     def _or_joined_libs(self, libs):
         """Return " or " joind libs descriptive string."""
@@ -390,10 +390,10 @@ class Checker(object):
         severity = self.severity
         if direct_check_msg:
             console.diagnose(self.source_location, severity,
-                '%s: Missing dependency declaration:\n%s' % (self.name, '\n'.join(direct_check_msg)))
+                '{}: Missing dependency declaration:\n{}'.format(self.name, '\n'.join(direct_check_msg)))
         if generated_check_msg:
             console.diagnose(self.source_location, severity,
-                '%s: Missing indirect dependency declaration:\n%s' % (self.name, '\n'.join(generated_check_msg)))
+                '{}: Missing indirect dependency declaration:\n{}'.format(self.name, '\n'.join(generated_check_msg)))
 
         ok = (severity != 'error' or not direct_check_msg and not generated_check_msg)
 

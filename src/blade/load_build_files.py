@@ -79,7 +79,7 @@ def _find_dir_dependent(dir, blade):
 
 def _report_not_exist(kind, path, source_dir, blade):
     """Report dir or BUILD file does not exist."""
-    msg = '%s "//%s" does not exist' % (kind, path)
+    msg = '{} "//{}" does not exist'.format(kind, path)
     dependent = _find_dir_dependent(source_dir, blade)
     (dependent or console).error(msg)
 
@@ -256,7 +256,7 @@ def load(name, *symbols, **aliases):
     extension_globals = _load_extension(name)
 
     def error(symbol):
-        console.diagnose(src_loc, 'error', '"%s" is not defined in "%s"' % (symbol, name))
+        console.diagnose(src_loc, 'error', '"{}" is not defined in "{}"'.format(symbol, name))
 
     if '*' in symbols:
         # Wildcard import import all symbols except aliases.
@@ -314,7 +314,7 @@ def __load_build_file(source_dir, blade):
             except SystemExit:
                 console.fatal('%s: Fatal error' % build_file)
             except Exception:
-                console.fatal('Parse error in %s\n%s' % (
+                console.fatal('Parse error in {}\n{}'.format(
                     build_file, traceback.format_exc()))
         else:
             _report_not_exist('File', build_file, source_dir, blade)
@@ -382,7 +382,7 @@ def _has_load_excluded_file(root, files):
         console.info('Skip nested workspace "%s"' % root)
         return True
     if _BLADE_SKIP_FILE in files:
-        console.info('Skip "%s" due to the "%s" file' % (root, _BLADE_SKIP_FILE))
+        console.info('Skip "{}" due to the "{}" file'.format(root, _BLADE_SKIP_FILE))
         return True
     return False
 
@@ -489,7 +489,7 @@ def _expand_target_patterns(blade, target_ids, excluded_trees):
 
         skip_file = _check_under_skipped_dir(source_dir)
         if skip_file:
-            console.warning('"%s" is under skipped directory due to "%s", ignored' % (target_id, skip_file))
+            console.warning('"{}" is under skipped directory due to "{}", ignored'.format(target_id, skip_file))
             continue
 
         if target_name == '...':
@@ -552,7 +552,7 @@ def _load_related_build_files(blade, command_targets, processed_dirs):
         skip_file = _check_under_skipped_dir(source_dir)
         if skip_file:
             dependent = _find_dependent(target_id, blade)
-            dependent.error('"%s" is under skipped directory due to "%s"' % (target_id, skip_file))
+            dependent.error('"{}" is under skipped directory due to "{}"'.format(target_id, skip_file))
             continue
 
         if not _load_build_file(source_dir, processed_dirs, blade):

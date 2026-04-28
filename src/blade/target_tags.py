@@ -62,8 +62,8 @@ def _convert_expression(expr, func_name):
         else:
             scope, names = token.split(':')
             names = names.split(',')
-            args = ', '.join(['"%s:%s"' % (scope, name) for name in names])
-            tokens.append('%s(%s)' % (func_name, args))
+            args = ', '.join(['"{}:{}"'.format(scope, name) for name in names])
+            tokens.append('{}({})'.format(func_name, args))
     if stack:
         error = 'Unbalanced "(": "%s"' % expr[stack[-1][1]:]
         return None, error
@@ -78,7 +78,7 @@ def _compile_filter_expr(expr, match_func):
     try:
         code = compile(result, '--tags-filter', 'eval')
     except SyntaxError as e:
-        return None, "%s: %s" % (str(e), result)
+        return None, "{}: {}".format(str(e), result)
     return code, error
 
 

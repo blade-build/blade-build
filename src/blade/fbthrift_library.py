@@ -39,7 +39,7 @@ class FBThriftLibrary(CcTarget):
                  deprecated,
                  kwargs):
         srcs = var_to_list(srcs)
-        super(FBThriftLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='fbthrift_library',
                 srcs=srcs,

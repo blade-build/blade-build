@@ -18,7 +18,7 @@ from blade import config
 from blade import console
 
 
-class JacocoReporter(object):
+class JacocoReporter:
     """
     Jacoco Coverage Report Generator
     """
@@ -68,7 +68,7 @@ class JacocoReporter(object):
         """
         for cls in classes:
             if cls in checked_classes:
-                console.warning('Conflict: %s/%s already existed in %s' % (classes_path, cls, checked_classes[cls]))
+                console.warning('Conflict: {}/{} already existed in {}'.format(classes_path, cls, checked_classes[cls]))
                 return True
             checked_classes[cls] = classes_path
         return False
@@ -160,7 +160,7 @@ class JacocoReporter(object):
         with open(report_dir + '.packages.csv', 'w') as f:
             f.write('package_name,source_path\r\n')
             for package, path in mapping.items():
-                f.write('%s,%s\r\n' % (package, path))
+                f.write('{},{}\r\n'.format(package, path))
 
     def generate(self):
         """Run jacococli to generate coverage report"""

@@ -86,7 +86,7 @@ def generate_fat_jar(output, conflict_severity, compression_level, args):
                 else:
                     if name.endswith('/'):
                         continue
-                    message = ('%s: Duplicate path %s found in {%s, %s}' % (
+                    message = ('{}: Duplicate path {} found in {{{}, {}}}'.format(
                         target, name,
                         os.path.basename(path_jar_dict[name]),
                         os.path.basename(dep_jar)))
@@ -126,7 +126,7 @@ def main():
         options, args = util.parse_command_line(sys.argv[1:])
         generate_fat_jar(args=args, **options)
     except Exception as e:  # pylint: disable=broad-except
-        console.error('fatjar error: %s %s' % (str(e), traceback.format_exc()))
+        console.error('fatjar error: {} {}'.format(str(e), traceback.format_exc()))
         sys.exit(1)
 
 

@@ -51,7 +51,7 @@ class PackageTarget(Target):
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
 
-        super(PackageTarget, self).__init__(
+        super().__init__(
                 name=name,
                 type='package',
                 srcs=[],
@@ -62,7 +62,7 @@ class PackageTarget(Target):
                 kwargs=kwargs)
 
         if type not in _package_types:
-            self.error('Invalid type %s. Types supported by the package are %s' % (
+            self.error('Invalid type {}. Types supported by the package are {}'.format(
                        type, ', '.join(sorted(_package_types))))
         self.attr['type'] = type
         self.attr['sources'] = []
@@ -71,7 +71,7 @@ class PackageTarget(Target):
         self._process_srcs(srcs)
 
         if not out:
-            out = '%s.%s' % (name, type)
+            out = '{}.{}'.format(name, type)
         self.attr['out'] = out
         self.attr['shell'] = shell
 
@@ -105,7 +105,7 @@ class PackageTarget(Target):
         Return src full path within the workspace and mapping path in the archive.
         """
         if '..' in src or '..' in dst:
-            self.error('Invalid src (%s, %s). Relative path is not allowed.' % (src, dst))
+            self.error('Invalid src ({}, {}). Relative path is not allowed.'.format(src, dst))
 
         if src.startswith('//'):
             src = src[2:]
@@ -143,7 +143,7 @@ class PackageTarget(Target):
         for key, type, dst in self.attr['locations']:
             path = targets[key]._get_target_file(type)
             if not path:
-                self.warning('Location %s %s is missing. Ignored.' % (key, type))
+                self.warning('Location {} {} is missing. Ignored.'.format(key, type))
                 continue
             if not dst:
                 dst = os.path.basename(path)

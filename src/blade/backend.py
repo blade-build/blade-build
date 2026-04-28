@@ -1,4 +1,3 @@
-# coding: utf-8
 # Copyright (c) 2011 Tencent Inc.
 # All rights reserved.
 #
@@ -62,7 +61,7 @@ def _shell_support_pipefail():
     return subprocess.call('set -o pipefail 2>/dev/null', shell=True) == 0
 
 
-class _NinjaFileHeaderGenerator(object):
+class _NinjaFileHeaderGenerator:
     """Generate global declarations and definitions for build script.
 
     Specifically it may consist of global functions and variables,
@@ -314,7 +313,7 @@ class _NinjaFileHeaderGenerator(object):
         arflags = ''.join(config.get_item('cc_library_config', 'arflags'))
         ar = self.build_accelerator.get_ar_command()
         self.generate_rule(name='ar',
-                           command='rm -f $out; %s %s $out $in' % (ar, arflags),
+                           command='rm -f $out; {} {} $out $in'.format(ar, arflags),
                            description='AR ${out}')
 
     def _generate_cc_link_rules(self, ld, linkflags):
@@ -368,7 +367,7 @@ class _NinjaFileHeaderGenerator(object):
 
         if _shell_support_pipefail():
             # Use `pipefail` to ensure that the exit code is correct.
-            template = 'export LC_ALL=C; set -o pipefail; %%s %s 2>&1 | %s > %s' % (
+            template = 'export LC_ALL=C; set -o pipefail; %s {} 2>&1 | {} > {}'.format(
                 print_header_option, _INCLUSION_STACK_SPLITTER, inclusion_stack_file)
         else:
             # Some shell such as Ubuntu's `dash` doesn't support pipefail, make a workaround.
@@ -428,7 +427,7 @@ class _NinjaFileHeaderGenerator(object):
                 outdir = os.path.join(go_home, 'src')
             subplugins = proto_config['protoc_go_subplugins']
             if subplugins:
-                go_out = 'plugins=%s:%s' % ('+'.join(subplugins), outdir)
+                go_out = 'plugins={}:{}'.format('+'.join(subplugins), outdir)
             else:
                 go_out = outdir
             self.generate_rule(name='protogo',
@@ -499,7 +498,7 @@ class _NinjaFileHeaderGenerator(object):
     def generate_java_jar_rules(self, java_config):
         jar = self.get_java_command(java_config, 'jar')
         level = config.get_item('java_config', 'jar_compression_level')
-        args = '%s --compression_level=%s ${out} ${in}' % (jar, level)
+        args = '{} --compression_level={} ${{out}} ${{in}}'.format(jar, level)
         self.generate_rule(name='javajar',
                            command=self._builtin_command('java_jar', args),
                            description='JAVA JAR ${out}')
@@ -515,7 +514,7 @@ class _NinjaFileHeaderGenerator(object):
     def generate_fatjar_rules(self, java_config):
         conflict_severity = java_config.get('fat_jar_conflict_severity', 'warning')
         compression_level = java_config.get('fat_jar_compression_level')
-        args = '--output=${out} --compression_level=%s --conflict_severity=%s ${in}' % (
+        args = '--output=${{out}} --compression_level={} --conflict_severity={} ${{in}}'.format(
             compression_level, conflict_severity)
         self.generate_rule(name='fatjar',
                            command=self._builtin_command('java_fatjar', args),
@@ -626,17 +625,17 @@ class _NinjaFileHeaderGenerator(object):
                     # add slash to the end of the relpath
                     out_relative = os.path.join(os.path.relpath("./", go_module_relpath), "")
             else:
-                prefix = 'GOPATH=%s %s' % (go_path, go)
+                prefix = 'GOPATH={} {}'.format(go_path, go)
             self.generate_rule(name='gopackage',
                                command='%s install ${extra_goflags} ${package}' % prefix,
                                description='GO INSTALL ${package}',
                                pool=go_pool)
             self.generate_rule(name='gocommand',
-                               command='%s build -o %s${out} ${extra_goflags} ${package}' % (prefix, out_relative),
+                               command='{} build -o {}${{out}} ${{extra_goflags}} ${{package}}'.format(prefix, out_relative),
                                description='GO BUILD ${package}',
                                pool=go_pool)
             self.generate_rule(name='gotest',
-                               command='%s test -c -o %s${out} ${extra_goflags} ${package}' % (prefix, out_relative),
+                               command='{} test -c -o {}${{out}} ${{extra_goflags}} ${{package}}'.format(prefix, out_relative),
                                description='GO TEST ${package}',
                                pool=go_pool)
 
@@ -686,7 +685,7 @@ class _NinjaFileHeaderGenerator(object):
                   url = %s
                   profile = %s
                   compiler = %s
-                ''') % (scm, revision, url, self.options.profile, '%s %s' % (cc, cc_version)))
+                ''') % (scm, revision, url, self.options.profile, '{} {}'.format(cc, cc_version)))
         self._add_line(textwrap.dedent('''\
                 build %s: cxx %s
                   cppflags = -w -O2
@@ -744,7 +743,7 @@ class _NinjaFileHeaderGenerator(object):
     def _builtin_command(self, builder, args=''):
         cmd = ['PYTHONPATH=%s:$$PYTHONPATH' % self.blade_path]
         python = os.environ.get('BLADE_PYTHON_INTERPRETER') or sys.executable
-        cmd.append('%s -m blade.builtin_tools %s' % (python, builder))
+        cmd.append('{} -m blade.builtin_tools {}'.format(python, builder))
         if args:
             cmd.append(args)
         else:
@@ -770,7 +769,7 @@ class _NinjaFileHeaderGenerator(object):
         return self.rules_buf
 
 
-class NinjaFileGenerator(object):
+class NinjaFileGenerator:
     """Generate ninja rules to build.ninja."""
 
     def __init__(self, ninja_path, blade_path, blade):

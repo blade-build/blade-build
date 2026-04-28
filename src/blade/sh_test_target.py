@@ -42,7 +42,7 @@ class ShellTest(Target):
         deps = var_to_list(deps)
         testdata = var_to_list(testdata)
 
-        super(ShellTest, self).__init__(
+        super().__init__(
                 name=name,
                 type='sh_test',
                 srcs=srcs,
@@ -86,7 +86,7 @@ class ShellTest(Target):
         for key, type, dst in self.attr['locations']:
             path = targets[key]._get_target_file(type)
             if not path:
-                self.warning('Location %s %s is missing. Ignored.' % (key, type))
+                self.warning('Location {} {} is missing. Ignored.'.format(key, type))
             else:
                 inputs.append(path)
                 if not dst:

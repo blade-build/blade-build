@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2025 Tencent Inc.
 # All rights reserved.
@@ -50,14 +49,14 @@ def expand_response_files(args):
         # This is a response file
         rsp_path = arg[1:]
         try:
-            with open(rsp_path, 'r') as f:
+            with open(rsp_path) as f:
                 # Read lines from response file
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#'):
                         # Support multiple arguments per line
                         expanded.extend(line.split())
-        except IOError as e:
+        except OSError as e:
             console.fatal("Error: Failed to read response file %s: %s" %
                     (rsp_path, e))
     return expanded
@@ -76,7 +75,7 @@ def extract_objects_from_archive(archive_path):
     # Use 'ar t' to list contents of the archive, 'ar t' outputs full paths
     returncode, stdout, stderr = util.run_command(['ar', 't', archive_path])
     if returncode != 0:
-        console.fatal("Error: Failed to extract objects from %s with '%s'" % (archive_path, stderr))
+        console.fatal("Error: Failed to extract objects from {} with '{}'".format(archive_path, stderr))
 
     object_files = []
     for line in stdout.strip().splitlines():

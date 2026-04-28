@@ -34,7 +34,7 @@ def config_rule(func):
     return func
 
 
-class BladeConfig(object):
+class BladeConfig:
     """BladeConfig. A configuration parser class."""
 
     def __init__(self):
@@ -277,17 +277,17 @@ class BladeConfig(object):
         }
 
     def info(self, msg):
-        console.info('%s: info: %s' % (source_location(self.current_file_name), msg), prefix=False)
+        console.info('{}: info: {}'.format(source_location(self.current_file_name), msg), prefix=False)
 
     def warning(self, msg):
-        console.warning('%s: warning: %s' % (source_location(self.current_file_name), msg), prefix=False)
+        console.warning('{}: warning: {}'.format(source_location(self.current_file_name), msg), prefix=False)
 
     def error(self, msg):
-        console.error('%s: error: %s' % (source_location(self.current_file_name), msg), prefix=False)
+        console.error('{}: error: {}'.format(source_location(self.current_file_name), msg), prefix=False)
 
     def fatal(self, msg):
         # NOTE: VSCode's problem matcher doesn't recognize 'fatal', use 'error' instead
-        console.fatal('%s: error: %s' % (source_location(self.current_file_name), msg), prefix=False)
+        console.fatal('{}: error: {}'.format(source_location(self.current_file_name), msg), prefix=False)
 
     def try_parse_file(self, filename):
         """load the configuration file and parse."""
@@ -328,10 +328,10 @@ class BladeConfig(object):
                 if isinstance(section[k], list):
                     section[k] += var_to_list(append[k])
                 else:
-                    self.warning('%s: Config item %s is not a list' % (section_name, k))
+                    self.warning('{}: Config item {} is not a list'.format(section_name, k))
 
             else:
-                self.warning('%s: Unknown config item name: %s' % (section_name, k))
+                self.warning('{}: Unknown config item name: {}'.format(section_name, k))
 
     def _replace_config(self, section_name, section, user_config):
         """Replace config section items"""
@@ -349,7 +349,7 @@ class BladeConfig(object):
                 if item_name in section:
                     self._prepend_item_value(section, name, item_name, value, user_config)
                     continue
-            msg = '%s: Unknown config item name: "%s"' % (section_name, name)
+            msg = '{}: Unknown config item name: "{}"'.format(section_name, name)
             other_section = self.suggest_other_section(name)
             if other_section:
                 msg += ', maybe it is in "%s"?' % other_section
@@ -365,30 +365,30 @@ class BladeConfig(object):
         elif isinstance(value, type(section[name])):
             section[name] = value
         else:
-            self.error('Incorrect type for "%s", expect "%s", actual "%s"' % (
+            self.error('Incorrect type for "{}", expect "{}", actual "{}"'.format(
                 name, type(section[name]).__name__, type(value).__name__))
 
     def _append_item_value(self, section, name, item_name, value, user_config):
         """Append value to config item."""
         if item_name in user_config:
-            self.error('"%s" and "%s" can not be used together' % (name, item_name))
+            self.error('"{}" and "{}" can not be used together'.format(name, item_name))
             return
         if isinstance(section[item_name], list):
             section[item_name] += var_to_list(value)
         elif isinstance(section[item_name], set):
             section[item_name].update(var_to_list(value))
         else:
-            self.warning('Invalid "%s", "%s" is not appendable' % (name, item_name))
+            self.warning('Invalid "{}", "{}" is not appendable'.format(name, item_name))
 
     def _prepend_item_value(self, section, name, item_name, value, user_config):
         """Prepend value to config item."""
         if item_name in user_config:
-            self.error('"%s" and "%s" can not be used together' % (name, item_name))
+            self.error('"{}" and "{}" can not be used together'.format(name, item_name))
             return
         if isinstance(section[item_name], list):
             section[item_name] = var_to_list(value) + section[item_name]
         else:
-            self.warning('Invalid "%s", "%s" is not prependable' % (name, item_name))
+            self.warning('Invalid "{}", "{}" is not prependable'.format(name, item_name))
 
     def suggest_other_section(self, name):
         """Suggest possible section for item name"""
@@ -427,7 +427,7 @@ class BladeConfig(object):
             help = k + '__help__'
             if help in values:
                 print('    # %s' % values[help], file=f)
-            print('    %s = %s,' % (k, pprint.pformat(v, indent=8)), file=f)
+            print('    {} = {},'.format(k, pprint.pformat(v, indent=8)), file=f)
         print(')\n', file=f)
 
 
@@ -465,7 +465,7 @@ def get_item(section_name, item_name):
 def _check_kwarg_enum_value(kwargs, name, valid_values):
     value = kwargs.get(name)
     if value is not None and value not in valid_values:
-        _blade_config.error('Invalid config item "%s" value "%s", can only be in %s' % (
+        _blade_config.error('Invalid config item "{}" value "{}", can only be in {}'.format(
             name, value, valid_values))
 
 
@@ -475,7 +475,7 @@ def _check_test_related_envs(kwargs):
             re.compile(name)
         except re.error as e:
             _blade_config.error(
-                '"global_config.test_related_envs": Invalid env name or regex "%s", %s' % (name, e))
+                '"global_config.test_related_envs": Invalid env name or regex "{}", {}'.format(name, e))
 
 
 def _check_default_visibility(kwargs):

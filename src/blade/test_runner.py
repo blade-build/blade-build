@@ -79,7 +79,7 @@ class TestRunner(binary_runner.BinaryRunner):
             test_jobs_num:int, max number of concurrent test jobs
         """
         # pylint: disable=too-many-locals, too-many-statements
-        super(TestRunner, self).__init__(options, target_database, build_targets)
+        super().__init__(options, target_database, build_targets)
         self.__direct_targets = direct_targets
         self.__command_targets = command_targets
         self.__test_jobs_num = test_jobs_num
@@ -119,7 +119,7 @@ class TestRunner(binary_runner.BinaryRunner):
     def _update_test_history(self):
         old_env = self.test_history.get('env', {})
         env_keys = _filter_envs(os.environ.keys())
-        new_env = dict((key, os.environ[key]) for key in env_keys)
+        new_env = {key: os.environ[key] for key in env_keys}
         if old_env and new_env != old_env:
             console.notice('Some tests will be run due to test environments changed:')
             new, old = _diff_env(new_env, old_env)
@@ -229,7 +229,7 @@ class TestRunner(binary_runner.BinaryRunner):
                 data_target = data_target[2:]
                 data_target_path = os.path.abspath(data_target)
             else:
-                data_target_path = os.path.abspath('%s/%s' % (
+                data_target_path = os.path.abspath('{}/{}'.format(
                                                    target.path, data_target))
             if os.path.exists(data_target_path):
                 related_file_data_list.append(data_target_path)
@@ -352,7 +352,7 @@ class TestRunner(binary_runner.BinaryRunner):
         tests.sort(key=lambda x: x[1])
         output_function = console.error if is_error else console.info
         for key, costtime, reason, result in tests:
-            output_function('  %s triggered by %s, exit(%s), cost %.2f s' % (
+            output_function('  {} triggered by {}, exit({}), cost {:.2f} s'.format(
                             key, reason, result, costtime), prefix=False)
 
     def _show_unrepaired_results(self):
@@ -365,7 +365,7 @@ class TestRunner(binary_runner.BinaryRunner):
             test = items[key]
             first_fail_time = time.strftime('%F %T %A', time.localtime(test.first_fail_time))
             duration = datetime.timedelta(seconds=int(time.time() - test.first_fail_time))
-            console.error('  %s: exit(%s), retry %s times, since %s, duration %s' % (
+            console.error('  {}: exit({}), retry {} times, since {}, duration {}'.format(
                 key, test.result.exit_code, test.fail_count, first_fail_time, duration),
                 prefix=False)
         console.error('You can specify --run-unrepaired-tests to run them', prefix=False)
@@ -380,7 +380,7 @@ class TestRunner(binary_runner.BinaryRunner):
         if slow_tests:
             console.warning('Found %d slow tests:' % len(slow_tests))
             for cost_time, key in sorted(slow_tests):
-                console.warning('  %.4gs\t//%s' % (cost_time, key), prefix=False)
+                console.warning('  {:.4g}s\t//{}'.format(cost_time, key), prefix=False)
 
     def _show_tests_summary(self, passed_run_results, failed_run_results):
         """Show tests summary."""

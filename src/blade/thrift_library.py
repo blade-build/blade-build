@@ -38,7 +38,7 @@ class ThriftLibrary(CcTarget):
             deprecated,
             kwargs):
         srcs = var_to_list(srcs)
-        super(ThriftLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='thrift_library',
                 srcs=srcs,

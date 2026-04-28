@@ -189,7 +189,7 @@ class CcTarget(Target):
         deps = var_to_list(deps)
         self.cmd = cmd
 
-        super(CcTarget, self).__init__(
+        super().__init__(
                 name=name,
                 type=type,
                 srcs=srcs,
@@ -274,7 +274,7 @@ class CcTarget(Target):
             if dep and dep.attr.get('deprecated'):
                 replaced_deps = dep.deps
                 if replaced_deps:
-                    self.warning('//%s is deprecated, please depends on //%s' % (
+                    self.warning('//{} is deprecated, please depends on //{}'.format(
                         dep, replaced_deps[0]))
 
     __cxx_keyword_list = frozenset([
@@ -757,7 +757,7 @@ class CcTarget(Target):
 
     def _collect_declared_headers(self):
         """Collect direct headers declarations."""
-        declared_hdrs = set(full_hdr for hdr, full_hdr in self.attr['expanded_hdrs'])
+        declared_hdrs = {full_hdr for hdr, full_hdr in self.attr['expanded_hdrs']}
         declared_incs = set(self.attr.get('generated_incs', []))
 
         build_targets = self.blade.get_build_targets()
@@ -836,7 +836,7 @@ class CcLibrary(CcTarget):
 
         """
         # pylint: disable=too-many-locals
-        super(CcLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='cc_library',
                 srcs=srcs,
@@ -900,7 +900,7 @@ class PrebuiltCcLibrary(CcTarget):
                  kwargs):
         """Init method."""
         # pylint: disable=too-many-locals
-        super(PrebuiltCcLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='prebuilt_cc_library',
                 srcs=[],
@@ -938,7 +938,7 @@ class PrebuiltCcLibrary(CcTarget):
         has_dynamic = os.path.exists(dynamic_source)
 
         if not has_static and not has_dynamic:
-            self.error('Can not find either %s or %s' % (static_source, dynamic_source))
+            self.error('Can not find either {} or {}'.format(static_source, dynamic_source))
             return
 
         if has_static:
@@ -983,7 +983,7 @@ class PrebuiltCcLibrary(CcTarget):
 
         libpath = os.path.join(self.path, libpath)
 
-        return os.path.join(libpath, 'lib%s.%s' % (self.name, suffix))
+        return os.path.join(libpath, 'lib{}.{}'.format(self.name, suffix))
 
     def _is_depended(self):
         """Does this library really be used"""
@@ -1161,7 +1161,7 @@ class ForeignCcLibrary(CcTarget):
                  kwargs):
         """Init method."""
         # pylint: disable=too-many-locals
-        super(ForeignCcLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='foreign_cc_library',
                 srcs=[],
@@ -1199,7 +1199,7 @@ class ForeignCcLibrary(CcTarget):
         """Return full path of the library file with specified type"""
         assert type in ('a', 'so')
         return self._target_file_path(os.path.join(self.attr['install_dir'], self.attr['lib_dir'],
-                                                   'lib%s.%s' % (self.name, type)))
+                                                   'lib{}.{}'.format(self.name, type)))
 
     def soname_and_full_path(self):
         """Return soname and full path of the shared library, if any"""
@@ -1310,7 +1310,7 @@ class CcBinary(CcTarget):
 
         """
         # pylint: disable=too-many-locals
-        super(CcBinary, self).__init__(
+        super().__init__(
                 name=name,
                 type='cc_binary',
                 srcs=srcs,
@@ -1519,7 +1519,7 @@ class CcPlugin(CcTarget):
         Init the cc plugin target.
 
         """
-        super(CcPlugin, self).__init__(
+        super().__init__(
                   name=name,
                   type='cc_plugin',
                   srcs=srcs,
@@ -1659,7 +1659,7 @@ class CcTest(CcBinary):
         if dynamic_link is None:
             dynamic_link = cc_test_config['dynamic_link']
 
-        super(CcTest, self).__init__(
+        super().__init__(
                 name=name,
                 srcs=srcs,
                 deps=deps,

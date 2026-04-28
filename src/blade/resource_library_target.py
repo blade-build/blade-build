@@ -32,7 +32,7 @@ class ResourceLibrary(cc_targets.CcTarget):
         Init the cc target.
 
         """
-        super(ResourceLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='resource_library',
                 srcs=srcs,

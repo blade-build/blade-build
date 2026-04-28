@@ -45,7 +45,7 @@ class GoTarget(Target):
         deps = var_to_list(deps)
         extra_goflags = ' '.join(var_to_list(extra_goflags))
 
-        super(GoTarget, self).__init__(
+        super().__init__(
                 name=name,
                 type=type,
                 srcs=srcs,
@@ -139,7 +139,7 @@ class GoLibrary(GoTarget):
     """GoLibrary generates build rules for a go package."""
 
     def __init__(self, name, srcs, deps, visibility, tags, extra_goflags, kwargs):
-        super(GoLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='go_library',
                 srcs=srcs,
@@ -156,7 +156,7 @@ class GoLibrary(GoTarget):
         """Return package object path according to the standard go directory layout."""
         go_home = config.get_item('go_config', 'go_home')
         return os.path.join(go_home, 'pkg',
-                            '%s_%s' % (GoTarget._go_os, GoTarget._go_arch),
+                            '{}_{}'.format(GoTarget._go_os, GoTarget._go_arch),
                             '%s.a' % self.attr['go_package'])
 
 
@@ -164,7 +164,7 @@ class GoBinary(GoTarget):
     """GoBinary generates build rules for a go command executable."""
 
     def __init__(self, name, srcs, deps, visibility, tags, extra_goflags, kwargs):
-        super(GoBinary, self).__init__(
+        super().__init__(
                 name=name,
                 type='go_binary',
                 srcs=srcs,
@@ -182,7 +182,7 @@ class GoTest(GoTarget):
     """GoTest generates build rules for a go test binary."""
 
     def __init__(self, name, srcs, deps, visibility, tags, testdata, extra_goflags, kwargs):
-        super(GoTest, self).__init__(
+        super().__init__(
                 name=name,
                 type='go_test',
                 srcs=srcs,
