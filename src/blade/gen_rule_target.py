@@ -54,7 +54,7 @@ class GenRuleTarget(Target):
         """
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
-        super(GenRuleTarget, self).__init__(
+        super().__init__(
                 name=name,
                 type='gen_rule',
                 srcs=srcs,
@@ -133,7 +133,7 @@ class GenRuleTarget(Target):
             for key, label in locations:
                 path = targets[key]._get_target_file(label)
                 if not path:
-                    self.error('Invalid location reference %s %s' % (':'.join(key), label))
+                    self.error('Invalid location reference {} {}'.format(':'.join(key), label))
                     continue
                 locations_paths.append(path)
             cmd = cmd % tuple(locations_paths)
@@ -165,7 +165,7 @@ class GenRuleTarget(Target):
         # `build` statement, so any other build scoped variables are expanded to empty.
         rule = '%s__rule__' % regular_variable_name(self._source_file_path(self.name))
         cmd = self._expand_command()
-        description = console.colored('%s %s' % (self.attr['cmd_name'], self.fullname), 'dimpurple')
+        description = console.colored('{} {}'.format(self.attr['cmd_name'], self.fullname), 'dimpurple')
         self._write_rule(_RULE_FORMAT % (rule, cmd, self.blade.get_root_dir(), description))
 
         outputs = self.attr['outputs']

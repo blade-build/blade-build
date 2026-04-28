@@ -21,7 +21,7 @@ from blade.util import var_to_list, run_command
 # example: Cuda compilation tools, release 11.0, V11.0.194
 _nvcc_version_re = re.compile(r'V(\d+\.\d+\.\d+)')
 
-class BuildArchitecture(object):
+class BuildArchitecture:
     """
     The BuildArchitecture class manages architecture/bits configuration
     across various platforms/compilers combined with the input from
@@ -103,7 +103,7 @@ class BuildArchitecture(object):
         return None
 
 
-class ToolChain(object):
+class ToolChain:
     """The build platform handles and gets the platform information."""
 
     def __init__(self):
@@ -233,7 +233,7 @@ class ToolChain(object):
                 valid_flags.append(flag)
 
         if unrecognized_flags:
-            console.warning('config: Unrecognized %s flags: %s' % (
+            console.warning('config: Unrecognized {} flags: {}'.format(
                     language, ', '.join(unrecognized_flags)))
 
         return valid_flags

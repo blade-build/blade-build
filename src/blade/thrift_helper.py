@@ -27,7 +27,7 @@ import re
 from blade import console
 
 
-class ThriftParser(object):
+class ThriftParser:
     def __init__(self, path):
         self.path = path
         if not os.path.isfile(self.path):
@@ -119,7 +119,7 @@ class FBThriftHelper(ThriftParser):
 
 class ThriftHelper(ThriftParser):
     def __init__(self, dir, src):
-        super(ThriftHelper, self).__init__(os.path.join(dir, src))
+        super().__init__(os.path.join(dir, src))
         self.src = src
 
     def get_generated_cpp_files(self):

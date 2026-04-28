@@ -64,7 +64,7 @@ def lock_file(filename):
         fcntl.fcntl(fd, fcntl.F_SETFD, old_fd_flags | fcntl.FD_CLOEXEC)
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return fd, 0
-    except IOError as ex_value:
+    except OSError as ex_value:
         return -1, ex_value.errno
 
 
@@ -73,7 +73,7 @@ def unlock_file(fd):
     try:
         fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
-    except IOError:
+    except OSError:
         pass
 
 
@@ -270,7 +270,7 @@ def source_location(filename):
             lineno = frame.f_lineno
             break
         frame = frame.f_back
-    return '%s:%s' % (full_filename, lineno)
+    return '{}:{}'.format(full_filename, lineno)
 
 
 def calling_source_location(skip=0):
@@ -280,7 +280,7 @@ def calling_source_location(skip=0):
     frame = inspect.currentframe()
     while frame:
         if skipped == skip:
-            return '%s:%s' % (frame.f_code.co_filename, frame.f_lineno)
+            return '{}:{}'.format(frame.f_code.co_filename, frame.f_lineno)
         frame = frame.f_back
         skipped += 1
     raise ValueError('Invalid value "%d" for "skip"' % skip)

@@ -74,7 +74,7 @@ def _generate_scm(build_dir):
         }, f)
 
 
-class Workspace(object):
+class Workspace:
     """Workspace represent a dir tree rooted from the dir where the BLADE_ROOT residents."""
     def __init__(self, options):
         self.__options = options
@@ -111,7 +111,7 @@ class Workspace(object):
             os.mkdir(build_dir)
         try:
             os.remove('blade-bin')
-        except os.error:
+        except OSError:
             pass
         os.symlink(os.path.abspath(build_dir), 'blade-bin')
 

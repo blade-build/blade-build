@@ -62,7 +62,7 @@ def _run_ninja_build(cmd, options):
         return _run_ninja_command(cmdstr)
     # In quiet mode, redirect ninja output to the file
     ninja_output = 'blade-bin/ninja_output.log'
-    with open(ninja_output, 'w', buffering=1) as wf, open(ninja_output, 'r', buffering=1) as rf:
+    with open(ninja_output, 'w', buffering=1) as wf, open(ninja_output, buffering=1) as rf:
         os.environ['NINJA_STATUS'] = '[%f/%t] '  # The progress depends on this format
         p = subprocess.Popen(cmdstr, shell=True, stdout=wf, stderr=subprocess.STDOUT)
         _show_progress(p, rf)
@@ -122,4 +122,4 @@ def _show_slow_builds(build_dir, build_start_time, show_builds_slower_than):
         if build_times:
             console.notice('Slow build targets:')
             for cost_time, target in sorted(build_times):
-                console.notice('%.4gs\t%s' % (cost_time, target), prefix=False)
+                console.notice('{:.4g}s\t{}'.format(cost_time, target), prefix=False)

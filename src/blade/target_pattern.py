@@ -51,7 +51,7 @@ def normalize(target, working_dir):
         if working_dir != '.':
             target = os.path.join(working_dir, target)
     path, name = _split(target)
-    return '%s:%s' % (path, name)
+    return '{}:{}'.format(path, name)
 
 
 def normalize_list(targets, working_dir):

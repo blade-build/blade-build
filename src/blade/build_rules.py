@@ -9,7 +9,7 @@ Manage symbols can be used in BUILD files.
 """
 
 
-class Native(object):
+class Native:
     """
     A built-in object to support native rules and other helper functions.
     make native rules such as `cc_library` can always be accessed in the form of `native.cc_library`.

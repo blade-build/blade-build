@@ -31,7 +31,7 @@ except ImportError:
     VERSION = '(developing, unversioned)'
 
 
-class CommandLineParser(object):
+class CommandLineParser:
     """Command Line Parser.
 
     Parses user's input and provides hint.
@@ -109,7 +109,7 @@ class CommandLineParser(object):
             options.bits = m
             options.arch = BuildArchitecture.get_model_architecture(arch, m)
             if options.arch is None:
-                console.fatal('"-m%s" is not supported by the architecture %s' % (m, compiler_arch))
+                console.fatal('"-m{}" is not supported by the architecture {}'.format(m, compiler_arch))
 
     def _check_clean_options(self, options, targets):
         """check the clean options."""

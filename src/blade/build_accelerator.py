@@ -10,7 +10,7 @@ Build accelerator (ccache, distcc, etc.) manage module.
 
 
 
-class BuildAccelerator(object):
+class BuildAccelerator:
     """Describe a build accelerator."""
 
     def __init__(self, toolchain):

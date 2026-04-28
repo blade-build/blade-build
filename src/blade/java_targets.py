@@ -28,7 +28,7 @@ class MavenJar(Target):
     """Describe a maven jar"""
 
     def __init__(self, name, id, classifier, transitive, visibility, tags):
-        super(MavenJar, self).__init__(
+        super().__init__(
                 name=name,
                 type='maven_jar',
                 srcs=[],
@@ -108,7 +108,7 @@ _JAVA_SRC_PATH_SEGMENTS = (
 )
 
 
-class JavaTargetMixIn(object):
+class JavaTargetMixIn:
     """
     This mixin includes common java methods
     """
@@ -321,7 +321,7 @@ class JavaTargetMixIn(object):
                         break
                     if picked_version is None or LooseVersion(v) > LooseVersion(picked_version):
                         picked_version = v
-                self.debug('Maven dependency version conflict %s:%s:{%s} during %s. Use %s' % (
+                self.debug('Maven dependency version conflict {}:{}:{{{}}} during {}. Use {}'.format(
                     group, artifact, ', '.join(versions), scope, picked_version))
             jars += maven_jars[group, artifact, picked_version]
         return sorted(jars)
@@ -535,7 +535,7 @@ class JavaTargetMixIn(object):
         for key, type, dst in locations:
             path = targets[key]._get_target_file(type)
             if not path:
-                self.warning('Location %s %s is missing. Ignored.' % (key, type))
+                self.warning('Location {} {} is missing. Ignored.'.format(key, type))
                 continue
             if not dst:
                 dst = os.path.basename(path)
@@ -626,7 +626,7 @@ class JavaTarget(Target, JavaTargetMixIn):
         deps = var_to_list(deps)
         resources = var_to_list(resources)
 
-        super(JavaTarget, self).__init__(
+        super().__init__(
                 name=name,
                 type=type,
                 srcs=srcs,
@@ -710,7 +710,7 @@ class JavaLibrary(JavaTarget):
         exported_deps = var_to_list(exported_deps)
         provided_deps = var_to_list(provided_deps)
         all_deps = var_to_list(deps) + exported_deps + provided_deps
-        super(JavaLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type=type,
                 srcs=srcs,
@@ -757,7 +757,7 @@ class JavaBinary(JavaTarget):
             main_class,
             exclusions,
             kwargs):
-        super(JavaBinary, self).__init__(
+        super().__init__(
                 name=name,
                 type='java_binary',
                 srcs=srcs,
@@ -814,7 +814,7 @@ class JavaFatLibrary(JavaTarget):
             warnings,
             exclusions,
             kwargs):
-        super(JavaFatLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='java_fat_library',
                 srcs=srcs,
@@ -852,7 +852,7 @@ class JavaTest(JavaBinary):
             testdata,
             target_under_test,
             kwargs):
-        super(JavaTest, self).__init__(
+        super().__init__(
                 name=name,
                 srcs=srcs,
                 deps=deps,

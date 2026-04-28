@@ -21,7 +21,7 @@ from blade.cc_targets import CcTarget
 from blade.util import var_to_list
 
 
-class ProtocPlugin(object):
+class ProtocPlugin:
     """A helper class for protoc plugin.
 
     Currently blade only supports protoc plugin which generates
@@ -59,10 +59,10 @@ class ProtocPlugin(object):
             self.code_generation[language]['deps'] = deps
 
     def protoc_plugin_flag(self, out, plugin_opts):
-        flag_value = '--plugin=protoc-gen-%s=%s --%s_out=%s' % (
+        flag_value = '--plugin=protoc-gen-{}={} --{}_out={}'.format(
             self.name, self.path, self.name, out)
         for opt in plugin_opts:
-            flag_value += ' --%s_opt=%s' % (self.name, opt)
+            flag_value += ' --{}_opt={}'.format(self.name, opt)
         return flag_value
 
     def __repr__(self):
@@ -100,7 +100,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         srcs = var_to_list(srcs)
         proto_config = config.get_section('proto_library_config')
 
-        super(ProtoLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='proto_library',
                 srcs=srcs,
@@ -230,7 +230,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             input = self._source_file_path(src)
             package_dir, java_name = self._proto_java_gen_file(src)
             self.src_java_info[src] = (package_dir, java_name)
-            self.attr["generated_java_sources"].append("%s__%s__%s" % (input, package_dir, java_name))
+            self.attr["generated_java_sources"].append("{}__{}__{}".format(input, package_dir, java_name))
 
     def _expand_deps_generation(self):
         if self.attr['generate_java']:
@@ -242,8 +242,8 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         sources = []
         headers = []
         for cpp_out in self.attr['cpp_outs']:
-            sources.append(self._target_file_path('%s%s.cc' % (proto_name, cpp_out)))
-            headers.append(self._target_file_path('%s%s.h' % (proto_name, cpp_out)))
+            sources.append(self._target_file_path('{}{}.cc'.format(proto_name, cpp_out)))
+            headers.append(self._target_file_path('{}{}.h'.format(proto_name, cpp_out)))
         return (sources, headers)
 
     def _proto_gen_php_file(self, src):
@@ -422,7 +422,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             if not package:
                 continue
             if not package.startswith(protobuf_go_path):
-                self.warning('go_package "%s" is not starting with "%s" in %s' % (
+                self.warning('go_package "{}" is not starting with "{}" in {}'.format(
                              package, protobuf_go_path, src))
             basename = os.path.basename(src)
             output = os.path.join(go_home, 'src', package, '%s.pb.go' % basename[:-6])
@@ -452,8 +452,8 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         sources = []
         headers = []
         for cpp_out in self.attr['cpp_outs']:
-            sources.append('%s%s.cc' % (base, cpp_out))
-            headers.append('%s%s.h' % (base, cpp_out))
+            sources.append('{}{}.cc'.format(base, cpp_out))
+            headers.append('{}{}.h'.format(base, cpp_out))
         return [sources, headers]
 
     def generate(self):

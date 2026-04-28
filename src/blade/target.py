@@ -96,7 +96,7 @@ def _parse_target(dep):
 _parse_target.cache = {}
 
 
-class Target(object):
+class Target:
     """Abstract target class.
 
     This class should be derived by subclass like CcLibrary CcBinary
@@ -133,7 +133,7 @@ class Target(object):
         self.target_dir = os.path.normpath(os.path.join(self.build_dir, current_source_path))
 
         # The unique key of this target, for internal use mainly.
-        self.key = '%s:%s' % (current_source_path, name)
+        self.key = '{}:{}'.format(current_source_path, name)
         # The full qualified target id, to be displayed in diagnostic message
         self.fullname = '//' + self.key
         self.source_location = source_location(os.path.join(current_source_path, 'BUILD'))
@@ -236,7 +236,7 @@ class Target(object):
         return self.__fingerprint
 
     def _format_message(self, level, msg):
-        return '%s: %s: %s: %s' % (self.source_location, level, self.name, msg)
+        return '{}: {}: {}: {}'.format(self.source_location, level, self.name, msg)
 
     def debug(self, msg):
         """Print message with target full name prefix"""
@@ -293,13 +293,13 @@ class Target(object):
             self.error('"%s" can not be empty' % (attr_name))
             return False
         if must_exist and not os.path.exists(os.path.join(self.path, path)):
-            self.error('Invalid path "%s" for "%s", does not exist' % (path, attr_name))
+            self.error('Invalid path "{}" for "{}", does not exist'.format(path, attr_name))
             return False
         if '..' in path:
-            self.error('Invalid path "%s" for "%s". can not contains ".."' % (path, attr_name))
+            self.error('Invalid path "{}" for "{}". can not contains ".."'.format(path, attr_name))
             return False
         if path.startswith('/'):
-            self.error('Invalid path "%s" for "%s". can not be absolute path' % (path, attr_name))
+            self.error('Invalid path "{}" for "{}". can not be absolute path'.format(path, attr_name))
             return False
         return True
 
@@ -325,14 +325,14 @@ class Target(object):
             if ext:
                 ext = ext[1:]
             if ext not in exts:
-                self.error('Invalid %s file name: "%s", must ends with %s' % (file_kind, src, list(exts)))
+                self.error('Invalid {} file name: "{}", must ends with {}'.format(file_kind, src, list(exts)))
             full_path = self._source_file_path(src)
             if not os.path.exists(full_path):
                 if ext and _is_likely_concatenated_filenames(src, exts):
                     self.warning('File "%s" does not exist, missing "," between file names?' % src)
 
         if dups:
-            self.error('Duplicate %s file paths: %s ' % (file_kind, dups))
+            self.error('Duplicate {} file paths: {} '.format(file_kind, dups))
 
     # Keep the relationship of all src -> target.
     # Used by build rules to ensure that a source file occurs in
@@ -359,7 +359,7 @@ class Target(object):
                     elif target[1]:
                         pass
                     else:
-                        message = '"%s" is already in srcs of "%s"' % (src, target_existed[0])
+                        message = '"{}" is already in srcs of "{}"'.format(src, target_existed[0])
                         if action == 'error':
                             self.error(message)
                         elif action == 'warning':
@@ -461,7 +461,7 @@ class Target(object):
                 # Depend on library in current directory
                 path = self.path
 
-        return '%s:%s' % (path, name)
+        return '{}:{}'.format(path, name)
 
     def _init_target_deps(self, deps):
         """Init the target deps.
@@ -723,7 +723,7 @@ class Target(object):
         if order_only_deps:
             ins.append('||')
             ins += var_to_list(order_only_deps)
-        self._write_rule('build %s: %s %s' % (' '.join(outs), rule, ' '.join(ins)))
+        self._write_rule('build {}: {} {}'.format(' '.join(outs), rule, ' '.join(ins)))
         clean = (outputs + implicit_outputs) if clean is None else var_to_list(clean)
         if clean:
             self._remove_on_clean(*clean)
@@ -733,7 +733,7 @@ class Target(object):
             for name, v in variables.items():
                 assert v is not None
                 if v:
-                    self._write_rule('  %s = %s' % (name, v))
+                    self._write_rule('  {} = {}'.format(name, v))
                 else:
                     self._write_rule('  %s =' % name)
         self._write_rule('')  # An empty line to improve readability
@@ -756,7 +756,7 @@ class Target(object):
 
 class SystemLibrary(Target):
     def __init__(self, name):
-        super(SystemLibrary, self).__init__(
+        super().__init__(
                 name=name,
                 type='system_library',
                 srcs=[],

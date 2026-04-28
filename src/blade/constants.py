@@ -18,7 +18,7 @@ SEVERITIES = {'debug', 'info', 'notice', 'warning', 'error'}
 ALL_COMMAND_TARGETS = '__all_command_targets__'
 
 
-class HELP(object):
+class HELP:
     build_jobs = 'Specifies the number of build jobs (commands) to run simultaneously'
     test_jobs = 'The number of tests to run simultaneously'
     run_unrepaired_tests = 'Whether run unrepaired(no changw after previous failure) tests during incremental test'

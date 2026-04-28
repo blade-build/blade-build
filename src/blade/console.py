@@ -159,7 +159,7 @@ def _progress_bar(progress, current, total):
     [===========================================================----] 46/50 92%
     """
     width = progress * _PROGRESS_BAR_WIDTH // 100
-    return '[%s%s] %s/%s %g%%' % ('=' * width, '-' * (_PROGRESS_BAR_WIDTH - width),
+    return '[{}{}] {}/{} {:g}%'.format('=' * width, '-' * (_PROGRESS_BAR_WIDTH - width),
                                   current, total, progress)
 
 
@@ -276,7 +276,7 @@ def debug(msg, prefix=True):
 def diagnose(source_location, severity, message):
     """Output diagnostic message with source location and severity."""
     assert severity in ('debug', 'info', 'notice', 'warning', 'error')
-    globals()[severity]("%s: %s: %s" % (source_location, severity, message), prefix=False)
+    globals()[severity]("{}: {}: {}".format(source_location, severity, message), prefix=False)
 
 
 def flush():

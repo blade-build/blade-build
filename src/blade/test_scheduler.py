@@ -45,7 +45,7 @@ _SIGNAL_MAP = _signal_map()
 class WorkerThread(threading.Thread):
     def __init__(self, index, job_queue, job_handler, redirect):
         """Init methods for this thread."""
-        super(WorkerThread, self).__init__()
+        super().__init__()
         self.index = index
         self.running = True
         self.job_queue = job_queue
@@ -123,7 +123,7 @@ class WorkerThread(threading.Thread):
             traceback.print_exc()
 
 
-class TestScheduler(object):
+class TestScheduler:
     """Schedule specified tests to be ran in multiple test threads"""
 
     def __init__(self, tests_list, num_jobs):
@@ -151,15 +151,15 @@ class TestScheduler(object):
         result = 'SUCCESS'
         if returncode != 0:
             result = _SIGNAL_MAP.get(returncode, 'FAILED')
-            result = '%s:%s' % (result, returncode)
+            result = '{}:{}'.format(result, returncode)
         return result
 
     def _progress(self, done=0):
-        return '[%s/%s/%s]' % (self.num_of_finished_tests + done,
+        return '[{}/{}/{}]'.format(self.num_of_finished_tests + done,
                                self.num_of_running_tests - done, len(self.tests_list))
 
     def _show_progress(self, cmd):
-        console.info('%s Start %s' % (self._progress(), cmd))
+        console.info('{} Start {}'.format(self._progress(), cmd))
         if console.verbosity_le('quiet'):
             console.show_progress_bar(self.num_of_finished_tests, len(self.tests_list))
 
@@ -183,7 +183,7 @@ class TestScheduler(object):
         job_thread.set_job_data(p, test_name, timeout)
         stdout = p.communicate()[0]
         result = self._get_result(p.returncode)
-        msg = 'Output of //%s:\n%s%s Test //%s finished: %s\n' % (
+        msg = 'Output of //{}:\n{}{} Test //{} finished: {}\n'.format(
             test_name, stdout, self._progress(done=1), test_name, result)
         if console.verbosity_le('quiet') and p.returncode != 0:
             console.error(msg, prefix=False)
@@ -206,7 +206,7 @@ class TestScheduler(object):
         job_thread.set_job_data(p, test_name, timeout)
         p.wait()
         result = self._get_result(p.returncode)
-        console.info('%s Test //%s finished : %s\n' % (self._progress(done=1), test_name, result))
+        console.info('{} Test //{} finished : {}\n'.format(self._progress(done=1), test_name, result))
 
         return p.returncode
 

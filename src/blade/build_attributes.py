@@ -13,7 +13,7 @@ such as bits: 32/64, profile: debug/release.
 attributes = None
 
 
-class TargetAttributes(object):
+class TargetAttributes:
     """Build target attributes."""
 
     def __init__(self, options):
