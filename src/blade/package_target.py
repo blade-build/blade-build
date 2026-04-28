@@ -55,7 +55,7 @@ class PackageTarget(Target):
                 name=name,
                 type='package',
                 srcs=[],
-                src_exts=None,
+                src_exts=[],
                 deps=deps,
                 visibility=visibility,
                 tags=tags,
