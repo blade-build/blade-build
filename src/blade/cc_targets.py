@@ -15,6 +15,7 @@ of all of the cc targets, like cc_library, cc_binary.
 import os
 import sys
 from string import Template
+from typing import Any
 
 from blade import build_manager
 from blade import build_rules
@@ -1513,7 +1514,10 @@ def cc_binary(name=None,
 build_rules.register_function(cc_binary)
 
 
-def cc_benchmark(name=None, deps=None, **kwargs):
+def cc_benchmark(
+        name: 'str | None' = None,
+        deps: 'StrOrListOpt' = None,
+        **kwargs: Any):
     """cc_benchmark target."""
     cc_config = config.get_section('cc_config')
     benchmark_libs = cc_config['benchmark_libs']
