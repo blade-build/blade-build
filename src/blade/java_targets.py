@@ -535,7 +535,7 @@ class JavaTargetMixIn:
         for key, type, dst in locations:
             path = targets[key]._get_target_file(type)
             if not path:
-                self.warning('Location {} {} is missing. Ignored.'.format(key, type))
+                self.warning(f'Location {key} {type} is missing. Ignored.')
                 continue
             if not dst:
                 dst = os.path.basename(path)

@@ -124,7 +124,7 @@ def _parse_inclusion_stacks(path, build_dir):
                 break
             level, hdr = _parse_hdr_level_line(line)
             if level == -1:
-                console.log('{}: Unrecognized line {}'.format(path, line))
+                console.log(f'{path}: Unrecognized line {line}')
                 break
             if level == 1 and not hdr.startswith('/'):
                 direct_hdrs.append(_remove_build_dir_prefix(os.path.normpath(hdr), build_dir))
@@ -248,8 +248,7 @@ class Checker:
             if not libs:
                 libs = self.find_targets_by_private_hdr(hdr)
                 if libs and self.key not in libs:
-                    msg.append('    "{}" is a private header file of {}'.format(
-                            hdr, self._or_joined_libs(libs)))
+                    msg.append(f'    "{hdr}" is a private header file of {self._or_joined_libs(libs)}')
                     continue
                 console.diagnose(self.source_location, 'debug', '"%s" is an undeclared header' % hdr)
                 undeclared_hdrs.add(hdr)
@@ -303,7 +302,7 @@ class Checker:
             libs = self.find_libs_by_header(hdr)
         if not libs:
             return '"%s"' % hdr
-        return '"{}", which belongs to {}'.format(hdr, self._or_joined_libs(libs))
+        return f'"{hdr}", which belongs to {self._or_joined_libs(libs)}'
 
     def _or_joined_libs(self, libs):
         """Return " or " joind libs descriptive string."""

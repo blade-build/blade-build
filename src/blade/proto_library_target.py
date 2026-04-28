@@ -59,10 +59,9 @@ class ProtocPlugin:
             self.code_generation[language]['deps'] = deps
 
     def protoc_plugin_flag(self, out, plugin_opts):
-        flag_value = '--plugin=protoc-gen-{}={} --{}_out={}'.format(
-            self.name, self.path, self.name, out)
+        flag_value = f'--plugin=protoc-gen-{self.name}={self.path} --{self.name}_out={out}'
         for opt in plugin_opts:
-            flag_value += ' --{}_opt={}'.format(self.name, opt)
+            flag_value += f' --{self.name}_opt={opt}'
         return flag_value
 
     def __repr__(self):
@@ -230,7 +229,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             input = self._source_file_path(src)
             package_dir, java_name = self._proto_java_gen_file(src)
             self.src_java_info[src] = (package_dir, java_name)
-            self.attr["generated_java_sources"].append("{}__{}__{}".format(input, package_dir, java_name))
+            self.attr["generated_java_sources"].append(f"{input}__{package_dir}__{java_name}")
 
     def _expand_deps_generation(self):
         if self.attr['generate_java']:
@@ -242,8 +241,8 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         sources = []
         headers = []
         for cpp_out in self.attr['cpp_outs']:
-            sources.append(self._target_file_path('{}{}.cc'.format(proto_name, cpp_out)))
-            headers.append(self._target_file_path('{}{}.h'.format(proto_name, cpp_out)))
+            sources.append(self._target_file_path(f'{proto_name}{cpp_out}.cc'))
+            headers.append(self._target_file_path(f'{proto_name}{cpp_out}.h'))
         return (sources, headers)
 
     def _proto_gen_php_file(self, src):
@@ -422,8 +421,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             if not package:
                 continue
             if not package.startswith(protobuf_go_path):
-                self.warning('go_package "{}" is not starting with "{}" in {}'.format(
-                             package, protobuf_go_path, src))
+                self.warning(f'go_package "{package}" is not starting with "{protobuf_go_path}" in {src}')
             basename = os.path.basename(src)
             output = os.path.join(go_home, 'src', package, '%s.pb.go' % basename[:-6])
             self.generate_build('protogo', output, inputs=path)
@@ -452,8 +450,8 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         sources = []
         headers = []
         for cpp_out in self.attr['cpp_outs']:
-            sources.append('{}{}.cc'.format(base, cpp_out))
-            headers.append('{}{}.h'.format(base, cpp_out))
+            sources.append(f'{base}{cpp_out}.cc')
+            headers.append(f'{base}{cpp_out}.h')
         return [sources, headers]
 
     def generate(self):

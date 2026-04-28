@@ -62,7 +62,7 @@ class Version:
         )
 
     def __repr__(self):
-        return f"{self.__class__.__name__} ('{str(self)}')"
+        return f"{self.__class__.__name__} ('{self!s}')"
 
     def __eq__(self, other):
         c = self._cmp(other)
@@ -181,7 +181,7 @@ class StrictVersion(Version):
 
         return vstring
 
-    def _cmp(self, other):  # noqa: C901
+    def _cmp(self, other):
         if isinstance(other, str):
             with suppress_known_deprecation():
                 other = StrictVersion(other)

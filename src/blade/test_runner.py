@@ -229,8 +229,7 @@ class TestRunner(binary_runner.BinaryRunner):
                 data_target = data_target[2:]
                 data_target_path = os.path.abspath(data_target)
             else:
-                data_target_path = os.path.abspath('{}/{}'.format(
-                                                   target.path, data_target))
+                data_target_path = os.path.abspath(f'{target.path}/{data_target}')
             if os.path.exists(data_target_path):
                 related_file_data_list.append(data_target_path)
 
@@ -313,11 +312,10 @@ class TestRunner(binary_runner.BinaryRunner):
                         testdata_md5=testdata_md5,
                         env_md5=self.env_md5,
                         args=self.options.args)
+            elif history.result.exit_code == 0:
+                self.unchanged_tests.append(target.key)
             else:
-                if history.result.exit_code == 0:
-                    self.unchanged_tests.append(target.key)
-                else:
-                    self.unrepaired_tests.append(target.key)
+                self.unrepaired_tests.append(target.key)
         self.unrepaired_tests.sort(key=lambda x: self.test_history['items'][x].first_fail_time,
                                    reverse=True)
 
@@ -352,8 +350,7 @@ class TestRunner(binary_runner.BinaryRunner):
         tests.sort(key=lambda x: x[1])
         output_function = console.error if is_error else console.info
         for key, costtime, reason, result in tests:
-            output_function('  {} triggered by {}, exit({}), cost {:.2f} s'.format(
-                            key, reason, result, costtime), prefix=False)
+            output_function(f'  {key} triggered by {reason}, exit({result}), cost {costtime:.2f} s', prefix=False)
 
     def _show_unrepaired_results(self):
         """Show the unrepaired tests"""
@@ -365,8 +362,7 @@ class TestRunner(binary_runner.BinaryRunner):
             test = items[key]
             first_fail_time = time.strftime('%F %T %A', time.localtime(test.first_fail_time))
             duration = datetime.timedelta(seconds=int(time.time() - test.first_fail_time))
-            console.error('  {}: exit({}), retry {} times, since {}, duration {}'.format(
-                key, test.result.exit_code, test.fail_count, first_fail_time, duration),
+            console.error(f'  {key}: exit({test.result.exit_code}), retry {test.fail_count} times, since {first_fail_time}, duration {duration}',
                 prefix=False)
         console.error('You can specify --run-unrepaired-tests to run them', prefix=False)
 
@@ -380,7 +376,7 @@ class TestRunner(binary_runner.BinaryRunner):
         if slow_tests:
             console.warning('Found %d slow tests:' % len(slow_tests))
             for cost_time, key in sorted(slow_tests):
-                console.warning('  {:.4g}s\t//{}'.format(cost_time, key), prefix=False)
+                console.warning(f'  {cost_time:.4g}s\t//{key}', prefix=False)
 
     def _show_tests_summary(self, passed_run_results, failed_run_results):
         """Show tests summary."""

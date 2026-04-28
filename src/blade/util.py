@@ -196,7 +196,7 @@ def run_command(args, **kwargs):
     kwargs.setdefault('stdout', subprocess.PIPE)
     kwargs.setdefault('stderr', subprocess.PIPE)
 
-    r = subprocess.run(args, universal_newlines=True, **kwargs)
+    r = subprocess.run(args, text=True, **kwargs)
     return r.returncode, r.stdout, r.stderr
 
 
@@ -270,7 +270,7 @@ def source_location(filename):
             lineno = frame.f_lineno
             break
         frame = frame.f_back
-    return '{}:{}'.format(full_filename, lineno)
+    return f'{full_filename}:{lineno}'
 
 
 def calling_source_location(skip=0):
@@ -280,7 +280,7 @@ def calling_source_location(skip=0):
     frame = inspect.currentframe()
     while frame:
         if skipped == skip:
-            return '{}:{}'.format(frame.f_code.co_filename, frame.f_lineno)
+            return f'{frame.f_code.co_filename}:{frame.f_lineno}'
         frame = frame.f_back
         skipped += 1
     raise ValueError('Invalid value "%d" for "skip"' % skip)

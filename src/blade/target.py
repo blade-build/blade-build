@@ -35,7 +35,7 @@ def _is_likely_concatenated_filenames(string, exts):
     """
     # Convert exts to regex, e.g., ['h', 'hpp'] to "(h|hpp)"
     ext_pattern = '(%s)' % '|'.join(e.replace('+', r'\+') for e in exts)
-    return re.search(r'\w+\.{ext}.+\.{ext}$'.format(ext=ext_pattern), string)
+    return re.search(rf'\w+\.{ext_pattern}.+\.{ext_pattern}$', string)
 
 
 # Target regex
@@ -133,7 +133,7 @@ class Target:
         self.target_dir = os.path.normpath(os.path.join(self.build_dir, current_source_path))
 
         # The unique key of this target, for internal use mainly.
-        self.key = '{}:{}'.format(current_source_path, name)
+        self.key = f'{current_source_path}:{name}'
         # The full qualified target id, to be displayed in diagnostic message
         self.fullname = '//' + self.key
         self.source_location = source_location(os.path.join(current_source_path, 'BUILD'))
@@ -236,7 +236,7 @@ class Target:
         return self.__fingerprint
 
     def _format_message(self, level, msg):
-        return '{}: {}: {}: {}'.format(self.source_location, level, self.name, msg)
+        return f'{self.source_location}: {level}: {self.name}: {msg}'
 
     def debug(self, msg):
         """Print message with target full name prefix"""
@@ -293,13 +293,13 @@ class Target:
             self.error('"%s" can not be empty' % (attr_name))
             return False
         if must_exist and not os.path.exists(os.path.join(self.path, path)):
-            self.error('Invalid path "{}" for "{}", does not exist'.format(path, attr_name))
+            self.error(f'Invalid path "{path}" for "{attr_name}", does not exist')
             return False
         if '..' in path:
-            self.error('Invalid path "{}" for "{}". can not contains ".."'.format(path, attr_name))
+            self.error(f'Invalid path "{path}" for "{attr_name}". can not contains ".."')
             return False
         if path.startswith('/'):
-            self.error('Invalid path "{}" for "{}". can not be absolute path'.format(path, attr_name))
+            self.error(f'Invalid path "{path}" for "{attr_name}". can not be absolute path')
             return False
         return True
 
@@ -325,14 +325,14 @@ class Target:
             if ext:
                 ext = ext[1:]
             if ext not in exts:
-                self.error('Invalid {} file name: "{}", must ends with {}'.format(file_kind, src, list(exts)))
+                self.error(f'Invalid {file_kind} file name: "{src}", must ends with {list(exts)}')
             full_path = self._source_file_path(src)
             if not os.path.exists(full_path):
                 if ext and _is_likely_concatenated_filenames(src, exts):
                     self.warning('File "%s" does not exist, missing "," between file names?' % src)
 
         if dups:
-            self.error('Duplicate {} file paths: {} '.format(file_kind, dups))
+            self.error(f'Duplicate {file_kind} file paths: {dups} ')
 
     # Keep the relationship of all src -> target.
     # Used by build rules to ensure that a source file occurs in
@@ -359,7 +359,7 @@ class Target:
                     elif target[1]:
                         pass
                     else:
-                        message = '"{}" is already in srcs of "{}"'.format(src, target_existed[0])
+                        message = f'"{src}" is already in srcs of "{target_existed[0]}"'
                         if action == 'error':
                             self.error(message)
                         elif action == 'warning':
@@ -453,15 +453,14 @@ class Target:
         if path.startswith('//'):
             # Depend on library in remote directory
             path = path[2:]
+        elif path:
+            # Depend on library in relative subdirectory
+            path = os.path.join(self.path, path)
         else:
-            if path:
-                # Depend on library in relative subdirectory
-                path = os.path.join(self.path, path)
-            else:
-                # Depend on library in current directory
-                path = self.path
+            # Depend on library in current directory
+            path = self.path
 
-        return '{}:{}'.format(path, name)
+        return f'{path}:{name}'
 
     def _init_target_deps(self, deps):
         """Init the target deps.
@@ -733,7 +732,7 @@ class Target:
             for name, v in variables.items():
                 assert v is not None
                 if v:
-                    self._write_rule('  {} = {}'.format(name, v))
+                    self._write_rule(f'  {name} = {v}')
                 else:
                     self._write_rule('  %s =' % name)
         self._write_rule('')  # An empty line to improve readability

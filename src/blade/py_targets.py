@@ -206,13 +206,12 @@ class PythonBinary(PythonLibrary):
         self.attr['run_in_shell'] = True
         if main:
             self.attr['main'] = main
+        elif len(srcs) == 1:
+            self.attr['main'] = srcs[0]
         else:
-            if len(srcs) == 1:
-                self.attr['main'] = srcs[0]
-            else:
-                self.error(
-                    'The entry file must be specified by the "main" '
-                    'argument if there are more than one srcs')
+            self.error(
+                'The entry file must be specified by the "main" '
+                'argument if there are more than one srcs')
         self.attr['exclusions'] = exclusions
         self._add_tags('type:binary')
 

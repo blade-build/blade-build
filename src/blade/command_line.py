@@ -109,7 +109,7 @@ class CommandLineParser:
             options.bits = m
             options.arch = BuildArchitecture.get_model_architecture(arch, m)
             if options.arch is None:
-                console.fatal('"-m{}" is not supported by the architecture {}'.format(m, compiler_arch))
+                console.fatal(f'"-m{m}" is not supported by the architecture {compiler_arch}')
 
     def _check_clean_options(self, options, targets):
         """check the clean options."""

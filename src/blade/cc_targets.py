@@ -274,8 +274,7 @@ class CcTarget(Target):
             if dep and dep.attr.get('deprecated'):
                 replaced_deps = dep.deps
                 if replaced_deps:
-                    self.warning('//{} is deprecated, please depends on //{}'.format(
-                        dep, replaced_deps[0]))
+                    self.warning(f'//{dep} is deprecated, please depends on //{replaced_deps[0]}')
 
     __cxx_keyword_list = frozenset([
         'and', 'and_eq', 'alignas', 'alignof', 'asm', 'auto',
@@ -938,7 +937,7 @@ class PrebuiltCcLibrary(CcTarget):
         has_dynamic = os.path.exists(dynamic_source)
 
         if not has_static and not has_dynamic:
-            self.error('Can not find either {} or {}'.format(static_source, dynamic_source))
+            self.error(f'Can not find either {static_source} or {dynamic_source}')
             return
 
         if has_static:
@@ -983,7 +982,7 @@ class PrebuiltCcLibrary(CcTarget):
 
         libpath = os.path.join(self.path, libpath)
 
-        return os.path.join(libpath, 'lib{}.{}'.format(self.name, suffix))
+        return os.path.join(libpath, f'lib{self.name}.{suffix}')
 
     def _is_depended(self):
         """Does this library really be used"""
@@ -1199,7 +1198,7 @@ class ForeignCcLibrary(CcTarget):
         """Return full path of the library file with specified type"""
         assert type in ('a', 'so')
         return self._target_file_path(os.path.join(self.attr['install_dir'], self.attr['lib_dir'],
-                                                   'lib{}.{}'.format(self.name, type)))
+                                                   f'lib{self.name}.{type}'))
 
     def soname_and_full_path(self):
         """Return soname and full path of the shared library, if any"""
@@ -1693,10 +1692,9 @@ class CcTest(CcBinary):
 
         if heap_check is None:
             heap_check = cc_test_config.get('heap_check', '')
-        else:
-            if heap_check not in HEAP_CHECK_VALUES:
-                self.error('heap_check can only be in %s' % HEAP_CHECK_VALUES)
-                heap_check = ''
+        elif heap_check not in HEAP_CHECK_VALUES:
+            self.error('heap_check can only be in %s' % HEAP_CHECK_VALUES)
+            heap_check = ''
 
         perftools_lib = var_to_list(cc_test_config['gperftools_libs'])
         perftools_debug_lib = var_to_list(cc_test_config['gperftools_debug_libs'])

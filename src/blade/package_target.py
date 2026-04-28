@@ -71,7 +71,7 @@ class PackageTarget(Target):
         self._process_srcs(srcs)
 
         if not out:
-            out = '{}.{}'.format(name, type)
+            out = f'{name}.{type}'
         self.attr['out'] = out
         self.attr['shell'] = shell
 
@@ -105,7 +105,7 @@ class PackageTarget(Target):
         Return src full path within the workspace and mapping path in the archive.
         """
         if '..' in src or '..' in dst:
-            self.error('Invalid src ({}, {}). Relative path is not allowed.'.format(src, dst))
+            self.error(f'Invalid src ({src}, {dst}). Relative path is not allowed.')
 
         if src.startswith('//'):
             src = src[2:]
@@ -143,7 +143,7 @@ class PackageTarget(Target):
         for key, type, dst in self.attr['locations']:
             path = targets[key]._get_target_file(type)
             if not path:
-                self.warning('Location {} {} is missing. Ignored.'.format(key, type))
+                self.warning(f'Location {key} {type} is missing. Ignored.')
                 continue
             if not dst:
                 dst = os.path.basename(path)
