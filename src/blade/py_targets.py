@@ -15,8 +15,9 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade.blade_types import StrOrListOpt
 from blade.target import Target
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 class PythonTarget(Target):
@@ -25,17 +26,21 @@ class PythonTarget(Target):
     """
 
     def __init__(self,
-                 name,
-                 type,
-                 srcs,
-                 deps,
-                 base,
-                 visibility,
-                 tags,
-                 kwargs):
+                 name: str | None,
+                 type: str,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 base: str | None,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 kwargs: dict[str, object]):
         """Init method."""
+        # Normalize BUILD-file-friendly StrOrList unions to list[str] once,
+        # right at the top; Target.__init__ below sees layer-2 shapes.
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
 
         super().__init__(
             name=name,
@@ -74,13 +79,13 @@ class PythonLibrary(PythonTarget):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 base,
-                 visibility,
-                 tags,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 base: str | None,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 kwargs: dict[str, object]):
         """Init method."""
         super().__init__(
                 name=name,
@@ -109,13 +114,13 @@ class PythonLibrary(PythonTarget):
 
 class PrebuiltPythonLibrary(PythonTarget):
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 base,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 base: str | None,
+                 kwargs: dict[str, object]):
         """Init method."""
         super().__init__(
                 name=name,
@@ -140,14 +145,14 @@ class PrebuiltPythonLibrary(PythonTarget):
         self._add_target_file('pylib', self._source_file_path(self.srcs[0]))
 
 
-def py_library(name=None,
-               srcs=None,
-               deps=None,
-               visibility=None,
-               tags=None,
-               base=None,
-               prebuilt=None,
-               **kwargs):
+def py_library(name: str,
+               srcs: StrOrListOpt = None,
+               deps: StrOrListOpt = None,
+               visibility: StrOrListOpt = None,
+               tags: StrOrListOpt = None,
+               base: str | None = None,
+               prebuilt: bool = False,
+               **kwargs: object):
     """python library."""
     if prebuilt:
         target = PrebuiltPythonLibrary(
@@ -180,15 +185,15 @@ class PythonBinary(PythonLibrary):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 main,
-                 base,
-                 exclusions,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 main: str | None,
+                 base: str | None,
+                 exclusions: StrOrListOpt,
+                 kwargs: dict[str, object]):
         """Init method."""
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
@@ -240,15 +245,15 @@ class PythonBinary(PythonLibrary):
         self._add_default_target_file('bin', output)
 
 
-def py_binary(name=None,
-              srcs=None,
-              deps=None,
-              visibility=None,
-              tags=None,
-              main=None,
-              base=None,
-              exclusions=None,
-              **kwargs):
+def py_binary(name: str,
+              srcs: StrOrListOpt = None,
+              deps: StrOrListOpt = None,
+              visibility: StrOrListOpt = None,
+              tags: StrOrListOpt = None,
+              main: str | None = None,
+              base: str | None = None,
+              exclusions: StrOrListOpt = None,
+              **kwargs: object):
     """python binary."""
     target = PythonBinary(
             name=name,
@@ -272,15 +277,15 @@ class PythonTest(PythonBinary):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 main,
-                 base,
-                 testdata,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 main: str | None,
+                 base: str | None,
+                 testdata: StrOrListOpt,
+                 kwargs: dict[str, object]):
         """Init method."""
         super().__init__(
                 name=name,
@@ -297,15 +302,15 @@ class PythonTest(PythonBinary):
         self._add_tags('type:test')
 
 
-def py_test(name=None,
-            srcs=None,
-            deps=None,
-            visibility=None,
-            tags=None,
-            main=None,
-            base=None,
-            testdata=None,
-            **kwargs):
+def py_test(name: str,
+            srcs: StrOrListOpt = None,
+            deps: StrOrListOpt = None,
+            visibility: StrOrListOpt = None,
+            tags: StrOrListOpt = None,
+            main: str | None = None,
+            base: str | None = None,
+            testdata: StrOrListOpt = None,
+            **kwargs: object):
     """python test."""
     target = PythonTest(
             name=name,
