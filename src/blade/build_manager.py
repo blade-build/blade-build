@@ -201,7 +201,7 @@ class Blade:
             self.get_build_dir(),
             self.build_script(),
             self.build_jobs_num(),
-            targets='',  # FIXME: because not all targets has a targets
+            targets='',  # empty => build all default ninja targets
             options=self.__options)
         self._write_build_stamp_file(start_time, returncode)
         if returncode != 0:
