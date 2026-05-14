@@ -22,23 +22,28 @@ import os
 from blade import build_manager
 from blade import build_rules
 from blade import config
+from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget
 from blade.thrift_helper import FBThriftHelper
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 class FBThriftLibrary(CcTarget):
     """A fbthrift library target derived from CcTarget."""
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 optimize,
-                 visibility,
-                 tags,
-                 deprecated,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 optimize: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 deprecated: bool,
+                 kwargs: dict[str, object]):
         srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
+        optimize = var_to_list_or_none(optimize)
         super().__init__(
                 name=name,
                 type='fbthrift_library',
@@ -88,14 +93,14 @@ class FBThriftLibrary(CcTarget):
         # (don't forget `generated_hdrs`)
 
 
-def fbthrift_library(name=None,
-                     srcs=None,
-                     deps=None,
-                     optimize=None,
-                     visibility=None,
-                     tags=None,
-                     deprecated=False,
-                     **kwargs):
+def fbthrift_library(name: str,
+                     srcs: StrOrListOpt = None,
+                     deps: StrOrListOpt = None,
+                     optimize: StrOrListOpt = None,
+                     visibility: StrOrListOpt = None,
+                     tags: StrOrListOpt = None,
+                     deprecated: bool = False,
+                     **kwargs: object):
     """fbthrift_library target."""
     fbthrift_library_target = FBThriftLibrary(
             name=name,

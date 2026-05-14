@@ -14,8 +14,9 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade.blade_types import StrOrListOpt
 from blade.target import Target, LOCATION_RE
-from blade.util import which, var_to_list
+from blade.util import which, var_to_list, var_to_list_or_none
 
 
 _package_types = frozenset([
@@ -39,17 +40,19 @@ class PackageTarget(Target):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 type,
-                 out,
-                 shell,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 type: str,
+                 out: str | None,
+                 shell: bool,
+                 kwargs: dict[str, object]):
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
 
         super().__init__(
                 name=name,
@@ -191,15 +194,15 @@ class PackageTarget(Target):
         self.generate_build(rule, output, inputs=package_sources, variables=vars)
 
 
-def package(name=None,
-            srcs=None,
-            deps=None,
-            visibility=None,
-            tags=None,
-            type='tar',
-            out=None,
-            shell=False,
-            **kwargs):
+def package(name: str,
+            srcs: StrOrListOpt = None,
+            deps: StrOrListOpt = None,
+            visibility: StrOrListOpt = None,
+            tags: StrOrListOpt = None,
+            type: str = 'tar',
+            out: str | None = None,
+            shell: bool = False,
+            **kwargs: object):
     package_target = PackageTarget(
             name=name,
             srcs=srcs,

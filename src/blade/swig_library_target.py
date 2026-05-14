@@ -13,25 +13,32 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 class SwigLibrary(CcTarget):
     """This class is used to build swig library."""
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 warning,
-                 java_package,
-                 java_lib_packed,
-                 optimize,
-                 extra_swigflags,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 warning: str,
+                 java_package: str,
+                 java_lib_packed: bool,
+                 optimize: StrOrListOpt,
+                 extra_swigflags: StrOrListOpt,
+                 kwargs: dict[str, object]):
+        # Normalize before forwarding to CcTarget.__init__
+        srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
+        optimize = var_to_list_or_none(optimize)
         super().__init__(
                 name=name,
                 type='swig_library',
@@ -96,17 +103,17 @@ class SwigLibrary(CcTarget):
 
 
 def swig_library(
-        name,
-        srcs=None,
-        deps=None,
-        visibility=None,
-        tags=None,
-        warning='',
-        java_package='',
-        java_lib_packed=False,
-        optimize=None,
-        extra_swigflags=None,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt = None,
+        deps: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        warning: str = '',
+        java_package: str = '',
+        java_lib_packed: bool = False,
+        optimize: StrOrListOpt = None,
+        extra_swigflags: StrOrListOpt = None,
+        **kwargs: object):
     """swig_library target."""
     target = SwigLibrary(
             name=name,

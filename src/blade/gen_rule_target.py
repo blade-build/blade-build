@@ -16,9 +16,10 @@ from blade import build_manager
 from blade import build_rules
 from blade import cc_targets
 from blade import console
+from blade.blade_types import StrOrListOpt
 from blade.target import Target, LOCATION_RE
 from blade.util import regular_variable_name
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 # The rule template for gen_rule
@@ -33,32 +34,35 @@ class GenRuleTarget(Target):
     """General Rule Target"""
 
     def __init__(self,
-                 name,
-                 srcs,
-                 src_exts,
-                 deps,
-                 visibility,
-                 tags,
-                 outs,
-                 cmd,
-                 cmd_name,
-                 generated_hdrs,
-                 generated_incs,
-                 export_incs,
-                 cleans,
-                 heavy,
-                 exclude_dep_labels,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 src_exts: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 outs: StrOrListOpt,
+                 cmd: str,
+                 cmd_name: str,
+                 generated_hdrs: StrOrListOpt,
+                 generated_incs: StrOrListOpt,
+                 export_incs: StrOrListOpt,
+                 cleans: StrOrListOpt,
+                 heavy: bool,
+                 exclude_dep_labels: StrOrListOpt,
+                 kwargs: dict[str, object]):
         """Init method.
         Init the gen rule target.
         """
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
+        src_exts = var_to_list(src_exts) if src_exts is not None else None
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
         super().__init__(
                 name=name,
                 type='gen_rule',
                 srcs=srcs,
-                src_exts=src_exts,
+                src_exts=src_exts if src_exts is not None else [],
                 deps=deps,
                 visibility=visibility,
                 tags=tags,
@@ -185,22 +189,22 @@ class GenRuleTarget(Target):
 
 
 def gen_rule(
-        name,
-        srcs=None,
-        src_exts=None,
-        deps=None,
-        visibility=None,
-        tags=None,
-        outs=None,
-        cmd='',
-        cmd_name='COMMAND',
-        generated_hdrs=None,
-        generated_incs=None,
-        export_incs=None,
-        cleans=None,
-        heavy=False,
-        exclude_dep_labels=None,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt = None,
+        src_exts: StrOrListOpt = None,
+        deps: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        outs: StrOrListOpt = None,
+        cmd: str = '',
+        cmd_name: str = 'COMMAND',
+        generated_hdrs: StrOrListOpt = None,
+        generated_incs: StrOrListOpt = None,
+        export_incs: StrOrListOpt = None,
+        cleans: StrOrListOpt = None,
+        heavy: bool = False,
+        exclude_dep_labels: StrOrListOpt = None,
+        **kwargs: object):
     """General Build Rule
     Args:
         src_exts: List[str],

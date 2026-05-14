@@ -13,8 +13,9 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade.blade_types import StrOrListOpt
 from blade.target import Target, LOCATION_RE
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 class ShellTest(Target):
@@ -31,15 +32,17 @@ class ShellTest(Target):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 testdata,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 testdata: StrOrListOpt,
+                 kwargs: dict[str, object]):
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
         testdata = var_to_list(testdata)
 
         super().__init__(
@@ -99,13 +102,13 @@ class ShellTest(Target):
                                 variables={'testdata': ' '.join(testdata)})
 
 
-def sh_test(name=None,
-            srcs=None,
-            deps=None,
-            visibility=None,
-            tags=None,
-            testdata=None,
-            **kwargs):
+def sh_test(name: str,
+            srcs: StrOrListOpt = None,
+            deps: StrOrListOpt = None,
+            visibility: StrOrListOpt = None,
+            tags: StrOrListOpt = None,
+            testdata: StrOrListOpt = None,
+            **kwargs: object):
     build_manager.instance.register_target(ShellTest(
             name=name,
             srcs=srcs,
