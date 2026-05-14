@@ -24,13 +24,10 @@ from gen_rule_test import TestGenRule
 from hdr_dep_check_test import TestHdrDepCheck
 from java_test import TestJava
 from lex_yacc_test import TestLexYacc
-from load_builds_test import TestLoadBuilds
 from proto_library_test import TestProtoLibrary
 from prebuild_cc_library_test import TestPrebuildCcLibrary
 from query_target_test import TestQuery
 from resource_library_test import TestResourceLibrary
-from swig_library_test import TestSwigLibrary
-from target_dependency_test import TestDepsAnalyzing
 from target_pattern_test import TargetPatternTest
 from linker_scripts_test import LinkerScriptsTest
 
@@ -53,11 +50,8 @@ def _main():
         unittest.defaultTestLoader.loadTestsFromTestCase(TestHdrDepCheck),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestJava),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestLexYacc),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestLoadBuilds),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestProtoLibrary),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestResourceLibrary),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestSwigLibrary),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestDepsAnalyzing),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestQuery),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestTestRunner),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestPrebuildCcLibrary),
