@@ -267,13 +267,6 @@ class BladeConfig:
                 'thrift_gen_params': 'cpp:include_prefix,pure_enums'
             },
 
-            'fbthrift_config': {
-                '__help__': 'Facebook Thrift Configuration',
-                'fbthrift1': 'thrift1',
-                'fbthrift2': 'thrift2',
-                'fbthrift_libs': [],
-                'fbthrift_incs': [],
-            },
         }
 
     def info(self, msg):
@@ -631,5 +624,11 @@ def thrift_library_config(append=None, **kwargs):
 
 @config_rule
 def fbthrift_library_config(append=None, **kwargs):
-    """fbthrift config."""
-    _blade_config.update_config('fbthrift_config', append, kwargs)
+    """fbthrift config (deprecated)."""
+    # fbthrift_library was removed in v3. This stub exists so that
+    # BLADE_ROOT files referencing fbthrift_library_config don't
+    # cause a NameError during config parsing. All arguments are
+    # silently ignored.
+    pass
+
+
