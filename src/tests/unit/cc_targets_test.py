@@ -9,7 +9,7 @@
 The method emits linker flags that force every symbol of a static archive
 to be pulled in — the idiom protoc-generated code relies on for descriptor
 registration (proto_library sets ``link_all_symbols=True`` unconditionally),
-and which thrift_library / fbthrift_library / lex_yacc_target reach for
+and which thrift_library / lex_yacc_target reach for
 the same way.
 
 The flag spelling is platform-sensitive:

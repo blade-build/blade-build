@@ -13,11 +13,6 @@
 """
 Helper classes to get the files generated from thrift IDL files.
 
-Additionally, FBThriftHelper works with the new thrift compiler
-and library from Facebook's own branch:
-
-    https://github.com/facebook/fbthrift
-
 """
 
 
@@ -87,34 +82,6 @@ class ThriftParser:
             pass
         else:
             console.error('%s is an empty thrift file.' % self.path)
-
-
-class FBThriftHelper(ThriftParser):
-    def get_generated_cpp_files(self):
-        files = ['gen-cpp/%s_constants.cpp' % self.thrift_name,
-                 'gen-cpp/%s_constants.h' % self.thrift_name,
-                 'gen-cpp/%s_reflection.cpp' % self.thrift_name,
-                 'gen-cpp/%s_reflection.h' % self.thrift_name,
-                 'gen-cpp/%s_types.cpp' % self.thrift_name,
-                 'gen-cpp/%s_types.h' % self.thrift_name,
-                 'gen-cpp/%s_types.tcc' % self.thrift_name]
-        for service in self.services:
-            files.append('gen-cpp/%s.cpp' % service)
-            files.append('gen-cpp/%s.h' % service)
-            files.append('gen-cpp/%s.tcc' % service)
-        return files
-
-    def get_generated_cpp2_files(self):
-        files = ['gen-cpp2/%s_constants.cpp' % self.thrift_name,
-                 'gen-cpp2/%s_constants.h' % self.thrift_name,
-                 'gen-cpp2/%s_types.cpp' % self.thrift_name,
-                 'gen-cpp2/%s_types.h' % self.thrift_name,
-                 'gen-cpp2/%s_types.tcc' % self.thrift_name]
-        for service in self.services:
-            files.append('gen-cpp2/%s.cpp' % service)
-            files.append('gen-cpp2/%s.h' % service)
-            files.append('gen-cpp2/%s.tcc' % service)
-        return files
 
 
 class ThriftHelper(ThriftParser):

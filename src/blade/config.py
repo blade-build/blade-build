@@ -267,13 +267,6 @@ class BladeConfig:
                 'thrift_gen_params': 'cpp:include_prefix,pure_enums'
             },
 
-            'fbthrift_config': {
-                '__help__': 'Facebook Thrift Configuration',
-                'fbthrift1': 'thrift1',
-                'fbthrift2': 'thrift2',
-                'fbthrift_libs': [],
-                'fbthrift_incs': [],
-            },
         }
 
     def info(self, msg):
@@ -629,7 +622,3 @@ def thrift_library_config(append=None, **kwargs):
     _blade_config.update_config('thrift_config', append, kwargs)
 
 
-@config_rule
-def fbthrift_library_config(append=None, **kwargs):
-    """fbthrift config."""
-    _blade_config.update_config('fbthrift_config', append, kwargs)
