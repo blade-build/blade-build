@@ -18,8 +18,9 @@ from blade import build_manager
 from blade import build_rules
 from blade import config
 from blade import console
+from blade.blade_types import StrOrListOpt
 from blade.target import Target
-from blade.util import run_command, var_to_list
+from blade.util import run_command, var_to_list, var_to_list_or_none
 
 
 _package_re = re.compile(r'^\s*package\s+(\w+)\s*$')
@@ -32,17 +33,21 @@ class GoTarget(Target):
     _go_arch = None
 
     def __init__(self,
-                 name,
-                 type,
-                 srcs,
-                 deps,
-                 extra_goflags,
-                 visibility,
-                 tags,
-                 kwargs):
+                 name: str | None,
+                 type: str,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 extra_goflags: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 kwargs: dict[str, object]):
         """Init the go target."""
+        # Normalize BUILD-file-friendly StrOrList unions to list[str] once,
+        # right at the top; Target.__init__ below sees layer-2 shapes.
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
         extra_goflags = ' '.join(var_to_list(extra_goflags))
 
         super().__init__(
@@ -138,7 +143,14 @@ class GoTarget(Target):
 class GoLibrary(GoTarget):
     """GoLibrary generates build rules for a go package."""
 
-    def __init__(self, name, srcs, deps, visibility, tags, extra_goflags, kwargs):
+    def __init__(self,
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 extra_goflags: StrOrListOpt,
+                 kwargs: dict[str, object]):
         super().__init__(
                 name=name,
                 type='go_library',
@@ -163,7 +175,14 @@ class GoLibrary(GoTarget):
 class GoBinary(GoTarget):
     """GoBinary generates build rules for a go command executable."""
 
-    def __init__(self, name, srcs, deps, visibility, tags, extra_goflags, kwargs):
+    def __init__(self,
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 extra_goflags: StrOrListOpt,
+                 kwargs: dict[str, object]):
         super().__init__(
                 name=name,
                 type='go_binary',
@@ -181,7 +200,15 @@ class GoBinary(GoTarget):
 class GoTest(GoTarget):
     """GoTest generates build rules for a go test binary."""
 
-    def __init__(self, name, srcs, deps, visibility, tags, testdata, extra_goflags, kwargs):
+    def __init__(self,
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 testdata: StrOrListOpt,
+                 extra_goflags: StrOrListOpt,
+                 kwargs: dict[str, object]):
         super().__init__(
                 name=name,
                 type='go_test',
@@ -197,13 +224,13 @@ class GoTest(GoTarget):
 
 
 def go_library(
-        name,
-        srcs,
-        deps=None,
-        extra_goflags=None,
-        visibility=None,
-        tags=None,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt,
+        deps: StrOrListOpt = None,
+        extra_goflags: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        **kwargs: object):
     build_manager.instance.register_target(GoLibrary(
         name=name,
         srcs=srcs,
@@ -215,13 +242,13 @@ def go_library(
 
 
 def go_binary(
-        name,
-        srcs,
-        deps=None,
-        visibility=None,
-        tags=None,
-        extra_goflags=None,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt,
+        deps: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        extra_goflags: StrOrListOpt = None,
+        **kwargs: object):
     build_manager.instance.register_target(GoBinary(
             name=name,
             srcs=srcs,
@@ -233,14 +260,14 @@ def go_binary(
 
 
 def go_test(
-        name,
-        srcs,
-        deps=None,
-        visibility=None,
-        tags=None,
-        testdata=None,
-        extra_goflags=None,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt,
+        deps: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        testdata: StrOrListOpt = None,
+        extra_goflags: StrOrListOpt = None,
+        **kwargs: object):
     build_manager.instance.register_target(GoTest(
             name=name,
             srcs=srcs,
