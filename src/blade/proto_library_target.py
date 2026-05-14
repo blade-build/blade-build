@@ -17,8 +17,9 @@ from blade import build_rules
 from blade import config
 from blade import console
 from blade import java_targets
+from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 class ProtocPlugin:
@@ -34,9 +35,9 @@ class ProtocPlugin:
     __languages = ['cpp', 'java', 'python']
 
     def __init__(self,
-                 name,
-                 path,
-                 code_generation):
+                 name: str,
+                 path: str,
+                 code_generation: dict[str, 'dict[str, StrOrListOpt]']):
         self.name = name
         self.path = path
         assert isinstance(code_generation, dict)
@@ -76,27 +77,34 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
     """
 
     def __init__(self,
-                 name,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 optimize,
-                 deprecated,
-                 generate_descriptors,
-                 target_languages,
-                 plugins,
-                 source_encoding,
-                 cpp_outs,
-                 plugin_opts,
-                 kwargs):
+                 name: str | None,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 optimize: StrOrListOpt,
+                 deprecated: bool,
+                 generate_descriptors: bool,
+                 target_languages: StrOrListOpt,
+                 plugins: StrOrListOpt,
+                 source_encoding: str,
+                 cpp_outs: StrOrListOpt,
+                 plugin_opts: 'dict[str, list[str]] | None',
+                 kwargs: dict[str, object]):
         """Init method.
 
         Init the proto target.
 
         """
         # pylint: disable=too-many-locals
+        # Normalize BUILD-file-friendly StrOrList unions to list[str] once
+        # for the CcTarget.__init__ forward; the rest of the body uses the
+        # normalized shapes.
         srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
+        optimize = var_to_list_or_none(optimize)
         proto_config = config.get_section('proto_library_config')
 
         super().__init__(
@@ -465,20 +473,20 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
 
 
 def proto_library(
-        name,
-        srcs=None,
-        deps=None,
-        visibility=None,
-        tags=None,
-        optimize=None,
-        deprecated=False,
-        generate_descriptors=False,
-        target_languages=None,
-        plugins=None,
-        source_encoding='iso-8859-1',
-        cpp_outs=None,
-        plugin_opts=None,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt = None,
+        deps: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        optimize: StrOrListOpt = None,
+        deprecated: bool = False,
+        generate_descriptors: bool = False,
+        target_languages: StrOrListOpt = None,
+        plugins: StrOrListOpt = None,
+        source_encoding: str = 'iso-8859-1',
+        cpp_outs: StrOrListOpt = None,
+        plugin_opts: 'dict[str, list[str]] | None' = None,
+        **kwargs: object):
     """proto_library target.
     Args:
         generate_descriptors (bool): Whether generate binary protobuf descriptors.
