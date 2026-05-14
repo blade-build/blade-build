@@ -622,3 +622,13 @@ def thrift_library_config(append=None, **kwargs):
     _blade_config.update_config('thrift_config', append, kwargs)
 
 
+@config_rule
+def fbthrift_library_config(append=None, **kwargs):
+    """fbthrift config (deprecated)."""
+    # fbthrift_library was removed in v3. This stub exists so that
+    # BLADE_ROOT files referencing fbthrift_library_config don't
+    # cause a NameError during config parsing. All arguments are
+    # silently ignored.
+    pass
+
+
