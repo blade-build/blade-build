@@ -14,9 +14,10 @@ import os
 from blade import build_manager
 from blade import build_rules
 from blade import config
+from blade.blade_types import StrOrListOpt
 from blade.java_targets import JavaTargetMixIn
 from blade.target import Target
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 class ScalaTarget(Target, JavaTargetMixIn):
@@ -27,24 +28,28 @@ class ScalaTarget(Target, JavaTargetMixIn):
     """
 
     def __init__(self,
-                 name,
-                 type,
-                 srcs,
-                 deps,
-                 visibility,
-                 tags,
-                 resources,
-                 source_encoding,
-                 warnings,
-                 kwargs):
+                 name: str | None,
+                 type: str,
+                 srcs: StrOrListOpt,
+                 deps: StrOrListOpt,
+                 visibility: StrOrListOpt,
+                 tags: StrOrListOpt,
+                 resources: StrOrListOpt,
+                 source_encoding: str | None,
+                 warnings: str | None,
+                 kwargs: dict[str, object]):
         """Init method.
 
         Init the scala target.
 
         """
+        # Normalize BUILD-file-friendly StrOrList unions to list[str] once,
+        # right at the top; Target.__init__ below sees layer-2 shapes.
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
         resources = var_to_list(resources)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
 
         super().__init__(
                 name=name,
@@ -118,18 +123,18 @@ class ScalaLibrary(ScalaTarget):
 
     def __init__(
             self,
-            name,
-            srcs,
-            deps,
-            visibility,
-            tags,
-            resources,
-            source_encoding,
-            warnings,
-            exported_deps,
-            provided_deps,
-            coverage,
-            kwargs):
+            name: str | None,
+            srcs: StrOrListOpt,
+            deps: StrOrListOpt,
+            visibility: StrOrListOpt,
+            tags: StrOrListOpt,
+            resources: StrOrListOpt,
+            source_encoding: str | None,
+            warnings: str | None,
+            exported_deps: StrOrListOpt,
+            provided_deps: StrOrListOpt,
+            coverage: bool,
+            kwargs: dict[str, object]):
         exported_deps = var_to_list(exported_deps)
         provided_deps = var_to_list(provided_deps)
         all_deps = var_to_list(deps) + exported_deps + provided_deps
@@ -160,16 +165,16 @@ class ScalaFatLibrary(ScalaTarget):
 
     def __init__(
             self,
-            name,
-            srcs,
-            deps,
-            visibility,
-            tags,
-            resources,
-            source_encoding,
-            warnings,
-            exclusions,
-            kwargs):
+            name: str | None,
+            srcs: StrOrListOpt,
+            deps: StrOrListOpt,
+            visibility: StrOrListOpt,
+            tags: StrOrListOpt,
+            resources: StrOrListOpt,
+            source_encoding: str | None,
+            warnings: str | None,
+            exclusions: StrOrListOpt,
+            kwargs: dict[str, object]):
         super().__init__(
                 name=name,
                 type='scala_fat_library',
@@ -195,17 +200,17 @@ class ScalaTest(ScalaFatLibrary):
 
     def __init__(
             self,
-            name,
-            srcs,
-            deps,
-            visibility,
-            tags,
-            resources,
-            source_encoding,
-            warnings,
-            exclusions,
-            testdata,
-            kwargs):
+            name: str | None,
+            srcs: StrOrListOpt,
+            deps: StrOrListOpt,
+            visibility: StrOrListOpt,
+            tags: StrOrListOpt,
+            resources: StrOrListOpt,
+            source_encoding: str | None,
+            warnings: str | None,
+            exclusions: StrOrListOpt,
+            testdata: StrOrListOpt,
+            kwargs: dict[str, object]):
         super().__init__(
                 name=name,
                 srcs=srcs,
@@ -274,18 +279,18 @@ class ScalaTest(ScalaFatLibrary):
         self.generate_build('scalatest', output, inputs=[jar] + dep_jars + maven_jars, variables=vars)
 
 
-def scala_library(name=None,
-                  srcs=None,
-                  deps=None,
-                  resources=None,
-                  visibility=None,
-                  tags=None,
-                  source_encoding=None,
-                  warnings=None,
-                  exported_deps=None,
-                  provided_deps=None,
-                  coverage=True,
-                  **kwargs):
+def scala_library(name: str,
+                  srcs: StrOrListOpt = None,
+                  deps: StrOrListOpt = None,
+                  resources: StrOrListOpt = None,
+                  visibility: StrOrListOpt = None,
+                  tags: StrOrListOpt = None,
+                  source_encoding: str | None = None,
+                  warnings: str | None = None,
+                  exported_deps: StrOrListOpt = None,
+                  provided_deps: StrOrListOpt = None,
+                  coverage: bool = True,
+                  **kwargs: object):
     """Define scala_library target."""
     target = ScalaLibrary(
             name=name,
@@ -303,16 +308,16 @@ def scala_library(name=None,
     build_manager.instance.register_target(target)
 
 
-def scala_fat_library(name=None,
-                      srcs=None,
-                      deps=None,
-                      resources=None,
-                      visibility=None,
-                      tags=None,
-                      source_encoding=None,
-                      warnings=None,
-                      exclusions=None,
-                      **kwargs):
+def scala_fat_library(name: str,
+                      srcs: StrOrListOpt = None,
+                      deps: StrOrListOpt = None,
+                      resources: StrOrListOpt = None,
+                      visibility: StrOrListOpt = None,
+                      tags: StrOrListOpt = None,
+                      source_encoding: str | None = None,
+                      warnings: str | None = None,
+                      exclusions: StrOrListOpt = None,
+                      **kwargs: object):
     """Define scala_fat_library target."""
     target = ScalaFatLibrary(
             name=name,
@@ -328,17 +333,17 @@ def scala_fat_library(name=None,
     build_manager.instance.register_target(target)
 
 
-def scala_test(name=None,
-               srcs=None,
-               deps=None,
-               resources=None,
-               visibility=None,
-               tags=None,
-               source_encoding=None,
-               warnings=None,
-               exclusions=None,
-               testdata=None,
-               **kwargs):
+def scala_test(name: str,
+               srcs: StrOrListOpt = None,
+               deps: StrOrListOpt = None,
+               resources: StrOrListOpt = None,
+               visibility: StrOrListOpt = None,
+               tags: StrOrListOpt = None,
+               source_encoding: str | None = None,
+               warnings: str | None = None,
+               exclusions: StrOrListOpt = None,
+               testdata: StrOrListOpt = None,
+               **kwargs: object):
     """Build a scala test target
     Args:
         Most attributes are similar to java_test.
