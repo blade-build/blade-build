@@ -18,9 +18,10 @@ import os
 from blade import build_manager
 from blade import build_rules
 from blade import config
+from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget
 from blade.thrift_helper import ThriftHelper
-from blade.util import var_to_list
+from blade.util import var_to_list, var_to_list_or_none
 
 
 # TODO(chen3feng): Support java generation
@@ -29,15 +30,19 @@ class ThriftLibrary(CcTarget):
 
     def __init__(
             self,
-            name,
-            srcs,
-            deps,
-            visibility,
-            tags,
-            optimize,
-            deprecated,
-            kwargs):
+            name: str | None,
+            srcs: StrOrListOpt,
+            deps: StrOrListOpt,
+            visibility: StrOrListOpt,
+            tags: StrOrListOpt,
+            optimize: StrOrListOpt,
+            deprecated: bool,
+            kwargs: dict[str, object]):
         srcs = var_to_list(srcs)
+        deps = var_to_list(deps)
+        tags = var_to_list(tags)
+        visibility = var_to_list_or_none(visibility)
+        optimize = var_to_list_or_none(optimize)
         super().__init__(
                 name=name,
                 type='thrift_library',
@@ -111,14 +116,14 @@ class ThriftLibrary(CcTarget):
 
 
 def thrift_library(
-        name,
-        srcs=None,
-        deps=None,
-        visibility=None,
-        tags=None,
-        optimize=None,
-        deprecated=False,
-        **kwargs):
+        name: str,
+        srcs: StrOrListOpt = None,
+        deps: StrOrListOpt = None,
+        visibility: StrOrListOpt = None,
+        tags: StrOrListOpt = None,
+        optimize: StrOrListOpt = None,
+        deprecated: bool = False,
+        **kwargs: object):
     """thrift_library target."""
     thrift_library_target = ThriftLibrary(
             name=name,
