@@ -41,7 +41,7 @@ V3 是一次全面的现代化升级，带来以下增强：
 
 升级细节请参考[升级到 V3 版](doc/zh_CN/upgrade-to-v3.md)。
 
-如果需要 V2，请使用 `2.x` 分支或 [v2.x tag](https://github.com/blade-build/blade-build/releases)，升级细节参考 [V2 升级说明](doc/zh_CN/upgrade-to-v2.md)。
+如果需要 V2，请使用 `v2` 分支或 [v2.x tag](https://github.com/blade-build/blade-build/releases)，升级细节参考 [V2 升级说明](doc/zh_CN/upgrade-to-v2.md)。
 
 ## Stargazers over time
 

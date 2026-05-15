@@ -29,7 +29,7 @@ Execute the installation script to install Blade under `~/bin`:
 **Supported Python Versions:**
 - **Python 3.10+:** Required minimum version (tested on 3.10 through 3.14)
 
-Older versions (Python 2.7 and Python 3.x prior to 3.10) are no longer supported by Blade v3. For legacy environments, use the `2.x` LTS branch.
+Older versions (Python 2.7 and Python 3.x prior to 3.10) are no longer supported by Blade v3. For legacy environments, use the `v2` LTS branch.
 
 ## Post-Installation Verification
 
