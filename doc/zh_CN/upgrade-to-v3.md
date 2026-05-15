@@ -22,14 +22,11 @@ V3 是一次全面的现代化升级，主要目标是：
 
 V3 **只支持 Python 3.10 及以上版本**（在 3.10 - 3.14 上经过 CI 测试）。V2 支持的 Python 2.7 和旧版 Python 3 不再支持。
 
-如果你的系统默认 Python 版本低于 3.10，可以通过以下方式指定 Python 解释器：
+如果你的系统默认 Python 版本低于 3.10，可以通过环境变量 `BLADE_PYTHON_INTERPRETER` 指定 Python 解释器：
 
 ```bash
-# 方法 1：使用环境变量
-export BLADE_PYTHON=/usr/bin/python3.12
-
-# 方法 2：修改 blade 脚本第一行
-#!/usr/bin/env python3.12
+# 设置 BLADE_PYTHON_INTERPRETER 环境变量指向 Python 3.10+
+export BLADE_PYTHON_INTERPRETER=/usr/bin/python3.12
 ```
 
 ### BUILD 文件语法变更

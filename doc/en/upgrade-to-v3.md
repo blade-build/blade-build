@@ -22,14 +22,10 @@ Upgrading to V3 gives you:
 
 V3 **only supports Python 3.10 and above** (tested on 3.10 - 3.14 via CI). Python 2.7 and older Python 3 versions supported by V2 are no longer supported.
 
-If your system's default Python is below 3.10, specify the interpreter via:
+If your system's default Python is below 3.10, set the `BLADE_PYTHON_INTERPRETER` environment variable to point to Python 3.10+:
 
 ```bash
-# Method 1: environment variable
-export BLADE_PYTHON=/usr/bin/python3.12
-
-# Method 2: modify the blade script shebang
-#!/usr/bin/env python3.12
+export BLADE_PYTHON_INTERPRETER=/usr/bin/python3.12
 ```
 
 ### BUILD file syntax
