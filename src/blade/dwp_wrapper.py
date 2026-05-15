@@ -24,7 +24,6 @@ The script will:
 """
 
 import os
-import sys
 import tempfile
 
 from blade import console

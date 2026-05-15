@@ -11,15 +11,12 @@ This module deals with the build toolchains.
 
 
 import os
-import re
 import subprocess
 import tempfile
 
 from blade import console
 from blade.util import var_to_list, run_command
 
-# example: Cuda compilation tools, release 11.0, V11.0.194
-_nvcc_version_re = re.compile(r'V(\d+\.\d+\.\d+)')
 
 class BuildArchitecture:
     """

@@ -89,7 +89,7 @@ def compile_filter(expr):
         return None, error
 
     def filter_function(target, _code=code):
-        match_tags = target.match_tags
+        match_tags = target.match_tags  # lgtm[py/unused-local-variable]
         return eval(_code)  # pylint: disable=eval-used
 
     return filter_function, []

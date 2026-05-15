@@ -12,7 +12,7 @@ Define resource_library target.
 from blade import build_manager
 from blade import build_rules
 from blade import cc_targets
-from blade.blade_types import StrOrList, StrOrListOpt
+from blade.blade_types import StrOrListOpt
 from blade.util import regular_variable_name, var_to_list, var_to_list_or_none
 
 

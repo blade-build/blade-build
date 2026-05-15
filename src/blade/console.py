@@ -87,7 +87,7 @@ _log = None
 def set_log_file(log_file):
     """Set the global log file."""
     global _log
-    _log = open(log_file, 'w', 1)
+    _log = open(log_file, 'w', 1)  # kept open for process lifetime
 
 
 def get_log_file():
