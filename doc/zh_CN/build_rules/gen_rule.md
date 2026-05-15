@@ -18,6 +18,15 @@
   - $FIRST\_SRC 第一个输入文件的路径
   - $FIRST\_OUT 第一个输出文件的路径
   - $BUILD\_DIR 输出的根目录，比如 build[64,32]\_[release,debug]
+  - `$(location target)` 和 `$(location target label)` — 被替换为所引用目标的输出文件路径。可选的 `label` 参数指定特定输出（如 `$(location //bin:server bin)` 表示可执行文件）。常用于 `gen_rule.cmd`、`testdata`、`package`、`sh_test` 等场景。示例：
+
+    ```python
+    gen_rule(
+        name = 'copy_binary',
+        cmd = 'cp $(location //server:server) $OUT_DIR/server',
+        outs = ['server'],
+    )
+    ```
 
 - `cmd_name`: str，命令的名字，用于简略模式下显示，默认为 `COMMAND`
 - generate\_hdrs bool，指示这个目标是否会生成 outs 里列出的文件名之外的 C/C++ 头文件。
