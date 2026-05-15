@@ -18,6 +18,18 @@ Used to customize your own construction rules, parameters:
     - $FIRST\_SRC, first input file path
     - $FIRST\_OUT, the path of the first output file
     - BUILD\_DIR, The root output directory, such as build[64,32]\_[release, debug]
+  - `$(location target)` and `$(location target label)` — replaced with the output
+    file path(s) of the referenced target. The optional `label` parameter specifies
+    a particular output (e.g. `$(location //bin:server bin)`). Commonly used in
+    `gen_rule.cmd`, `testdata`, `package`, and `sh_test`. Example:
+
+    ```python
+    gen_rule(
+        name = 'copy_binary',
+        cmd = 'cp $(location //server:server) $OUT_DIR/server',
+        outs = ['server'],
+    )
+    ```
 
 - cmd\_name: str, the name of the command, used to display in simplified mode, the default is `COMMAND`
 - generate\_hdrs: bool, indicates whether this target will generate C/C++ header files other than the file names already listed in `outs`.
