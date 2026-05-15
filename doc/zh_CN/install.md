@@ -32,7 +32,7 @@ curl https://blade-build.github.io/install.sh | bash
 
 - **Python 3.10+：** 最低要求版本（在 3.10 到 3.14 上测试）
 
-更老的版本（Python 2.7 及 3.10 之前的 Python 3）Blade v3 已不再支持。如需在遗留环境中使用，请使用 `2.x` LTS 分支。
+更老的版本（Python 2.7 及 3.10 之前的 Python 3）Blade v3 已不再支持。如需在遗留环境中使用，请使用 `v2` LTS 分支。
 
 ## 安装后验证
 
