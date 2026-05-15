@@ -33,6 +33,8 @@ V3 is a comprehensive modernization upgrade with these highlights:
 
 - **Python 3.10+ only**, all Python 2 compatibility code removed
 - **Full type annotations** with pyright static checking
+- **Comprehensive unit tests** covering core build rules and utilities
+- **Cross-repo E2E smoke tests** against the standalone [blade-test](https://github.com/blade-build/blade-test) repository
 - **Experimental macOS support**, with multiple macOS compilation fixes
 - **Code cleanup**: dead code and invalid tests removed, known bugs fixed
 - **New documentation**: Go builds and `$(location)` syntax

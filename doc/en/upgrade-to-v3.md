@@ -12,6 +12,7 @@ V3 is a comprehensive modernization upgrade with the following goals:
 Upgrading to V3 gives you:
 
 - Better type safety, reducing parameter errors when writing BUILD files
+- Comprehensive unit tests and cross-repo E2E smoke test coverage
 - Cleaner code structure, easier to extend and develop
 - Blade can run on macOS (experimental)
 - Better documentation coverage (new Go build docs, `$(location)` syntax docs)
