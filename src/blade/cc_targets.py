@@ -91,18 +91,16 @@ def declare_hdr_dir(target, inc):
     _hdr_dir_targets_map[inc].add(target.key)
 
 
+_find_libs_by_header_cache: dict = {}
+
 def find_libs_by_header(hdr):
-    cache = find_libs_by_header.cache
-    result = cache.get(hdr)
+    result = _find_libs_by_header_cache.get(hdr)
     if result is not None:
         return result
     result = inclusion_check.find_libs_by_header(
                 hdr, _hdr_targets_map, _hdr_dir_targets_map)
-    cache[hdr] = result
+    _find_libs_by_header_cache[hdr] = result
     return result
-
-
-find_libs_by_header.cache = {}
 
 
 # dict(hdr, set(targets))
@@ -177,22 +175,22 @@ class CcTarget(Target):
     """
 
     def __init__(self,
-                 name: 'str | None',
+                 name: str | None,
                  type: str,
-                 srcs: 'list[str]',
-                 deps: 'list[str]',
-                 visibility: 'list[str] | None',
-                 tags: 'list[str]',
+                 srcs: list[str],
+                 deps: list[str],
+                 visibility: list[str] | None,
+                 tags: list[str],
                  warning: str,
-                 defs: 'list[str]',
-                 incs: 'list[str]',
-                 export_incs: 'list[str]',
-                 optimize: 'list[str] | None',
-                 linkflags: 'list[str] | None',
-                 extra_cppflags: 'list[str]',
-                 extra_linkflags: 'list[str]',
-                 kwargs: 'dict[str, object]',
-                 src_exts: 'list[str] | None' = None,
+                 defs: list[str],
+                 incs: list[str],
+                 export_incs: list[str],
+                 optimize: list[str] | None,
+                 linkflags: list[str] | None,
+                 extra_cppflags: list[str],
+                 extra_linkflags: list[str],
+                 kwargs: dict[str, object],
+                 src_exts: list[str] | None = None,
                  cmd: str = ''):
         """Init method.
 
@@ -937,17 +935,17 @@ class PrebuiltCcLibrary(CcTarget):
     """
 
     def __init__(self,
-                 name: 'str | None',
+                 name: str | None,
                  deps: 'StrOrListOpt',
                  hdrs: 'StrOrListOpt',
                  visibility: 'StrOrListOpt',
                  tags: 'StrOrListOpt',
                  export_incs: 'StrOrListOpt',
-                 libpath_pattern: 'str | None',
+                 libpath_pattern: str | None,
                  link_all_symbols: bool,
                  binary_link_only: bool,
                  deprecated: bool,
-                 kwargs: 'dict[str, object]'):
+                 kwargs: dict[str, object]):
         """Init method."""
         # pylint: disable=too-many-locals
         # Normalize the BUILD-file-friendly StrOrList unions once, right at
@@ -1092,7 +1090,7 @@ def prebuilt_cc_library(
         tags: 'StrOrListOpt' = None,
         export_incs: 'StrOrListOpt' = None,
         hdrs: 'StrOrListOpt' = None,
-        libpath_pattern: 'str | None' = None,
+        libpath_pattern: str | None = None,
         link_all_symbols: bool = False,
         binary_link_only: bool = False,
         deprecated: bool = False,
@@ -1202,7 +1200,7 @@ class ForeignCcLibrary(CcTarget):
     """
 
     def __init__(self,
-                 name: 'str | None',
+                 name: str | None,
                  deps: 'StrOrListOpt',
                  install_dir: str,
                  hdrs: 'StrOrListOpt',
@@ -1215,7 +1213,7 @@ class ForeignCcLibrary(CcTarget):
                  link_all_symbols: bool,
                  binary_link_only: bool,
                  deprecated: bool,
-                 kwargs: 'dict[str, object]'):
+                 kwargs: dict[str, object]):
         """Init method."""
         # pylint: disable=too-many-locals
         # Normalize the BUILD-file-friendly StrOrList unions once, right at
@@ -1297,7 +1295,7 @@ class ForeignCcLibrary(CcTarget):
 
 
 def foreign_cc_library(
-        name: 'str | None' = None,
+        name: str | None = None,
         install_dir: str = '',
         lib_dir: str = 'lib',
         hdrs: 'StrOrListOpt' = None,
@@ -1599,7 +1597,7 @@ class CcPlugin(CcTarget):
                  version_scripts: 'StrOrListOpt',
                  allow_undefined: bool,
                  strip: bool,
-                 kwargs: 'dict[str, object]'):
+                 kwargs: dict[str, object]):
         """Init method.
 
         Init the cc plugin target.

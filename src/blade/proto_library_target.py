@@ -37,7 +37,7 @@ class ProtocPlugin:
     def __init__(self,
                  name: str,
                  path: str,
-                 code_generation: dict[str, 'dict[str, StrOrListOpt]']):
+                 code_generation: dict[str, dict[str, StrOrListOpt]]):
         self.name = name
         self.path = path
         assert isinstance(code_generation, dict)
@@ -89,7 +89,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
                  plugins: StrOrListOpt,
                  source_encoding: str,
                  cpp_outs: StrOrListOpt,
-                 plugin_opts: 'dict[str, list[str]] | None',
+                 plugin_opts: dict[str, list[str]] | None,
                  kwargs: dict[str, object]):
         """Init method.
 
@@ -483,7 +483,7 @@ def proto_library(
         plugins: StrOrListOpt = None,
         source_encoding: str = 'iso-8859-1',
         cpp_outs: StrOrListOpt = None,
-        plugin_opts: 'dict[str, list[str]] | None' = None,
+        plugin_opts: dict[str, list[str]] | None = None,
         **kwargs: object):
     """proto_library target.
     Args:

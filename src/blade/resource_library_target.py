@@ -20,14 +20,14 @@ class ResourceLibrary(cc_targets.CcTarget):
     """This class is used to generate C/C++ resource library rules."""
 
     def __init__(self,
-                 name: 'str | None',
+                 name: str | None,
                  srcs: 'StrOrListOpt',
                  deps: 'StrOrListOpt',
                  visibility: 'StrOrListOpt',
                  tags: 'StrOrListOpt',
                  optimize: 'StrOrListOpt',
                  extra_cppflags: 'StrOrListOpt',
-                 kwargs: 'dict[str, object]'):
+                 kwargs: dict[str, object]):
         """Init method.
 
         Init the cc target.
@@ -87,7 +87,7 @@ class ResourceLibrary(cc_targets.CcTarget):
         self._cc_library(objs)
 
 
-def resource_library(name: 'str | None' = None,
+def resource_library(name: str | None = None,
                      srcs: 'StrOrListOpt' = None,
                      deps: 'StrOrListOpt' = None,
                      visibility: 'StrOrListOpt' = None,

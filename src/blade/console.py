@@ -92,6 +92,7 @@ def set_log_file(log_file):
 
 def get_log_file():
     """Return the global log file name."""
+    assert _log is not None, 'log file not set'
     return _log.name
 
 

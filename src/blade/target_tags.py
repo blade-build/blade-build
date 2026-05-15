@@ -84,13 +84,14 @@ def _compile_filter_expr(expr, match_func):
 
 def compile_filter(expr):
     """Compile a filter expression into a filter function."""
-    def filter_function(target):
-        match_tags = target.match_tags
-        return eval(filter_function.code)  # pylint: disable=eval-used
     code, error = _compile_filter_expr(expr, 'match_tags')
     if not code:
         return None, error
-    filter_function.code = code
+
+    def filter_function(target, _code=code):
+        match_tags = target.match_tags
+        return eval(_code)  # pylint: disable=eval-used
+
     return filter_function, []
 
 
