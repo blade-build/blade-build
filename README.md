@@ -25,30 +25,21 @@ First, let's see a cool demo:
 
 ## Releases
 
-The code on the master branch is the development version and should be considered as an alpha version.
-Please prefer using the version on the tags in your formal environment.
-We will release the verified version on the large-scale internal code base to the tag from time to time.
+The `master` branch contains the development version. The `v3` branch is the current stable line. For production use, prefer tagged versions.
 
-* Version 2.0 is now available with the following major enhancements:
+### Blade 3.0
 
-* Minimum Python version requirement: 3.10
-  * Java and Scala build support
-  * Comprehensive Python language support
-  * Custom extension framework
-  * Exclusive use of [Ninja](doc/en/config.md#global_config) as the backend build system, delivering significant performance improvements
+V3 is a comprehensive modernization upgrade with these highlights:
 
-Please follow the [Upgrade Notes](doc/en/upgrade-to-v2.md) to upgrade.
+- **Python 3.10+ only**, all Python 2 compatibility code removed
+- **Full type annotations** with pyright static checking
+- **Experimental macOS support**, with multiple macOS compilation fixes
+- **Code cleanup**: dead code and invalid tests removed, known bugs fixed
+- **New documentation**: Go builds and `$(location)` syntax
 
-* Version 3.0 is now available with the following major enhancements:
+See the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide for details.
 
-  * Minimum Python version requirement: **3.10** (Python 2 dropped)
-  * Full type annotations with pyright static checking
-  * Code cleanup: dead code removed (fbthrift_library etc.), invalid tests cleaned up
-  * Experimental macOS support
-  * New Go build and `$(location)` syntax documentation
-  * Multiple bug fixes and compatibility improvements
-
-Please follow the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide to upgrade.
+For V2, use the `v2` branch or [v2.x tags](https://github.com/blade-build/blade-build/releases). See the [V2 Upgrade Notes](doc/en/upgrade-to-v2.md).
 
 ## Stargazers over time
 

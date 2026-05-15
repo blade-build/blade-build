@@ -25,28 +25,21 @@ Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based deve
 
 ## 版本发布
 
-`master` 分支上的代码为开发版本，应视为 alpha 版。生产环境请优先使用 tag 上的版本。我们会不定期地将在大规模内部代码库中经过验证的版本发布到 tag。
+`master` 分支上为开发版本，`v3` 分支为当前的稳定主线。生产环境请优先使用 tag 上的版本。
 
-* Blade 2.0 现已发布，带来以下重要增强：
+### Blade 3.0
 
-* 最低 Python 版本要求：3.10
-  * 完善的 Java 与 Scala 构建支持
-  * 全面的 Python 语言构建支持
-  * 自定义扩展机制
-  * 后端独家采用 [Ninja](doc/zh_CN/config.md#global_config) 构建系统，构建性能显著提升
+V3 是一次全面的现代化升级，带来以下增强：
 
-升级细节请参考[升级说明](doc/zh_CN/upgrade-to-v2.md)。
-
-* Blade 3.0 现已发布，带来以下重要增强：
-
-  * 最低 Python 版本要求：**3.10**（不再支持 Python 2）
-  * 全量类型标注，通过 pyright 静态检查
-  * 代码清理：移除死代码（fbthrift_library 等）和失效测试
-  * macOS 实验性支持
-  * 新增 Go 构建文档和 `$(location)` 语法文档
-  * 修复多个 bug 和编译兼容性问题
+- **仅支持 Python 3.10+**，彻底移除 Python 2 兼容代码
+- **全量类型标注**，通过 pyright 静态检查
+- **macOS 实验性支持**，修复了多个 mac 编译兼容性问题
+- **代码清理**：移除死代码和失效测试，修复已知 bug
+- **新增文档**：Go 构建和 `$(location)` 语法
 
 升级细节请参考[升级到 V3 版](doc/zh_CN/upgrade-to-v3.md)。
+
+如果需要 V2，请使用 `v2` 分支或 [v2.x tag](https://github.com/blade-build/blade-build/releases)，升级细节参考 [V2 升级说明](doc/zh_CN/upgrade-to-v2.md)。
 
 ## Stargazers over time
 
