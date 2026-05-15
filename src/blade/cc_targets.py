@@ -276,6 +276,9 @@ class CcTarget(Target):
         """Expand incs to full path"""
         result = []
         for inc in var_to_list(incs):
+            if '..' in inc.split(os.sep):
+                self.error('"incs" must not contain "..": %s' % inc)
+                continue
             if inc.startswith('//'):  # Full path
                 result.append(inc[2:])
             else:
