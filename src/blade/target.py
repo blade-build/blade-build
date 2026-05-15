@@ -598,7 +598,6 @@ class Target:
         Returns:
             A tuple of (target jars, maven jars)
         """
-        # TODO(chen3feng): put to `data`
         return [], []
 
     def _target_dir(self):
