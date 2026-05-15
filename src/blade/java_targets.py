@@ -4,6 +4,11 @@
 # Author: CHEN Feng <phongchen@tencent.com>
 # Created: Jun 26, 2013
 
+# pyright: reportAttributeAccessIssue=false
+# JavaTargetMixIn methods access Target attributes (self.deps, self.attr,
+# self.warning, etc.) that pyright can't resolve because the mixin does
+# not inherit from Target. The attributes exist at runtime via MRO when
+# mixed into JavaTarget / ScalaTarget / ProtoLibrary.
 # pylint: disable=too-many-lines
 
 """
