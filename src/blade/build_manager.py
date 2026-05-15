@@ -29,7 +29,9 @@ from blade.dependency_analyzer import analyze_deps
 from blade.load_build_files import load_targets
 from blade.backend import NinjaFileGenerator
 from blade.test_runner import TestRunner
-from blade.util import (cpu_count, md5sum_file, pickle)
+import pickle
+
+from blade.util import (cpu_count, md5sum_file)
 
 # Global build manager instance
 instance = None

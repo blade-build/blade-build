@@ -19,7 +19,6 @@ import hashlib
 import inspect
 import json
 import os
-import pickle  # re-exported for blade.util consumers
 import signal
 import subprocess
 import sys

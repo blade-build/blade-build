@@ -14,6 +14,7 @@ of all of the cc targets, like cc_library, cc_binary.
 
 import os
 import sys
+import pickle
 from string import Template
 from typing import Any
 
@@ -27,7 +28,6 @@ from blade.target import Target
 from blade.util import (
     mkdir_p,
     path_under_dir,
-    pickle,
     run_command,
     stable_unique,
     var_to_list,
