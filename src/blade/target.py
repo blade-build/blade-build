@@ -93,7 +93,7 @@ def _parse_target(dep):
     return result
 
 
-_parse_target_cache: 'dict[str, tuple]' = {}
+_parse_target_cache: dict[str, tuple] = {}
 
 
 class Target:
@@ -105,14 +105,14 @@ class Target:
     """
 
     def __init__(self,
-                 name: 'str | None',
+                 name: str | None,
                  type: str,
-                 srcs: 'list[str]',
-                 src_exts: 'list[str]',
-                 deps: 'list[str]',
-                 visibility: 'list[str] | None',
-                 tags: 'list[str]',
-                 kwargs: 'dict[str, object]',
+                 srcs: list[str],
+                 src_exts: list[str],
+                 deps: list[str],
+                 visibility: list[str] | None,
+                 tags: list[str],
+                 kwargs: dict[str, object],
                  cmd: str = ''):
         """Init method.
 
@@ -163,7 +163,7 @@ class Target:
         self.deps = []
 
         # Expanded dependencies, includes direct and indirect dependies.
-        self.expanded_deps: 'list[str] | None' = None  # None means not expanded yet
+        self.expanded_deps: list[str] | None = None  # None means not expanded yet
 
         self.dependents = set()  # Target keys which depends on this
         self.expanded_dependents = set()  # Expanded target keys which depends on this
