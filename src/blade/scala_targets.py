@@ -61,6 +61,11 @@ class ScalaTarget(Target, JavaTargetMixIn):
                 tags=tags,
                 kwargs=kwargs)
         self._process_resources(resources)
+        # Pre-expand resource directories so that changes to files inside
+        # the directory are captured in the target's fingerprint.
+        if self.attr['resources']:
+            self.attr['expanded_resources'] = self._process_regular_resources(
+                self.attr['resources'])
         if source_encoding:
             self.attr['source_encoding'] = source_encoding
         if warnings:

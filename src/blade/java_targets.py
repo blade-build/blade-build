@@ -541,7 +541,8 @@ class JavaTargetMixIn:
             return []
         inputs, outputs = [], []
         resources_dir = self._target_file_path(self.name + '.resources')
-        resources = self._process_regular_resources(resources)
+        resources = self.attr.get('expanded_resources',
+            self._process_regular_resources(resources))
         for src, dst in resources:
             inputs.append(src)
             outputs.append(os.path.join(resources_dir, dst))
@@ -654,6 +655,11 @@ class JavaTarget(Target, JavaTargetMixIn):
                 tags=tags,
                 kwargs=kwargs)
         self._process_resources(resources)
+        # Pre-expand resource directories so that changes to files inside
+        # the directory are captured in the target's fingerprint.
+        if self.attr['resources']:
+            self.attr['expanded_resources'] = self._process_regular_resources(
+                self.attr['resources'])
         self.attr['source_encoding'] = source_encoding
         self._add_tags('lang:java')
 
