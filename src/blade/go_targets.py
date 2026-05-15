@@ -101,7 +101,7 @@ class GoTarget(Target):
     def _expand_deps_generation(self):
         build_targets = self.blade.get_build_targets()
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
-        for dep in self.expanded_deps:  # pylint: disable=not-an-iterable
+        for dep in self.expanded_deps:
             d = build_targets[dep]
             d.attr['generate_go'] = True
 
