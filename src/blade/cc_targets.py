@@ -1671,7 +1671,7 @@ class CcPlugin(CcTarget):
         # Honor user-supplied prefix / suffix; fall back to the current
         # toolchain defaults when either is left as None. See
         # :func:`_cc_plugin_default_prefix_suffix` for the cross-platform
-        # TODO.
+        # defaults.
         default_prefix, default_suffix = _cc_plugin_default_prefix_suffix()
         prefix = default_prefix if self.attr['prefix'] is None else self.attr['prefix']
         suffix = default_suffix if self.attr['suffix'] is None else self.attr['suffix']

@@ -38,8 +38,6 @@ instance = None
 # Start of fingerprint line in each per-target ninja file
 _NINJA_FILE_FINGERPRINT_START = '#Fingerprint='
 
-_ALL_COMMAND_TARGETS = '__ALL_COMMAND_TARGETS__'
-
 class Blade:
     """Blade. A blade manager class."""
 
@@ -536,7 +534,6 @@ class Blade:
         code = []
         skip_test = getattr(self.__options, 'no_test', False)
         skip_package = not getattr(self.__options, 'generate_package', False)
-        command_target_outputs = []
         for k in self.__sorted_targets_keys:
             target = self.__build_targets[k]
             if skip_test and target.type.endswith('_test') and k not in self.__direct_targets:
@@ -548,11 +545,6 @@ class Blade:
             if target_ninja:
                 target._remove_on_clean(target_ninja)
                 code += 'include %s\n' % target_ninja
-                if k in self.__expanded_command_targets:
-                    command_target_outputs.append(target.get_outputs_goal())
-        # TODO: reland this feature
-        # code.append('build %s: phony %s\n' % (_ALL_COMMAND_TARGETS, ' '.join(command_target_outputs)))
-        # code.append('default %s\n' % (_ALL_COMMAND_TARGETS))
         return code
 
     def get_build_toolchain(self):

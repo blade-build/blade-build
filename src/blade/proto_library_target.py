@@ -157,7 +157,6 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         self.attr['source_encoding'] = source_encoding
         self.attr['generate_descriptors'] = generate_descriptors
 
-        # TODO(chen3feng): Change the values to a `set` rather than separated attributes
         target_languages = var_to_list(target_languages)
         self.attr['target_languages'] = target_languages
         options = self.blade.get_options()
