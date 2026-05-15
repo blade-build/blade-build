@@ -34,8 +34,6 @@ class JacocoReporter:
             if target.attr.get('jacoco_coverage'):
                 self.__coverage_targets.append(target)
 
-    # Copied from BinaryRunner
-    # TODO(chen3feng): DRY
     def _executable(self, target):
         """Returns the executable path."""
         return os.path.join(self.__build_dir, target.path, target.name)
