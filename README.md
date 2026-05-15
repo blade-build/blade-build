@@ -39,6 +39,17 @@ We will release the verified version on the large-scale internal code base to th
 
 Please follow the [Upgrade Notes](doc/en/upgrade-to-v2.md) to upgrade.
 
+* Version 3.0 is now available with the following major enhancements:
+
+  * Minimum Python version requirement: **3.10** (Python 2 dropped)
+  * Full type annotations with pyright static checking
+  * Code cleanup: dead code removed (fbthrift_library etc.), invalid tests cleaned up
+  * Experimental macOS support
+  * New Go build and `$(location)` syntax documentation
+  * Multiple bug fixes and compatibility improvements
+
+Please follow the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide to upgrade.
+
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/blade-build/blade-build.svg)](https://starchart.cc/blade-build/blade-build)

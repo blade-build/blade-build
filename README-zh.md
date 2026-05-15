@@ -37,6 +37,17 @@ Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based deve
 
 升级细节请参考[升级说明](doc/zh_CN/upgrade-to-v2.md)。
 
+* Blade 3.0 现已发布，带来以下重要增强：
+
+  * 最低 Python 版本要求：**3.10**（不再支持 Python 2）
+  * 全量类型标注，通过 pyright 静态检查
+  * 代码清理：移除死代码（fbthrift_library 等）和失效测试
+  * macOS 实验性支持
+  * 新增 Go 构建文档和 `$(location)` 语法文档
+  * 修复多个 bug 和编译兼容性问题
+
+升级细节请参考[升级到 V3 版](doc/zh_CN/upgrade-to-v3.md)。
+
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/blade-build/blade-build.svg)](https://starchart.cc/blade-build/blade-build)
