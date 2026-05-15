@@ -41,7 +41,7 @@ V3 is a comprehensive modernization upgrade with these highlights:
 
 See the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide for details.
 
-For V2, use the `v2` branch or [v2.x tags](https://github.com/blade-build/blade-build/releases). See the [V2 Upgrade Notes](doc/en/upgrade-to-v2.md).
+For V2, use the [`v2`](https://github.com/blade-build/blade-build/tree/v2) branch or [v2.1.0 tag](https://github.com/blade-build/blade-build/releases/tag/v2.1.0). See the [V2 Upgrade Notes](doc/en/upgrade-to-v2.md).
 
 ## Stargazers over time
 
