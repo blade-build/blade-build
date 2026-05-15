@@ -9,10 +9,7 @@ such as the `incchk`, `blade-bin/blade_inclusion.data`, etc.
 import pprint
 import sys
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+import pickle
 
 
 def main():
