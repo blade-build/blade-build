@@ -248,6 +248,7 @@ def load(name, *symbols, **aliases):
         symbols: str*, symbol names to be imported.
         aliases: alias_name='real_name'*, symbol name to be imported as alias.
     """
+    assert __current_globals is not None, 'not in BUILD file context'
     src_loc = _current_source_location()
     if not symbols and not aliases:
         console.diagnose(src_loc, 'error', 'The symbols to be imported must be explicitly declared')
@@ -353,22 +354,21 @@ def _check_under_skipped_dir(dirname):
     Return:
         Full path of the skip file or empty if it is not under a skipped dir.
     """
-    cache = _check_under_skipped_dir.cache
-    if dirname in cache:
-        return cache[dirname]
+    if dirname in _check_under_skipped_dir_cache:
+        return _check_under_skipped_dir_cache[dirname]
     if dirname in ('.', ''):
         return ''
     for skipfile in _SKIP_FILES:
         filepath = os.path.join(dirname, skipfile)
         if os.path.exists(filepath):
-            cache[dirname] = filepath
+            _check_under_skipped_dir_cache[dirname] = filepath
             return filepath
     result = _check_under_skipped_dir(os.path.dirname(dirname))
-    cache[dirname] = result
+    _check_under_skipped_dir_cache[dirname] = result
     return result
 
 
-_check_under_skipped_dir.cache = {}
+_check_under_skipped_dir_cache: dict = {}
 
 
 def _has_load_excluded_file(root, files):
@@ -550,7 +550,8 @@ def _load_related_build_files(blade, command_targets, processed_dirs):
         skip_file = _check_under_skipped_dir(source_dir)
         if skip_file:
             dependent = _find_dependent(target_id, blade)
-            dependent.error(f'"{target_id}" is under skipped directory due to "{skip_file}"')
+            if dependent is not None:
+                dependent.error(f'"{target_id}" is under skipped directory due to "{skip_file}"')
             continue
 
         if not _load_build_file(source_dir, processed_dirs, blade):

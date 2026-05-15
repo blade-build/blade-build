@@ -91,18 +91,16 @@ def declare_hdr_dir(target, inc):
     _hdr_dir_targets_map[inc].add(target.key)
 
 
+_find_libs_by_header_cache: dict = {}
+
 def find_libs_by_header(hdr):
-    cache = find_libs_by_header.cache
-    result = cache.get(hdr)
+    result = _find_libs_by_header_cache.get(hdr)
     if result is not None:
         return result
     result = inclusion_check.find_libs_by_header(
                 hdr, _hdr_targets_map, _hdr_dir_targets_map)
-    cache[hdr] = result
+    _find_libs_by_header_cache[hdr] = result
     return result
-
-
-find_libs_by_header.cache = {}
 
 
 # dict(hdr, set(targets))
