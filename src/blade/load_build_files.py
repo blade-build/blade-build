@@ -23,7 +23,7 @@ from blade import build_attributes
 from blade import build_rules
 from blade import config
 from blade import console
-from blade import dsl_api
+from blade import dsl_api  # lgtm[py/cyclic-import]
 from blade import restricted
 from blade import target_tags
 

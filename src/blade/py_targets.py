@@ -208,7 +208,7 @@ class PythonBinary(PythonLibrary):
                 base=base,
                 kwargs=kwargs)
 
-        self.type = 'py_binary'
+        self.type = 'py_binary'  # lgtm[py/overwritten-inherited-attribute]
         self.attr['run_in_shell'] = True
         if main:
             self.attr['main'] = main
@@ -299,7 +299,7 @@ class PythonTest(PythonBinary):
                 base=base,
                 exclusions=[],
                 kwargs=kwargs)
-        self.type = 'py_test'
+        self.type = 'py_test'  # lgtm[py/overwritten-inherited-attribute]
         self.attr['testdata'] = var_to_list(testdata)
         self._add_tags('type:test')
 

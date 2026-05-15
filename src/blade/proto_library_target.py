@@ -14,11 +14,11 @@ import re
 
 from blade import build_manager
 from blade import build_rules
-from blade import config
+from blade import config  # lgtm[py/cyclic-import]
 from blade import console
-from blade import java_targets
+from blade import java_targets  # lgtm[py/cyclic-import]
 from blade.blade_types import StrOrListOpt
-from blade.cc_targets import CcTarget
+from blade.cc_targets import CcTarget  # lgtm[py/cyclic-import]
 from blade.util import var_to_list, var_to_list_or_none
 
 

@@ -30,7 +30,7 @@ What we pin here:
 
 import os
 import sys
-import unittest
+import unittest  # lgtm[py/import-and-import-from]
 from unittest import mock
 
 # Make ``import blade.*`` resolve against the in-tree sources without

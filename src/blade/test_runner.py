@@ -25,7 +25,7 @@ from blade import config
 from blade import console
 from blade import coverage
 from blade import target_pattern
-from blade.test_scheduler import TestScheduler
+from blade.test_scheduler import TestScheduler  # lgtm[py/cyclic-import]
 # pylint: disable=unused-import
 from blade.test_scheduler import TestRunResult  # Used by eval
 from blade.util import md5sum

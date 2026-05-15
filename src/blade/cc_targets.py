@@ -20,7 +20,7 @@ from typing import Any
 
 from blade import build_manager
 from blade import build_rules
-from blade import config
+from blade import config  # lgtm[py/cyclic-import]
 from blade import inclusion_check
 from blade.blade_types import StrOrListOpt
 from blade.constants import HEAP_CHECK_VALUES

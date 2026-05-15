@@ -14,7 +14,7 @@ import os
 import subprocess
 import zipfile
 
-from blade import config
+from blade import config  # lgtm[py/cyclic-import]
 from blade import console
 
 

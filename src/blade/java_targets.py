@@ -23,9 +23,9 @@ import re
 from blade import build_manager
 from blade import build_rules
 from blade import config
-from blade import maven
+from blade import maven  # lgtm[py/cyclic-import]
 from blade.blade_types import StrOrListOpt
-from blade.target import Target, LOCATION_RE
+from blade.target import Target, LOCATION_RE  # lgtm[py/cyclic-import]
 from blade.util import var_to_list, var_to_list_or_none
 from blade.version import LooseVersion
 
@@ -891,7 +891,7 @@ class JavaTest(JavaBinary):
                 kwargs=kwargs)
         if target_under_test:
             self.warning('"target_under_test" is deprecated, you can remove it safely')
-        self.type = 'java_test'
+        self.type = 'java_test'  # lgtm[py/overwritten-inherited-attribute]
         self.attr['testdata'] = var_to_list(testdata)
         self._add_tags('type:test')
         self._apply_junit_libs_from_config()
