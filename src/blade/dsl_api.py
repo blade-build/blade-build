@@ -4,6 +4,11 @@
 # Author: chen3feng <chen3feng@gmail.com>
 # Date:   2021-03-04
 
+# This file creates safe API modules by dynamically injecting attributes
+# onto types.ModuleType instances (_safe_blade_module, _safe_workspace_module).
+# pyright can't statically track these — suppress file-wide.
+# pyright: reportAttributeAccessIssue=false
+
 """
 API for BUILD files and extensions.
 """
