@@ -75,6 +75,9 @@ class GenRuleTarget(Target):
         outs = var_to_list(outs)
         # self._check_path_list(outs, "outs", must_exist=False)
         outs = [os.path.normpath(o) for o in outs]
+        for o in outs:
+            if '..' in o.split(os.sep):
+                self.error('"outs" must not contain "..": %s' % o)
 
         self.attr['outs'] = var_to_list(outs)
         self.attr['outputs'] = [self._target_file_path(o) for o in self.attr['outs']]

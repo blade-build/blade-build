@@ -116,6 +116,10 @@ def glob(include, exclude=None, excludes=None, allow_empty=False):
     source_loc = _current_source_location()
     include = var_to_list(include)
     severity = config.get_item('global_config', 'glob_error_severity')
+    for pattern in include:
+        if '..' in pattern.split(os.sep):
+            console.diagnose(source_loc, 'error',
+                             '"glob" pattern must not contain "..": %s' % pattern)
     if excludes:
         console.diagnose(source_loc, severity, '"excludes" is deprecated, use "exclude" instead')
     exclude = var_to_list(exclude) + var_to_list(excludes)
