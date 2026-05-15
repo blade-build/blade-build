@@ -13,8 +13,8 @@ of all of the cc targets, like cc_library, cc_binary.
 
 
 import os
-import sys
 import pickle
+import sys
 from string import Template
 from typing import Any
 

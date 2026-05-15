@@ -7,7 +7,6 @@
 """C/C++ header file inclusion dependency declaration check."""
 
 import os
-
 import pickle
 
 from blade import console
