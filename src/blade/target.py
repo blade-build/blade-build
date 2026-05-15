@@ -163,8 +163,7 @@ class Target:
         self.deps = []
 
         # Expanded dependencies, includes direct and indirect dependies.
-        self.expanded_deps = []    # Provide type info then make lints happy(not-an-iterable).
-        self.expanded_deps = None  # Set to None to indicate not constructed.
+        self.expanded_deps: 'list[str] | None' = None  # None means not expanded yet
 
         self.dependents = set()  # Target keys which depends on this
         self.expanded_dependents = set()  # Expanded target keys which depends on this
