@@ -126,8 +126,12 @@ class _NinjaFileHeaderGenerator:
                 '''))
 
     def generate_common_rules(self):
+        if os.name == 'nt':
+            copy_cmd = 'cmd /c copy /y ${in} ${out} > nul'
+        else:
+            copy_cmd = 'cp -f ${in} ${out}'
         self.generate_rule(name='copy',
-                           command='cp -f ${in} ${out}',
+                           command=copy_cmd,
                            description='COPY ${in} ${out}')
 
     def _get_intrinsic_cc_flags(self):
@@ -212,15 +216,93 @@ class _NinjaFileHeaderGenerator:
         return filtered_cppflags, filtered_cxxflags, filtered_cflags, cuflags
 
     def generate_cc_rules(self):
+        if self.build_toolchain.cc_is('msvc'):
+            self._generate_windows_cc_rules()
+        else:
+            cc, cxx, ld = self.build_accelerator.get_cc_commands()
+            cppflags, linkflags = self._get_intrinsic_cc_flags()
+            self._generate_cc_compile_rules(cc, cxx, cppflags)
+            self._generate_cc_inclusion_check_rule()
+            self._generate_cc_ar_rules()
+            self._generate_cc_link_rules(ld, linkflags)
+            self.generate_rule(name='strip',
+                               command='strip --strip-unneeded -o ${out} ${in}',
+                               description='STRIP ${out}')
+
+    def _generate_windows_cc_rules(self):
+        """Generate Windows/MSVC-specific CC rules."""
         cc, cxx, ld = self.build_accelerator.get_cc_commands()
-        cppflags, linkflags = self._get_intrinsic_cc_flags()
-        self._generate_cc_compile_rules(cc, cxx, cppflags)
-        self._generate_cc_inclusion_check_rule()
-        self._generate_cc_ar_rules()
-        self._generate_cc_link_rules(ld, linkflags)
-        self.generate_rule(name='strip',
-                           command='strip --strip-unneeded -o ${out} ${in}',
-                           description='STRIP ${out}')
+        self._generate_windows_cc_vars()
+        self._generate_windows_cc_compile_rules(cc, cxx)
+        self._generate_windows_ar_rules()
+        self._generate_windows_link_rules(ld)
+
+    def _generate_windows_cc_vars(self):
+        """Generate Windows-specific CC variables."""
+        windows_config = config.get_section('windows_config')
+        warnings = windows_config['warnings']
+        self._add_line(textwrap.dedent('''\
+                c_warnings = %s
+                cxx_warnings = %s
+                ''') % (' '.join(warnings), ' '.join(warnings)))
+
+    def _generate_windows_cc_compile_rules(self, cc, cxx):
+        """Generate Windows CC compilation rules."""
+        windows_config = config.get_section('windows_config')
+        cppflags = windows_config['cppflags']
+        cflags = windows_config['cflags']
+        cxxflags = windows_config['cxxflags']
+
+        cc_config = config.get_section('cc_config')
+        includes = cc_config['extra_incs']
+        includes = includes + ['.', self.build_dir]
+        include_flags = ' '.join(['/I%s' % inc for inc in includes])
+
+        optimize_flags = windows_config['optimize']
+        optimize = ' '.join(optimize_flags.get(self.options.profile, []))
+
+        cc_command = ('%s /nologo /c %s %s %s /Fo${out} ${c_warnings} ${in}' % (
+            cc, ' '.join(cppflags), ' '.join(cflags), include_flags))
+        self.generate_rule(name='cc',
+                           command=cc_command,
+                           description='CC ${in}',
+                           deps='msvc')
+
+        cxx_command = ('%s /nologo /c %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
+            cxx, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
+        self.generate_rule(name='cxx',
+                           command=cxx_command,
+                           description='CXX ${in}',
+                           deps='msvc')
+
+        # For cxxhdrs: use /showIncludes to generate inclusion info
+        hdrs_command = ('%s /nologo /c /showIncludes %s %s %s /Fo${out} ${in} > ${out}.incl 2>&1' % (
+            cxx, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
+        self.generate_rule(name='cxxhdrs',
+                           command=hdrs_command,
+                           description='CXX HDRS ${in}',
+                           depfile=None)
+
+    def _generate_windows_ar_rules(self):
+        """Generate Windows static library rules."""
+        self.generate_rule(name='ar',
+                           command='lib /nologo /out:${out} ${in}',
+                           description='LIB ${out}')
+
+    def _generate_windows_link_rules(self):
+        """Generate Windows linking rules."""
+        windows_config = config.get_section('windows_config')
+        linkflags = ' '.join(windows_config['linkflags'])
+
+        self._add_line('linkflags = %s\n' % linkflags)
+
+        self.generate_rule(name='link',
+                           command='link /nologo /out:${out} ${linkflags} ${in}',
+                           description='LINK EXE ${out}')
+
+        self.generate_rule(name='solink',
+                           command='link /nologo /DLL /out:${out} ${linkflags} ${in}',
+                           description='LINK DLL ${out}')
 
     def _generate_cc_vars(self):
         warnings, cxx_warnings, c_warnings, cu_warnings = self._get_warning_flags()
@@ -736,9 +818,14 @@ class _NinjaFileHeaderGenerator:
             description='CUDA LINK SHARED ${out}')
 
     def _builtin_command(self, builder, args=''):
-        cmd = ['PYTHONPATH=%s:$$PYTHONPATH' % self.blade_path]
         python = os.environ.get('BLADE_PYTHON_INTERPRETER') or sys.executable
-        cmd.append(f'{python} -m blade.builtin_tools {builder}')
+        if os.name == 'nt':
+            # On Windows, PYTHONPATH uses ';' and cmd.exe syntax
+            cmd = ['set PYTHONPATH=%s;%%PYTHONPATH%% &&' % self.blade_path]
+            cmd.append(f'{python} -m blade.builtin_tools {builder}')
+        else:
+            cmd = ['PYTHONPATH=%s:$$PYTHONPATH' % self.blade_path]
+            cmd.append(f'{python} -m blade.builtin_tools {builder}')
         if args:
             cmd.append(args)
         else:

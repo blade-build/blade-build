@@ -15,6 +15,7 @@ This is the util module which provides command functions.
 
 import datetime
 import os
+import subprocess
 import sys
 import time
 from typing import TYPE_CHECKING
@@ -27,9 +28,37 @@ if TYPE_CHECKING:
 ##############################################################################
 
 
+def _windows_console_support_ansi_color():
+    """Enable ANSI escape sequence processing on Windows console."""
+    from ctypes import byref, windll, wintypes
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+    INVALID_HANDLE_VALUE = -1
+
+    handle = windll.kernel32.GetStdHandle(subprocess.STD_OUTPUT_HANDLE)
+    if handle == INVALID_HANDLE_VALUE:
+        return False
+
+    mode = wintypes.DWORD()
+    if not windll.kernel32.GetConsoleMode(handle, byref(mode)):
+        return False
+
+    if not (mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING):
+        if windll.kernel32.SetConsoleMode(
+            handle,
+            mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0:
+            print('kernel32.SetConsoleMode to enable ANSI sequences failed',
+                file=sys.stderr)
+    return True
+
+
+def _console_support_ansi_color():
+    if os.name == 'nt':
+        return _windows_console_support_ansi_color()
+    return sys.stdout.isatty() and os.environ.get('TERM') not in ('emacs', 'dumb')
+
+
 # Global color enabled or not
-_color_enabled = (sys.stdout.isatty() and
-                  os.environ.get('TERM') not in ('emacs', 'dumb'))
+_color_enabled = _console_support_ansi_color()
 
 # See http://en.wikipedia.org/wiki/ANSI_escape_code
 # colors

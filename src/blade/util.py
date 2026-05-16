@@ -14,17 +14,27 @@ This is the util module which provides some helper functions.
 
 import ast
 import errno
-import fcntl
 import hashlib
 import inspect
 import json
 import os
 import pickle  # re-exported; consumed via `blade.util.pickle` by external code
+import shutil
 import signal
 import subprocess
 import sys
 import zipfile
 from typing import TYPE_CHECKING
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 if TYPE_CHECKING:
     from blade.blade_types import StrOrListOpt  # noqa: F401 (used in annotations)
@@ -64,18 +74,26 @@ def lock_file(filename):
     """lock file."""
     try:
         fd = os.open(filename, os.O_CREAT | os.O_RDWR)
-        old_fd_flags = fcntl.fcntl(fd, fcntl.F_GETFD)
-        fcntl.fcntl(fd, fcntl.F_SETFD, old_fd_flags | fcntl.FD_CLOEXEC)
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if fcntl:
+            old_fd_flags = fcntl.fcntl(fd, fcntl.F_GETFD)
+            fcntl.fcntl(fd, fcntl.F_SETFD, old_fd_flags | fcntl.FD_CLOEXEC)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        elif msvcrt:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, os.stat(fd).st_size)
         return fd, 0
     except OSError as ex_value:
+        if msvcrt:  # msvcrt doesn't set errno correctly
+            return -1, errno.EAGAIN
         return -1, ex_value.errno
 
 
 def unlock_file(fd):
     """unlock file."""
     try:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        if fcntl:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        elif msvcrt:
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, os.stat(fd).st_size)
         os.close(fd)
     except OSError:
         pass
@@ -142,7 +160,10 @@ def get_cwd():
     os.environ.get('PWD') doesn't work because it won't reflect os.chdir().
     So in practice we simply use system('pwd') to get current working directory.
 
+    On Windows, 'pwd' is not available, so os.getcwd() is used.
     """
+    if os.name == 'nt':
+        return os.getcwd()
     p = subprocess.Popen(['pwd'], stdout=subprocess.PIPE)
     return to_string(p.communicate()[0].strip())
 
@@ -158,9 +179,10 @@ def find_file_bottom_up(name, from_dir=None):
         path = os.path.join(finding_dir, name)
         if os.path.exists(path):
             return path
-        if finding_dir == '/':
+        new_finding_dir = os.path.dirname(finding_dir)
+        if new_finding_dir == finding_dir:
             break
-        finding_dir = os.path.dirname(finding_dir)
+        finding_dir = new_finding_dir
     return ''
 
 
@@ -170,6 +192,11 @@ def path_under_dir(path, dir):
     Both path and dir must be normalized, and they must be both relative or relative path.
     """
     return dir == '.' or path == dir or path.startswith(dir) and path[len(dir)] == os.path.sep
+
+
+def to_unix_path(path):
+    """Convert path separators to Unix-style forward slashes."""
+    return path.replace('\\', '/')
 
 
 def mkdir_p(path):
@@ -342,6 +369,8 @@ def open_zip_file_for_write(filename, compression_level):
 
 
 def which(cmd):
+    if os.name == 'nt':
+        return shutil.which(cmd)
     returncode, stdout, _ = run_command(['which', cmd])
     if returncode != 0:
         return None

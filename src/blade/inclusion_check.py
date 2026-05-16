@@ -10,7 +10,7 @@ import os
 import pickle
 
 from blade import console
-from blade import util
+from blade.util import to_unix_path
 
 
 def find_libs_by_header(hdr, hdr_targets_map, hdr_dir_targets_map):
@@ -62,6 +62,16 @@ class GlobalDeclaration:
         return hdr in self._allowed_undeclared_hdrs
 
 
+_MSVC_INCUSION_PREFIX = 'Note: including file:'
+
+
+def _is_inclusion_line(line):
+    """Return True if the line is a header inclusion line (GCC or MSVC)."""
+    if os.name == 'nt' and line.startswith(_MSVC_INCUSION_PREFIX):
+        return True
+    return line.startswith('.')
+
+
 def _parse_inclusion_stacks(path, build_dir):
     """Parae headers inclusion stacks from file.
 
@@ -102,7 +112,7 @@ def _parse_inclusion_stacks(path, build_dir):
     stacks, hdrs_stack = [], []
 
     def _process_hdr(level, hdr, current_level):
-        if hdr.startswith('/'):
+        if os.path.isabs(hdr):
             skip_level = level
         elif hdr.startswith(build_dir):
             skip_level = level
@@ -119,14 +129,14 @@ def _parse_inclusion_stacks(path, build_dir):
     with open(path) as f:
         for index, line in enumerate(f):
             line = line.rstrip()  # Strip `\n`
-            if not line.startswith('.'):
+            if not _is_inclusion_line(line):
                 # The remaining lines are useless for us
                 break
             level, hdr = _parse_hdr_level_line(line)
             if level == -1:
                 console.log(f'{path}: Unrecognized line {line}')
                 break
-            if level == 1 and not hdr.startswith('/'):
+            if level == 1 and not os.path.isabs(hdr):
                 direct_hdrs.append(_remove_build_dir_prefix(os.path.normpath(hdr), build_dir))
             if level > current_level:
                 if skip_level != -1 and level > skip_level:
@@ -155,11 +165,20 @@ def _parse_inclusion_stacks(path, build_dir):
 
 
 def _parse_hdr_level_line(line):
-    """Parse a normal line of a header stack file
+    """Parse a normal line of a header stack file (GCC or MSVC format).
 
-    Example:
+    GCC example:
         . ./common/rpc/rpc_client.h
+    MSVC example:
+        Note: including file:  common/rpc/rpc_client.h
     """
+    if os.name == 'nt' and line.startswith(_MSVC_INCUSION_PREFIX):
+        return _parse_msvc_hdr_level_line(line)
+    return _parse_gcc_hdr_level_line(line)
+
+
+def _parse_gcc_hdr_level_line(line):
+    """Parse a GCC-format header level line."""
     pos = line.find(' ')
     if pos == -1:
         return -1, ''
@@ -167,6 +186,24 @@ def _parse_hdr_level_line(line):
     hdr = line[pos + 1:]
     if hdr.startswith('./'):
         hdr = hdr[2:]
+    return level, hdr
+
+
+def _parse_msvc_hdr_level_line(line):
+    """Parse an MSVC /showIncludes format header line.
+
+    MSVC format: 'Note: including file:  path\\to\\header.h'
+    where the whitespace between the prefix and the path indicates the nesting level.
+    """
+    line = line[len(_MSVC_INCUSION_PREFIX):]
+    hdr = line.lstrip()
+    level = len(line) - len(hdr)
+    # Normalize to Unix-style paths for consistency with GCC output
+    hdr = to_unix_path(hdr)
+    # Remove current working directory prefix if present
+    cwd = os.getcwd().lower()
+    if hdr.lower().startswith(cwd):
+        hdr = hdr[len(cwd) + 1:]
     return level, hdr
 
 

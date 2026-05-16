@@ -11,6 +11,7 @@ This module deals with the build toolchains.
 
 
 import os
+import re
 import subprocess
 import tempfile
 
@@ -60,6 +61,17 @@ class BuildArchitecture:
             'bits': '64',
             'models': {
                 '32': 'ppcle',
+            }
+        },
+        'win32': {
+            'alias': ['windows'],
+            'bits': '32',
+        },
+        'win64': {
+            'alias': ['windows64', 'x64'],
+            'bits': '64',
+            'models': {
+                '32': 'win32',
             }
         },
     }
@@ -185,6 +197,32 @@ class ToolChain:
         """
         return vendor == self._cc_vendor
 
+    def object_file_of(self, src):
+        """Return the object file path for a given source file."""
+        return src + '.o'
+
+    def static_library_name(self, name):
+        """Return the static library output name for a given target name."""
+        return 'lib%s.a' % name
+
+    def dynamic_library_name(self, name):
+        """Return the dynamic library output name for a given target name."""
+        return 'lib%s.so' % name
+
+    def executable_file_name(self, name):
+        """Return the executable output name for a given target name."""
+        return name
+
+    @property
+    def deps_style(self):
+        """Return the ninja deps style: 'gcc' or 'msvc'."""
+        return 'gcc'
+
+    @property
+    def uses_depfile(self):
+        """Whether the compiler generates a .d depfile."""
+        return True
+
     def filter_cc_flags(self, flag_list, language='c'):
         """Filter out the unrecognized compilation flags."""
         flag_list = var_to_list(flag_list)
@@ -234,3 +272,167 @@ class ToolChain:
                     language, ', '.join(unrecognized_flags)))
 
         return valid_flags
+
+
+class MsvcToolChain(ToolChain):
+    """MSVC toolchain for Windows builds."""
+
+    def __init__(self):
+        self.cc = self._get_msvc_command('cl')
+        self.cxx = self.cc  # MSVC uses same compiler for C and C++
+        self.ld = self._get_msvc_command('link')
+        self.ar = self._get_msvc_command('lib')
+        self.cc_version = self._get_msvc_version()
+        self._cc_vendor = 'msvc'
+
+    @staticmethod
+    def _get_msvc_command(tool):
+        """Get MSVC tool command path using vswhere."""
+        vswhere = os.path.join(os.environ.get('ProgramFiles(x86)',
+                               r'C:\Program Files (x86)'),
+                               r'Microsoft Visual Studio\Installer\vswhere.exe')
+        if os.path.exists(vswhere):
+            try:
+                result = subprocess.run(
+                    [vswhere, '-latest', '-products', '*',
+                     '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+                     '-property', 'installationPath'],
+                    capture_output=True, text=True, timeout=30)
+                if result.returncode == 0 and result.stdout.strip():
+                    vs_path = result.stdout.strip()
+                    vc_path = os.path.join(vs_path, 'VC', 'Tools', 'MSVC')
+                    if os.path.exists(vc_path):
+                        # Find the latest MSVC version directory
+                        versions = sorted(os.listdir(vc_path), reverse=True)
+                        for ver in versions:
+                            tool_path = os.path.join(vc_path, ver, 'bin', 'Hostx64', 'x64',
+                                                     f'{tool}.exe')
+                            if os.path.exists(tool_path):
+                                return tool_path
+            except Exception:
+                pass
+
+        # Fallback: check if tool is in PATH
+        result = subprocess.run(['where', tool], capture_output=True, text=True)
+        if result.returncode == 0:
+            return tool
+
+        return tool  # Let it fail with a clear error later
+
+    def _get_msvc_version(self):
+        """Get MSVC compiler version string."""
+        try:
+            result = subprocess.run([self.cc], capture_output=True, text=True)
+            output = (result.stdout or '') + '\n' + (result.stderr or '')
+            m = re.search(r'Version\s+(\d+\.\d+)', output)
+            if m:
+                return m.group(1)
+        except Exception:
+            pass
+        return 'unknown'
+
+    def get_cc_commands(self):
+        return self.cc, self.cxx, self.ld
+
+    def get_cc_target_arch(self):
+        """Get the MSVC target architecture."""
+        if 'x64' in (self.cc or '').lower() or os.environ.get('VSCMD_ARG_TGT_ARCH') == 'x64':
+            return 'x86_64'
+        return 'i386'
+
+    def cc_is(self, vendor):
+        """Check if compiler matches vendor."""
+        return vendor == 'msvc'
+
+    def object_file_of(self, src):
+        """MSVC produces .obj files."""
+        return src + '.obj'
+
+    def static_library_name(self, name):
+        """MSVC static libraries use .lib extension."""
+        return '%s.lib' % name
+
+    def dynamic_library_name(self, name):
+        """MSVC dynamic libraries use .dll extension."""
+        return '%s.dll' % name
+
+    def executable_file_name(self, name):
+        """MSVC executables use .exe extension."""
+        return name + '.exe'
+
+    @property
+    def deps_style(self):
+        """MSVC uses 'msvc' deps style in ninja."""
+        return 'msvc'
+
+    @property
+    def uses_depfile(self):
+        """MSVC /showIncludes outputs to stdout, not a depfile."""
+        return False
+
+    def filter_cc_flags(self, flag_list, language='c'):
+        """Filter MSVC-specific flags by testing each against the compiler."""
+        flag_list = var_to_list(flag_list)
+        valid_flags, unrecognized_flags = [], []
+
+        fd, obj = tempfile.mkstemp('.obj', 'filter_cc_flags_test')
+        try:
+            argv = [self.cc, '/nologo', '/c', '/Fo' + obj, '/WX', '/Tc-'] + list(flag_list)
+            proc = subprocess.Popen(
+                argv,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+            _, _ = proc.communicate(input=b'int main() { return 0; }\n')
+            returncode = proc.returncode
+        finally:
+            try:
+                os.remove(obj)
+            except OSError:
+                pass
+            os.close(fd)
+
+        if returncode == 0:
+            return flag_list
+        # When a flag is unrecognized, MSVC puts it in the error output.
+        # Re-test each flag individually to identify bad ones.
+        for flag in flag_list:
+            fd2, obj2 = tempfile.mkstemp('.obj', 'filter_cc_flags_test')
+            try:
+                test_argv = [self.cc, '/nologo', '/c', '/Fo' + obj2, '/WX', '/Tc-', flag]
+                proc = subprocess.Popen(
+                    test_argv,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE)
+                _, _ = proc.communicate(input=b'int main() { return 0; }\n')
+                if proc.returncode == 0:
+                    valid_flags.append(flag)
+                else:
+                    unrecognized_flags.append(flag)
+            finally:
+                try:
+                    os.remove(obj2)
+                except OSError:
+                    pass
+                os.close(fd2)
+
+        if unrecognized_flags:
+            console.warning('config: Unrecognized {} flags: {}'.format(
+                    language, ', '.join(unrecognized_flags)))
+
+        return valid_flags
+
+
+def create_toolchain(m=None):
+    """Create the appropriate toolchain for the current platform.
+
+    Args:
+        m: Optional architecture bits string ('32' or '64'), passed through for
+           potential future use.
+    Returns:
+        A ToolChain instance appropriate for the current OS.
+    """
+    if os.name == 'nt':
+        return MsvcToolChain()
+    return ToolChain()

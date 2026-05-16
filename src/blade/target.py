@@ -87,7 +87,7 @@ def _parse_target(dep):
         result = ('', '', msgs)
     else:
         if path:
-            path = os.path.normpath(path)
+            path = os.path.normpath(path).replace('\\', '/')
         result = (path, name, None)
     _parse_target_cache[dep] = result
     return result

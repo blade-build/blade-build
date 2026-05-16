@@ -267,6 +267,31 @@ class BladeConfig:
                 'thrift_gen_params': 'cpp:include_prefix,pure_enums'
             },
 
+            'windows_config': {
+                '__help__': 'Windows-specific Configuration',
+                'msvc_version': 'auto',
+                'msvc_version__help__': 'MSVC compiler version to use (auto, 2019, 2022)',
+                'windows_sdk': 'auto',
+                'windows_sdk__help__': 'Windows SDK version (auto, 10.0, etc.)',
+                'visual_studio': 'auto',
+                'visual_studio__help__': 'Visual Studio edition (auto, Community, Professional, Enterprise)',
+                'cppflags': ['/MD', '/EHsc'],
+                'cflags': [],
+                'cxxflags': [],
+                'linkflags': ['/SUBSYSTEM:CONSOLE'],
+                'warnings': ['/W3'],
+                'optimize': {
+                    'debug': ['/Od'],
+                    'release': ['/O2'],
+                },
+                'debug_info_levels': {
+                    'no': [],
+                    'low': ['/Zi'],
+                    'mid': ['/Zi', '/DEBUG'],
+                    'high': ['/Zi', '/DEBUG', '/RTC1'],
+                },
+            },
+
         }
 
     def info(self, msg):
@@ -630,5 +655,11 @@ def fbthrift_library_config(append=None, **kwargs):
     # cause a NameError during config parsing. All arguments are
     # silently ignored.
     pass
+
+
+@config_rule
+def windows_config(append=None, **kwargs):
+    """windows_config section."""
+    _blade_config.update_config('windows_config', append, kwargs)
 
 

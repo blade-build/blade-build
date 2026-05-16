@@ -161,10 +161,15 @@ def need_dwp():
 def _cc_plugin_default_prefix_suffix() -> tuple[str, str]:
     """Default (prefix, suffix) for cc_plugin output file names.
 
-    Currently fixed to ('lib', '.so') because blade only supports Linux as a
-    build target. When cross-platform support lands, derive these from the
-    active toolchain (macOS: ('lib', '.dylib'); Windows: ('', '.dll')).
+    Derives prefix/suffix from the active platform:
+    - Linux:   ('lib', '.so')
+    - macOS:   ('lib', '.dylib')
+    - Windows: ('', '.dll')
     """
+    if os.name == 'nt':
+        return ('', '.dll')
+    if sys.platform == 'darwin':
+        return ('lib', '.dylib')
     return ('lib', '.so')
 
 
@@ -612,7 +617,7 @@ class CcTarget(Target):
             # to avoid file missing error
             if secret and path_under_dir(full_src, self.build_dir):
                 self.generate_build('phony', full_src, inputs=[], clean=[])
-            obj = os.path.join(objs_dir, src + '.o')
+            obj = os.path.join(objs_dir, self.blade.get_build_toolchain().object_file_of(src))
             rule = self._get_rule_from_suffix(src, secret)
             self.generate_build(rule, obj, inputs=full_src,
                                 implicit_deps=implicit_deps,
@@ -652,13 +657,15 @@ class CcTarget(Target):
         return check_result_file
 
     def _static_cc_library(self, objs, inclusion_check_result):
-        output = self._target_file_path('lib%s.a' % self.name)
+        output = self._target_file_path(
+            self.blade.get_build_toolchain().static_library_name(self.name))
         self.generate_build('ar', output, inputs=objs,
                             order_only_deps=inclusion_check_result)
         self._add_default_target_file('a', output)
 
     def _dynamic_cc_library(self, objs, inclusion_check_result):
-        output = self._target_file_path('lib%s.so' % self.name)
+        output = self._target_file_path(
+            self.blade.get_build_toolchain().dynamic_library_name(self.name))
         target_linkflags = self._generate_link_flags()
         sys_libs, usr_libs, incchk_deps = self._dynamic_dependencies()
         if inclusion_check_result:
@@ -1478,7 +1485,8 @@ class CcBinary(CcTarget):
             scm = os.path.join(self.build_dir, 'scm.cc.o')
             objs.append(scm)
             order_only_deps.append(scm)
-        output = self._target_file_path(self.name)
+        output = self._target_file_path(
+            self.blade.get_build_toolchain().executable_file_name(self.name))
         self._cc_link(output, 'link', objs=objs, deps=usr_libs, sys_libs=sys_libs,
                       linker_scripts=self.attr.get('lds_fullpath'),
                       version_scripts=self.attr.get('vers_fullpath'),

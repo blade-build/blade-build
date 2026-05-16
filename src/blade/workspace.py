@@ -113,7 +113,10 @@ class Workspace:
             os.remove('blade-bin')
         except OSError:
             pass
-        os.symlink(os.path.abspath(build_dir), 'blade-bin')
+        try:
+            os.symlink(os.path.abspath(build_dir), 'blade-bin')
+        except OSError as e:
+            console.warning("Can't create symbolic link 'blade-bin', %s" % e)
 
         log_file = os.path.join(build_dir, 'blade.log')
         console.set_log_file(log_file)

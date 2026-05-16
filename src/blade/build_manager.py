@@ -24,7 +24,7 @@ from blade import maven
 from blade import ninja_runner
 from blade import target_pattern
 from blade.binary_runner import BinaryRunner
-from blade.toolchain import ToolChain
+from blade.toolchain import create_toolchain
 from blade.build_accelerator import BuildAccelerator
 from blade.dependency_analyzer import analyze_deps
 from blade.load_build_files import load_targets
@@ -99,7 +99,7 @@ class Blade:
         # Indicate whether the deps list is expanded by expander or not
         self.__targets_expanded = False
 
-        self.__build_toolchain = ToolChain()
+        self.__build_toolchain = create_toolchain(options.m)
         self.build_accelerator = BuildAccelerator(self.__build_toolchain)
         self.__build_jobs_num = 0
 
@@ -250,7 +250,12 @@ class Blade:
     def _remove_paths(paths):
         # The rm command can delete a large number of files at once, which is much faster than
         # using python's own remove functions (only supports deleting a single path at a time).
-        subprocess.call(['rm', '-fr'] + paths)
+        if os.name == 'posix':
+            subprocess.call(['rm', '-fr'] + paths)
+            return
+        import shutil
+        for path in paths:
+            shutil.rmtree(path, ignore_errors=True)
 
     def clean(self):
         """Clean specific generated target files or directories"""
