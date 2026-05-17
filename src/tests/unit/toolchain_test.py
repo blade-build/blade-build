@@ -60,11 +60,11 @@ def _make_run_command(version_stdout, version_ok=True, dumpversion='14.0.3'):
 
 
 class DetectCcVendorTest(unittest.TestCase):
-    """Cover every branch of ToolChain._detect_cc_vendor."""
+    """Cover every branch of GccToolChain._detect_cc_vendor."""
 
     def _build_toolchain(self, fake):
         with mock.patch.object(toolchain, 'run_command', side_effect=fake):
-            return toolchain.ToolChain()
+            return toolchain.GccToolChain()
 
     def test_apple_clang_is_detected_as_clang(self):
         tc = self._build_toolchain(_make_run_command(_APPLE_CLANG_BANNER))

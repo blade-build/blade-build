@@ -113,15 +113,21 @@ class BuildArchitecture:
 
 
 class ToolChain:
-    """The build platform handles and gets the platform information."""
+    """Abstract base for toolchain implementations.
+
+    Subclasses must set ``cc``, ``cxx``, ``ld``, ``ar``, ``cc_version``,
+    and ``_cc_vendor`` during ``__init__``.
+    """
+
+    cc: str
+    cxx: str
+    ld: str
+    ar: str
+    cc_version: str
+    _cc_vendor: str
 
     def __init__(self):
-        self.cc = self._get_cc_command('CC', 'gcc')
-        self.cxx = self._get_cc_command('CXX', 'g++')
-        self.ld = self._get_cc_command('LD', 'g++')
-        self.cc_version = self._get_cc_version()
-        self.ar = self._get_cc_command('AR', 'ar')
-        self._cc_vendor = self._detect_cc_vendor()
+        pass
 
     @staticmethod
     def _get_cc_command(env, default):
@@ -261,6 +267,7 @@ class ToolChain:
                 # In case of error, the `.o` file will be deleted by the compiler
                 os.remove(obj)
             except OSError:
+                # Temp file may already be deleted by the compiler on error.
                 pass
             os.close(fd)
 
@@ -280,6 +287,19 @@ class ToolChain:
                     language, ', '.join(unrecognized_flags)))
 
         return valid_flags
+
+
+class GccToolChain(ToolChain):
+    """GCC/Clang toolchain for Linux and macOS builds."""
+
+    def __init__(self):
+        super().__init__()
+        self.cc = self._get_cc_command('CC', 'gcc')
+        self.cxx = self._get_cc_command('CXX', 'g++')
+        self.ld = self._get_cc_command('LD', 'g++')
+        self.cc_version = self._get_cc_version()
+        self.ar = self._get_cc_command('AR', 'ar')
+        self._cc_vendor = self._detect_cc_vendor()
 
 
 class MsvcToolChain(ToolChain):
@@ -306,6 +326,7 @@ class MsvcToolChain(ToolChain):
     }
 
     def __init__(self, target_arch='auto'):
+        super().__init__()
         self.host_arch = self._detect_host_arch()
         self.target_arch = self._resolve_target_arch(target_arch)
         self._msvc_host = 'Host' + self.host_arch
@@ -363,6 +384,8 @@ class MsvcToolChain(ToolChain):
 
     def _has_tool_for_target(self, tool, msvc_target):
         """Check whether *tool* exists for the given MSVC target directory."""
+        if not self._msvc_path:
+            return False
         for host in (self._msvc_host, 'Hostx64', 'Hostx86'):
             tool_path = os.path.join(self._msvc_path, 'bin', host,
                                      msvc_target, f'{tool}.exe')
@@ -426,6 +449,7 @@ class MsvcToolChain(ToolChain):
                 if result.returncode == 0 and result.stdout.strip():
                     return result.stdout.strip()
             except Exception:
+                # vswhere may not be present; fall through to next candidate.
                 pass
         return None
 
@@ -526,6 +550,7 @@ class MsvcToolChain(ToolChain):
             if m:
                 return m.group(1)
         except Exception:
+            # cl.exe may not run outside a VS environment; fall back gracefully.
             pass
         return 'unknown'
 
@@ -736,6 +761,7 @@ class MsvcToolChain(ToolChain):
             try:
                 os.remove(obj)
             except OSError:
+                # Temp file may already be deleted by the compiler on error.
                 pass
             os.close(fd)
 
@@ -761,6 +787,7 @@ class MsvcToolChain(ToolChain):
                 try:
                     os.remove(obj2)
                 except OSError:
+                    # Temp file may not exist or be already cleaned up.
                     pass
                 os.close(fd2)
 
@@ -786,4 +813,4 @@ def create_toolchain(m=None):
         msvc_config = blade_config.get_section('msvc_config')
         target_arch = msvc_config.get('target_arch', 'auto')
         return MsvcToolChain(target_arch=target_arch)
-    return ToolChain()
+    return GccToolChain()
