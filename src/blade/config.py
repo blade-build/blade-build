@@ -269,6 +269,9 @@ class BladeConfig:
 
             'windows_config': {
                 '__help__': 'Windows-specific Configuration',
+                'target_arch': 'auto',
+                'target_arch__help__':
+                    'Target architecture: auto (detect from host), x64, x86, arm64, arm64ec',
                 'msvc_version': 'auto',
                 'msvc_version__help__': 'MSVC compiler version to use (auto, 2019, 2022)',
                 'windows_sdk': 'auto',

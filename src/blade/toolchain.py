@@ -223,6 +223,14 @@ class ToolChain:
         """Whether the compiler generates a .d depfile."""
         return True
 
+    def get_system_include_paths(self):
+        """Return system include paths, or empty list if not applicable."""
+        return []
+
+    def get_system_lib_paths(self):
+        """Return system library search paths, or empty list if not applicable."""
+        return []
+
     def filter_cc_flags(self, flag_list, language='c'):
         """Filter out the unrecognized compilation flags."""
         flag_list = var_to_list(flag_list)
@@ -275,9 +283,58 @@ class ToolChain:
 
 
 class MsvcToolChain(ToolChain):
-    """MSVC toolchain for Windows builds."""
+    """MSVC toolchain for Windows builds.
 
-    def __init__(self):
+    Detects VS installation, MSVC tools, and Windows SDK without relying on
+    vcvarsall.bat or pre-set environment variables. Target architecture is
+    specified via ``windows_config.target_arch`` (default: ``'auto'``, which
+    matches the host architecture).
+    """
+
+    # Map canonical arch names to MSVC directory names and target triplets.
+    _ARCH_MAP = {
+        'x64':    {'msvc_dir': 'x64',     'triplet': 'x86_64'},
+        'x86':    {'msvc_dir': 'x86',     'triplet': 'i386'},
+        'arm64':  {'msvc_dir': 'arm64',   'triplet': 'aarch64'},
+        'arm64ec':{'msvc_dir': 'arm64ec', 'triplet': 'aarch64'},
+    }
+
+    _HOST_ARCH_MAP = {
+        'AMD64': 'x64',
+        'x86':   'x86',
+        'ARM64': 'arm64',
+    }
+
+    def __init__(self, target_arch='auto'):
+        self.host_arch = self._detect_host_arch()
+        self.target_arch = self._resolve_target_arch(target_arch)
+        self._msvc_host = 'Host' + self.host_arch
+        self._msvc_target = self._ARCH_MAP[self.target_arch]['msvc_dir']
+
+        # Locate installations
+        self._vs_path = self._find_vs_path()
+        self._msvc_path, self._msvc_ver = self._find_msvc_tools()
+        self._sdk_path, self._sdk_ver = self._find_windows_sdk()
+
+        # If the requested target arch has no MSVC compiler, try to fall
+        # back to an available target (e.g. arm64 host without native arm64
+        # MSVC tools can still target x64).
+        if self._msvc_path and not self._has_tool_for_target('cl', self._msvc_target):
+            fallback = self._find_available_target()
+            if fallback:
+                console.warning(
+                    'MSVC has no %s-targeting compiler on this host; '
+                    'falling back to target_arch=%s. '
+                    'Set windows_config.target_arch explicitly to suppress '
+                    'this warning.' % (self._msvc_target, fallback))
+                self._msvc_target = fallback
+                # Update target_arch to stay consistent
+                for k, v in self._ARCH_MAP.items():
+                    if v['msvc_dir'] == fallback:
+                        self.target_arch = k
+                        break
+
+        # Tool commands
         self.cc = self._get_msvc_command('cl')
         self.cxx = self.cc  # MSVC uses same compiler for C and C++
         self.ld = self._get_msvc_command('link')
@@ -285,39 +342,180 @@ class MsvcToolChain(ToolChain):
         self.cc_version = self._get_msvc_version()
         self._cc_vendor = 'msvc'
 
+    # ------------------------------------------------------------------
+    # Architecture resolution
+    # ------------------------------------------------------------------
+
     @staticmethod
-    def _get_msvc_command(tool):
-        """Get MSVC tool command path using vswhere."""
-        vswhere = os.path.join(os.environ.get('ProgramFiles(x86)',
-                               r'C:\Program Files (x86)'),
-                               r'Microsoft Visual Studio\Installer\vswhere.exe')
+    def _detect_host_arch():
+        """Detect host machine architecture from environment."""
+        machine = os.environ.get('PROCESSOR_ARCHITECTURE', 'AMD64')
+        return MsvcToolChain._HOST_ARCH_MAP.get(machine, 'x64')
+
+    def _resolve_target_arch(self, target_arch):
+        if target_arch == 'auto':
+            return self.host_arch
+        if target_arch in self._ARCH_MAP:
+            return target_arch
+        console.warning('Unknown target_arch "%s", falling back to host (%s)'
+                        % (target_arch, self.host_arch))
+        return self.host_arch
+
+    def _has_tool_for_target(self, tool, msvc_target):
+        """Check whether *tool* exists for the given MSVC target directory."""
+        for host in (self._msvc_host, 'Hostx64', 'Hostx86'):
+            tool_path = os.path.join(self._msvc_path, 'bin', host,
+                                     msvc_target, f'{tool}.exe')
+            if os.path.exists(tool_path):
+                return True
+        return False
+
+    def _find_available_target(self):
+        """Return an MSVC target directory for which tools are available."""
+        for target in ('x64', 'x86', 'arm64'):
+            if target != self._msvc_target and self._has_tool_for_target('cl', target):
+                return target
+        return None
+
+    # ------------------------------------------------------------------
+    # Installation detection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _find_vs_path():
+        """Find Visual Studio or BuildTools installation root.
+
+        Returns the installation path, or None.
+        """
+        # 1. VCToolsInstallDir env var (set by VsDevCmd.bat / vcvarsall.bat)
+        vctools = os.environ.get('VCToolsInstallDir', '')
+        if vctools:
+            # VCToolsInstallDir = .../VC/Tools/MSVC/{ver}/bin/HostX64/x64/
+            # Walk up 7 levels to the VS root.
+            p = os.path.normpath(vctools)
+            for _ in range(7):
+                p = os.path.dirname(p)
+            if os.path.isdir(os.path.join(p, 'VC')):
+                return p
+
+        # 2. vswhere.exe
+        vs_installer = os.path.join(
+            os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'),
+            r'Microsoft Visual Studio\Installer')
+        vswhere = os.path.join(vs_installer, 'vswhere.exe')
         if os.path.exists(vswhere):
+            return MsvcToolChain._find_vs_with_vswhere(vswhere)
+
+        return None
+
+    @staticmethod
+    def _find_vs_with_vswhere(vswhere):
+        """Find a VS installation path with the VC toolchain component."""
+        base_args = [
+            vswhere, '-latest',
+            '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+            '-property', 'installationPath',
+            '-nologo',
+        ]
+        for products in [None, 'Microsoft.VisualStudio.Product.BuildTools']:
+            args = base_args[:]
+            if products:
+                args[1:1] = ['-products', products]
             try:
-                result = subprocess.run(
-                    [vswhere, '-latest', '-products', '*',
-                     '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-                     '-property', 'installationPath'],
-                    capture_output=True, text=True, timeout=30)
+                result = subprocess.run(args, capture_output=True, text=True, timeout=30)
                 if result.returncode == 0 and result.stdout.strip():
-                    vs_path = result.stdout.strip()
-                    vc_path = os.path.join(vs_path, 'VC', 'Tools', 'MSVC')
-                    if os.path.exists(vc_path):
-                        # Find the latest MSVC version directory
-                        versions = sorted(os.listdir(vc_path), reverse=True)
-                        for ver in versions:
-                            tool_path = os.path.join(vc_path, ver, 'bin', 'Hostx64', 'x64',
-                                                     f'{tool}.exe')
-                            if os.path.exists(tool_path):
-                                return tool_path
+                    return result.stdout.strip()
             except Exception:
                 pass
+        return None
 
-        # Fallback: check if tool is in PATH
+    def _find_msvc_tools(self):
+        """Find the MSVC tools directory under the VS installation.
+
+        Returns (msvc_path, msvc_version) or (None, None).
+        """
+        if not self._vs_path:
+            return None, None
+        vc_msvc = os.path.join(self._vs_path, 'VC', 'Tools', 'MSVC')
+        if not os.path.isdir(vc_msvc):
+            return None, None
+        for ver in sorted(os.listdir(vc_msvc), reverse=True):
+            msvc_path = os.path.join(vc_msvc, ver)
+            if os.path.isdir(msvc_path):
+                return msvc_path, ver
+        return None, None
+
+    @staticmethod
+    def _find_windows_sdk():
+        """Find the Windows SDK installation.
+
+        Returns (sdk_root, sdk_version) or (None, None).
+        """
+        # 1. Registry (most reliable)
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                r'SOFTWARE\Microsoft\Windows Kits\Installed Roots') as key:
+                kits_root = winreg.QueryValueEx(key, 'KitsRoot10')[0]
+        except Exception:
+            kits_root = os.path.join(
+                os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'),
+                r'Windows Kits\10')
+
+        if not kits_root or not os.path.isdir(kits_root):
+            return None, None
+
+        # 2. Pick the latest installed SDK version
+        include_root = os.path.join(kits_root, 'Include')
+        if os.path.isdir(include_root):
+            for ver in sorted(os.listdir(include_root), reverse=True):
+                sdk_inc = os.path.join(include_root, ver)
+                if os.path.isdir(sdk_inc):
+                    return kits_root, ver
+
+        return kits_root, None
+
+    # ------------------------------------------------------------------
+    # Tool path resolution
+    # ------------------------------------------------------------------
+
+    def _get_msvc_command(self, tool):
+        """Get the path to an MSVC tool executable.
+
+        Detection order:
+        1. VCToolsInstallDir env var (already set up by external script)
+        2. Discovered MSVC tools path from VS installation
+        3. Fallback to PATH via ``where``
+        """
+        # 1. VCToolsInstallDir
+        vctools = os.environ.get('VCToolsInstallDir', '')
+        if vctools:
+            tool_path = os.path.join(vctools, 'bin', self._msvc_host,
+                                     self._msvc_target, f'{tool}.exe')
+            if os.path.exists(tool_path):
+                return tool_path
+
+        # 2. Discovered MSVC tools path — try preferred host first,
+        #    then fallback hosts, all with the resolved target.
+        if self._msvc_path:
+            for host in (self._msvc_host, 'Hostx64', 'Hostx86'):
+                tool_path = os.path.join(self._msvc_path, 'bin', host,
+                                         self._msvc_target, f'{tool}.exe')
+                if os.path.exists(tool_path):
+                    return tool_path
+
+        # 3. Fallback to PATH
         result = subprocess.run(['where', tool], capture_output=True, text=True)
         if result.returncode == 0:
-            return tool
+            first_path = result.stdout.strip().split('\n')[0].strip()
+            if os.path.isfile(first_path):
+                return first_path
 
         return tool  # Let it fail with a clear error later
+
+    # ------------------------------------------------------------------
+    # Compiler metadata
+    # ------------------------------------------------------------------
 
     def _get_msvc_version(self):
         """Get MSVC compiler version string."""
@@ -335,14 +533,58 @@ class MsvcToolChain(ToolChain):
         return self.cc, self.cxx, self.ld
 
     def get_cc_target_arch(self):
-        """Get the MSVC target architecture."""
-        if 'x64' in (self.cc or '').lower() or os.environ.get('VSCMD_ARG_TGT_ARCH') == 'x64':
-            return 'x86_64'
-        return 'i386'
+        """Return the canonical triplet for the configured target arch."""
+        return self._ARCH_MAP[self.target_arch]['triplet']
 
     def cc_is(self, vendor):
         """Check if compiler matches vendor."""
         return vendor == 'msvc'
+
+    # ------------------------------------------------------------------
+    # System include / library paths (so callers don't need vcvarsall)
+    # ------------------------------------------------------------------
+
+    def get_system_include_paths(self):
+        """Return system include paths (MSVC + Windows SDK headers).
+
+        These are the equivalent of the INCLUDE environment variable set by
+        vcvarsall.bat, discovered from the installation.
+        """
+        paths = []
+        if self._msvc_path:
+            paths.append(os.path.join(self._msvc_path, 'include'))
+        if self._sdk_path and self._sdk_ver:
+            sdk_inc = os.path.join(self._sdk_path, 'Include', self._sdk_ver)
+            for sub in ('ucrt', 'um', 'shared'):
+                p = os.path.join(sdk_inc, sub)
+                if os.path.isdir(p):
+                    paths.append(p)
+        return paths
+
+    def get_system_lib_paths(self):
+        """Return system library search paths (MSVC + Windows SDK libs).
+
+        These are the equivalent of the LIB environment variable set by
+        vcvarsall.bat, discovered from the installation. Paths are
+        architecture-specific based on ``target_arch``.
+        """
+        arch = self._msvc_target
+        paths = []
+        if self._msvc_path:
+            lib = os.path.join(self._msvc_path, 'lib', arch)
+            if os.path.isdir(lib):
+                paths.append(lib)
+        if self._sdk_path and self._sdk_ver:
+            sdk_lib = os.path.join(self._sdk_path, 'Lib', self._sdk_ver)
+            for sub in ('um', 'ucrt'):
+                p = os.path.join(sdk_lib, sub, arch)
+                if os.path.isdir(p):
+                    paths.append(p)
+        return paths
+
+    # ------------------------------------------------------------------
+    # Output file naming (MSVC conventions)
+    # ------------------------------------------------------------------
 
     def object_file_of(self, src):
         """MSVC produces .obj files."""
@@ -369,6 +611,10 @@ class MsvcToolChain(ToolChain):
     def uses_depfile(self):
         """MSVC /showIncludes outputs to stdout, not a depfile."""
         return False
+
+    # ------------------------------------------------------------------
+    # Flag filtering
+    # ------------------------------------------------------------------
 
     def filter_cc_flags(self, flag_list, language='c'):
         """Filter MSVC-specific flags by testing each against the compiler."""
@@ -427,12 +673,16 @@ class MsvcToolChain(ToolChain):
 def create_toolchain(m=None):
     """Create the appropriate toolchain for the current platform.
 
-    Args:
-        m: Optional architecture bits string ('32' or '64'), passed through for
-           potential future use.
+    On Windows, reads ``windows_config.target_arch`` to determine the target
+    architecture. The *m* parameter (bits, ``'32'`` or ``'64'``) is reserved
+    for future cross-compilation support.
+
     Returns:
         A ToolChain instance appropriate for the current OS.
     """
     if os.name == 'nt':
-        return MsvcToolChain()
+        from blade import config as blade_config
+        windows_config = blade_config.get_section('windows_config')
+        target_arch = windows_config.get('target_arch', 'auto')
+        return MsvcToolChain(target_arch=target_arch)
     return ToolChain()

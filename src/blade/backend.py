@@ -254,8 +254,10 @@ class _NinjaFileHeaderGenerator:
         cxxflags = windows_config['cxxflags']
 
         cc_config = config.get_section('cc_config')
-        includes = cc_config['extra_incs']
-        includes = includes + ['.', self.build_dir]
+        # System includes (MSVC + Windows SDK) discovered by the toolchain,
+        # then user-specified extra_incs, then build directory.
+        system_includes = self.build_toolchain.get_system_include_paths()
+        includes = system_includes + cc_config['extra_incs'] + ['.', self.build_dir]
         include_flags = ' '.join(['/I%s' % inc for inc in includes])
 
         optimize_flags = windows_config['optimize']
@@ -294,14 +296,18 @@ class _NinjaFileHeaderGenerator:
         windows_config = config.get_section('windows_config')
         linkflags = ' '.join(windows_config['linkflags'])
 
+        # System library paths (MSVC + Windows SDK) discovered by the toolchain
+        lib_paths = self.build_toolchain.get_system_lib_paths()
+        libpath_flags = ' '.join(['/LIBPATH:%s' % p for p in lib_paths])
+
         self._add_line('linkflags = %s\n' % linkflags)
 
         self.generate_rule(name='link',
-                           command='link /nologo /out:${out} ${linkflags} ${in}',
+                           command='link /nologo /out:${out} ${linkflags} %s ${in}' % libpath_flags,
                            description='LINK EXE ${out}')
 
         self.generate_rule(name='solink',
-                           command='link /nologo /DLL /out:${out} ${linkflags} ${in}',
+                           command='link /nologo /DLL /out:${out} ${linkflags} %s ${in}' % libpath_flags,
                            description='LINK DLL ${out}')
 
     def _generate_cc_vars(self):

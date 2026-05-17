@@ -24,3 +24,4 @@ __pycache__
 !/.agent/tools/*.py
 !/.agent/tools/*.sh
 !/.agent/tools/README.md
+.claude/
