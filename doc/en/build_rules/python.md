@@ -64,7 +64,13 @@ When there are more than one `srcs`, you need to specify the entry file with the
 
 python_binary also support the `base` attribute.
 
-The generated executable file contains all dependencies and can be executed directly. You can use `unzip -l` to view the file content.
+Output files:
+
+* `name.zip` — a pure zip archive containing all Python sources and dependencies, identical on all platforms.
+* `name` — the Unix/Linux/macOS shell wrapper that adds the zip to `PYTHONPATH` and invokes `python3 -m` with the entry module.
+* `name.bat` — the Windows batch wrapper that does the same.
+
+Test targets follow the same output layout as binary targets.
 
 Attributes:
 

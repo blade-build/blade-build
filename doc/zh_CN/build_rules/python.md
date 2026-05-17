@@ -61,7 +61,13 @@ py_binary(
 
 python_binary 也支持 base 属性
 
-编译出来的可执行文件以及打包了所有的依赖，可以直接执行。可以用 `unzip -l` 查看其中包含的文件。
+产物文件：
+
+* `name.zip` — 纯 zip 包，内含所有 Python 源码和依赖，跨平台完全一致。
+* `name` — Unix/Linux/macOS 下的 shell 包装脚本，负责将 zip 加入 `PYTHONPATH` 并调用 `python3 -m` 执行入口模块。
+* `name.bat` — Windows 下的批处理包装脚本，功能同上。
+
+测试目标的产物布局与二元目标一致。
 
 属性：
 
