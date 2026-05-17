@@ -60,6 +60,8 @@ def protoc_import_path_option(incs):
 
 def _shell_support_pipefail():
     """Whether current shell support the `pipefail` option."""
+    if os.name == 'nt':
+        return False
     return subprocess.call('set -o pipefail 2>/dev/null', shell=True) == 0
 
 
@@ -629,7 +631,8 @@ class _NinjaFileHeaderGenerator:
         args = f'{jar} --compression_level={level} ${{out}} ${{in}}'
         self.generate_rule(name='javajar',
                            command=self._builtin_command('java_jar', args),
-                           description='JAVA JAR ${out}')
+                           description='JAVA JAR ${out}',
+                           restat=True)
 
     def generate_java_test_rules(self):
         jacocoagent = self.get_jacocoagent()
@@ -637,7 +640,8 @@ class _NinjaFileHeaderGenerator:
                 '--packages_under_test=${packages_under_test} ${in}') % jacocoagent
         self.generate_rule(name='javatest',
                            command=self._builtin_command('java_test', args),
-                           description='JAVA TEST ${out}')
+                           description='JAVA TEST ${out}',
+                           restat=True)
 
     def generate_fatjar_rules(self, java_config):
         conflict_severity = java_config.get('fat_jar_conflict_severity', 'warning')
