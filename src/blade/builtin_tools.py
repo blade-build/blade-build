@@ -624,14 +624,11 @@ def _pybin_add_whl(pybin, libname, exclusions, dirs, dirs_with_init_py):
 
 
 def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
-    if os.name == 'nt':
-        # pybin is the .bat wrapper; the zip goes next to it without the
-        # .bat extension (e.g. greeter_test.bat → greeter_test).
-        zip_path = pybin[:-4]
-        _declare_outputs(pybin, zip_path)
-    else:
-        zip_path = pybin
-        _declare_outputs(pybin)
+    # pybin is the wrapper script.  The zip always goes to
+    # <pybin_without_extension>.zip, identical on all platforms.
+    base, _ = os.path.splitext(pybin)
+    zip_path = base + '.zip'
+    _declare_outputs(pybin, zip_path)
 
     # Generate the pure zip file — identical on all platforms.
     pybin_zip = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True)
@@ -655,32 +652,18 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     pybin_zip.close()
 
     if os.name == 'nt':
-        # Generate .bat wrapper that sets PYTHONPATH to the zip and runs
-        # python -m <mainentry>.  %~dp0%~n0 resolves to the .bat's sibling
-        # without the .bat extension, i.e. the zip file.
         with open(pybin, 'w') as f:
             f.write('@echo off\r\n')
-            f.write('set "PYTHONPATH=%~dp0%~n0;%PYTHONPATH%"\r\n')
+            f.write('set "PYTHONPATH=%~dp0%~n0.zip;%PYTHONPATH%"\r\n')
             f.write(f'python -m {mainentry} %*\r\n')
         return
 
-    # Unix: prepend a shell bootstrap that adds the zip to PYTHONPATH and
-    # exec's python3 -m <mainentry>.  The zip central directory is at the
-    # end, so the file is both a valid shell script and a valid zip.
-    with open(pybin, 'rb') as f:
-        zip_content = f.read()
-    # The interpreter defaults to python3 because many modern systems
-    # (macOS, recent Debian/Ubuntu) ship only `python3` and not a bare
-    # `python`.  BLADE_PYTHON_INTERPRETER, if set, wins — it's the same
-    # escape hatch the top-level blade launcher honours when the host's
-    # default python3 is too old (see blade._check_python).
-    bootstrap = ('#!/bin/sh\n\n'
-                 'PYTHONPATH="$0:$PYTHONPATH" '
-                 'exec "${BLADE_PYTHON_INTERPRETER:-python3}" '
-                 '-m "%s" "$@"\n') % mainentry
-    with open(pybin, 'wb') as f:
-        f.write(bootstrap.encode('utf-8'))
-        f.write(zip_content)
+    with open(pybin, 'w') as f:
+        f.write('#!/bin/sh\n')
+        f.write('ZIP="$(dirname "$0")/$(basename "$0").zip"\n')
+        f.write('PYTHONPATH="$ZIP:$PYTHONPATH" '
+                'exec "${BLADE_PYTHON_INTERPRETER:-python3}" '
+                f'-m {mainentry} "$@"\n')
     os.chmod(pybin, 0o755)
 
 
