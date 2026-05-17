@@ -222,11 +222,7 @@ class BinaryRunner:
             target.error('is not a executable target')
             return 126
         run_env = self._prepare_env(target)
-        executable = os.path.abspath(self._executable(target))
-        if os.name == 'nt' and target.type in ('py_binary', 'py_test'):
-            cmd = [sys.executable, executable] + self.options.args
-        else:
-            cmd = [executable] + self.options.args
+        cmd = [os.path.abspath(self._executable(target))] + self.options.args
         shell = target.data.get('run_in_shell', False)
         if shell:
             cmd = subprocess.list2cmdline(cmd)

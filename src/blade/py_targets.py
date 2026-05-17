@@ -229,7 +229,11 @@ class PythonBinary(PythonLibrary):
         return rel_path.replace('/', '.')
 
     def generate(self):
-        output = self._target_file_path(self.name)
+        if os.name == 'nt':
+            output = self._target_file_path(self.name + '.bat')
+            self.attr['executable_name'] = self.name + '.bat'
+        else:
+            output = self._target_file_path(self.name)
         pylib = self._pylib()
         inputs = [pylib] if pylib else []
         targets = self.blade.get_build_targets()
