@@ -643,7 +643,19 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     for dir in sorted(dirs_missing_init_py):
         pybin_zip.writestr(os.path.join(dir, '__init__.py'), '')
     pybin_zip.writestr('__init__.py', '')
+    if os.name == 'nt':
+        pybin_zip.writestr(
+            '__main__.py',
+            f'import runpy\n'
+            f'runpy.run_module({mainentry!r}, run_name="__main__", alter_sys=True)\n')
     pybin_zip.close()
+
+    if os.name == 'nt':
+        # Pure zip file — Python on Windows can execute it directly via
+        # zipimport (it detects the PK\x03\x04 magic bytes).  No shebang
+        # prefix because Windows doesn't understand them, and the prefix
+        # would hide the zip magic from the Python launcher.
+        return
 
     with open(pybin, 'rb') as f:
         zip_content = f.read()
