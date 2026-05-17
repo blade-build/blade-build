@@ -278,7 +278,7 @@ def cpu_count():
         return int(os.sysconf('SC_NPROCESSORS_ONLN'))
 
 
-_TRANS_TABLE = str.maketrans(',-/:.+*', '_______')
+_TRANS_TABLE = str.maketrans(',-/:\\.+*', '________')
 
 def regular_variable_name(name):
     """convert some name to a valid identifier name"""

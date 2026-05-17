@@ -556,14 +556,12 @@ class _NinjaFileHeaderGenerator:
                                description='PROTOCGOLANG ${in}')
 
     def generate_resource_rules(self):
-        args = '${name} ${path} ${out} ${in}'
         self.generate_rule(name='resource_index',
-                           command=self._builtin_command('resource_index', args),
+                           command=self._builtin_command('resource_index',
+                                                         '${name} ${path} ${out} ${in}'),
                            description='RESOURCE INDEX ${out}')
         self.generate_rule(name='resource',
-                           command='xxd -i ${in} | '
-                                   'sed -e "s/^unsigned char /const char RESOURCE_/g" '
-                                   '-e "s/^unsigned int /const unsigned int RESOURCE_/g" > ${out}',
+                           command=self._builtin_command('resource', '${out} ${in}'),
                            description='RESOURCE ${in}')
 
     def get_java_command(self, java_config, cmd):
