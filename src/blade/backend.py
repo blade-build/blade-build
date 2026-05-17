@@ -618,7 +618,8 @@ class _NinjaFileHeaderGenerator:
                            ' '.join(cmd), jar, jarflags))
         self.generate_rule(name='javac',
                            command=command,
-                           description='JAVAC ${out}')
+                           description='JAVAC ${out}',
+                           restat=True)
 
     def generate_java_resource_rules(self):
         self.generate_rule(name='javaresource',

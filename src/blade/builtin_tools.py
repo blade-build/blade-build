@@ -39,6 +39,25 @@ def _declare_outputs(*outputs):
     _outputs[:] = outputs
 
 
+def _write_if_changed(path, content):
+    """Write *content* to *path* only if it differs from what is already on disk.
+
+    When the file already contains *content* it is left untouched so that its
+    modification time stays stable across identical builds.  Ninjaʼs ``restat``
+    machinery (and its basic up-to-date check) can then skip the rule entirely
+    on subsequent runs.
+    """
+    try:
+        with open(path, 'r') as f:
+            old = f.read()
+    except FileNotFoundError:
+        old = None
+    if old == content:
+        return
+    with open(path, 'w') as f:
+        f.write(content)
+
+
 def _verify_outputs():
     """Verify whether the declared output files were correctly generated."""
     missing = [o for o in _outputs if not os.path.exists(o)]
@@ -390,33 +409,36 @@ def generate_java_test(script, main_class, jacocoagent, packages_under_test, arg
 def _generate_java_test_sh(script, main_class, jacocoagent, packages_under_test, jars, test_classes):
     coverage_flags = _jacoco_test_coverage_flag(jacocoagent, packages_under_test)
     abs_jars = [os.path.abspath(j) for j in jars]
-    with open(script, 'w') as f:
-        f.write(textwrap.dedent('''\
-                #!/bin/sh
-                # Auto generated wrapper shell script by blade
+    content = textwrap.dedent('''\
+            #!/bin/sh
+            # Auto generated wrapper shell script by blade
 
-                if [ -n "$BLADE_COVERAGE" ]; then
-                    coverage_options="%s"
-                fi
+            if [ -n "$BLADE_COVERAGE" ]; then
+                coverage_options="%s"
+            fi
 
-                exec java $coverage_options -classpath %s %s %s $@''') % (
-                coverage_flags, ':'.join(abs_jars), main_class, test_classes))
+            exec java $coverage_options -classpath %s %s %s $@''') % (
+            coverage_flags, ':'.join(abs_jars), main_class, test_classes)
+    _write_if_changed(script, content)
     os.chmod(script, 0o755)
 
 
 def _generate_java_test_bat(script, main_class, jacocoagent, packages_under_test, jars, test_classes):
     coverage_flags = _jacoco_test_coverage_flag(jacocoagent, packages_under_test)
     abs_jars = [os.path.abspath(j) for j in jars]
-    with open(script, 'w') as f:
-        f.write('@echo off\r\n')
-        f.write('rem Auto generated wrapper batch script by blade\r\n')
-        f.write('\r\n')
-        f.write('setlocal\r\n')
-        f.write('set "coverage_options="\r\n')
-        f.write('if defined BLADE_COVERAGE set "coverage_options=%s"\r\n' % coverage_flags)
-        f.write('java %%coverage_options%% -classpath %s %s %s %%*\r\n' % (
-            ';'.join(abs_jars), main_class, test_classes))
-        f.write('endlocal\r\n')
+    lines = [
+        '@echo off\r\n',
+        'rem Auto generated wrapper batch script by blade\r\n',
+        '\r\n',
+        'setlocal\r\n',
+        'set "coverage_options="\r\n',
+        'if defined BLADE_COVERAGE set "coverage_options=%s"\r\n' % coverage_flags,
+        'java %%coverage_options%% -classpath %s %s %s %%*\r\n' % (
+            ';'.join(abs_jars), main_class, test_classes),
+        'endlocal\r\n',
+    ]
+    content = ''.join(lines)
+    _write_if_changed(script, content)
 
 
 def generate_fat_jar(output, **kwargs):
@@ -481,18 +503,18 @@ def generate_java_binary(args):
     _declare_outputs(script)
     basename = os.path.basename(onejar)
     fullpath = os.path.abspath(onejar)
-    with open(script, 'w') as f:
-        f.write(textwrap.dedent('''\
-                #!/bin/sh
-                # Auto generated wrapper shell script by blade
+    content = textwrap.dedent('''\
+            #!/bin/sh
+            # Auto generated wrapper shell script by blade
 
-                jar=`dirname "$0"`/"%s"
-                if [ ! -f "$jar" ]; then
-                  jar="%s"
-                fi
+            jar=`dirname "$0"`/"%s"
+            if [ ! -f "$jar" ]; then
+              jar="%s"
+            fi
 
-                exec java -jar "$jar" $@
-                ''') % (basename, fullpath))
+            exec java -jar "$jar" $@
+            ''') % (basename, fullpath)
+    _write_if_changed(script, content)
     os.chmod(script, 0o755)
 
 
@@ -652,18 +674,18 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     pybin_zip.close()
 
     if os.name == 'nt':
-        with open(pybin, 'w') as f:
-            f.write('@echo off\r\n')
-            f.write('set "PYTHONPATH=%~dp0%~n0.zip;%PYTHONPATH%"\r\n')
-            f.write(f'python -m {mainentry} %*\r\n')
+        content = '@echo off\r\n'
+        content += 'set "PYTHONPATH=%~dp0%~n0.zip;%PYTHONPATH%"\r\n'
+        content += f'python -m {mainentry} %*\r\n'
+        _write_if_changed(pybin, content)
         return
 
-    with open(pybin, 'w') as f:
-        f.write('#!/bin/sh\n')
-        f.write('ZIP="$(dirname "$0")/$(basename "$0").zip"\n')
-        f.write('PYTHONPATH="$ZIP:$PYTHONPATH" '
+    content = '#!/bin/sh\n'
+    content += 'ZIP="$(dirname "$0")/$(basename "$0").zip"\n'
+    content += ('PYTHONPATH="$ZIP:$PYTHONPATH" '
                 'exec "${BLADE_PYTHON_INTERPRETER:-python3}" '
                 f'-m {mainentry} "$@"\n')
+    _write_if_changed(pybin, content)
     os.chmod(pybin, 0o755)
 
 
