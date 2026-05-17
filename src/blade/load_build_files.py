@@ -29,6 +29,7 @@ from blade import target_tags
 
 from pathlib import Path
 from blade.util import path_under_dir, var_to_list, exec_file, source_location
+import posixpath
 
 
 # import these modules make build functions registered into build_rules
@@ -98,7 +99,7 @@ def _current_source_location():
     """Return source location in current BUILD file"""
     from blade import build_manager  # pylint: disable=import-outside-toplevel
     source_dir = Path(build_manager.instance.get_current_source_path())
-    return source_location(os.path.join(str(source_dir), 'BUILD'))
+    return source_location(posixpath.join(str(source_dir), 'BUILD'))
 
 
 def glob(include, exclude=None, excludes=None, allow_empty=False):

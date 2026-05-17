@@ -18,6 +18,7 @@ from blade import console
 from blade import target_pattern
 from blade import target_tags
 from blade.util import var_to_list, source_location, md5sum
+import posixpath
 
 
 def _is_likely_concatenated_filenames(string, exts):
@@ -158,7 +159,7 @@ class Target:
         self.key = f'{self.path}:{name}'
         # The full qualified target id, to be displayed in diagnostic message
         self.fullname = '//' + self.key
-        self.source_location = source_location(os.path.join(current_source_path, 'BUILD'))
+        self.source_location = source_location(posixpath.join(current_source_path, 'BUILD'))
         self.srcs = srcs
         self.deps = []
 
