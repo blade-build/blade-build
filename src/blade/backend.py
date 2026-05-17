@@ -335,11 +335,11 @@ class _NinjaFileHeaderGenerator:
         self._add_line('linkflags = %s\n' % ' '.join(linkflags))
 
         self.generate_rule(name='link',
-                           command=f'{ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{in}}',
+                           command=f'{ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
                            description='LINK EXE ${out}')
 
         self.generate_rule(name='solink',
-                           command=f'{ld} /nologo /DLL /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{in}}',
+                           command=f'{ld} /nologo /DLL /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
                            description='LINK DLL ${out}')
 
     def _generate_cc_vars(self):
@@ -513,22 +513,22 @@ class _NinjaFileHeaderGenerator:
                 protocpythonpluginflags =
                 '''))
         self.generate_rule(name='proto',
-                           command='%s --proto_path=. %s -I=`dirname ${in}` '
+                           command='%s --proto_path=. %s -I=${srcdir} '
                                    '--cpp_out=%s ${protocflags} ${protoccpppluginflags} ${in}' % (
                                        protoc, protobuf_incs, self.build_dir),
                            description='PROTOC CPP ${in}')
         self.generate_rule(name='protojava',
-                           command='%s --proto_path=. %s --java_out=%s/`dirname ${in}` '
+                           command='%s --proto_path=. %s --java_out=%s/${srcdir} '
                                    '${protocjavapluginflags} ${in}' % (
                                        protoc_java, protobuf_java_incs, self.build_dir),
                            description='PROTOC JAVA ${in}')
         self.generate_rule(name='protopython',
-                           command='%s --proto_path=. %s -I=`dirname ${in}` '
+                           command='%s --proto_path=. %s -I=${srcdir} '
                                    '--python_out=%s ${protocpythonpluginflags} ${in}' % (
                                        protoc, protobuf_incs, self.build_dir),
                            description='PROTOC PYTHON ${in}')
         self.generate_rule(name='protodescriptors',
-                           command='%s --proto_path=. %s -I=`dirname ${first}` '
+                           command='%s --proto_path=. %s -I=${srcdir} '
                                    '--descriptor_set_out=${out} --include_imports '
                                    '--include_source_info ${in}' % (
                                        protoc, protobuf_incs),
@@ -550,7 +550,7 @@ class _NinjaFileHeaderGenerator:
             else:
                 go_out = outdir
             self.generate_rule(name='protogo',
-                               command='%s --proto_path=. %s -I=`dirname ${in}` '
+                               command='%s --proto_path=. %s -I=${srcdir} '
                                        '--plugin=protoc-gen-go=%s --go_out=%s ${in}' % (
                                            protoc, protobuf_incs, protoc_go_plugin, go_out),
                                description='PROTOCGOLANG ${in}')

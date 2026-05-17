@@ -387,6 +387,19 @@ class Target:
     def _add_implicit_library(self, implicit_deps):
         """Add implicit dep list to key's deps."""
         for dep in implicit_deps:
+            if (os.path.isabs(dep) and not dep.startswith('//')
+                    and not dep.startswith('#')):
+                # Absolute path to a pre-existing library file.
+                # Hash the path into a #-key to keep _parse_target happy;
+                # the real path is stored on the SystemLibrary target.
+                import hashlib
+                path_hash = hashlib.md5(dep.encode()).hexdigest()[:12]
+                dkey = '#:abslib_' + path_hash
+                self._add_system_library(dkey, dep)
+                if dkey not in self.deps:
+                    self.deps.append(dkey)
+                self._implicit_deps.add(dkey)
+                continue
             if not dep.startswith('//') and not dep.startswith('#'):
                 dep = '//' + dep
             dkey = self._unify_dep(dep)
@@ -401,8 +414,8 @@ class Target:
     def _add_system_library(self, key, name):
         """Add system library entry to database."""
         if key not in self.target_database:
-            assert key[2:] == name
-            lib = SystemLibrary(name)
+            libpath = name if os.path.isabs(name) else None
+            lib = SystemLibrary(name, key=key, libpath=libpath)
             self.blade.register_target(lib)
 
     def _add_location_reference_target(self, m):
@@ -455,6 +468,13 @@ class Target:
 
     def _unify_dep(self, dep):
         """Unify dep to key."""
+        if os.path.isabs(dep) and not dep.startswith('//') and not dep.startswith('#'):
+            import hashlib
+            path_hash = hashlib.md5(dep.encode()).hexdigest()[:12]
+            dkey = '#:abslib_' + path_hash
+            self._add_system_library(dkey, dep)
+            return dkey
+
         (path, name, msgs) = _parse_target(dep)
 
         if msgs:
@@ -775,7 +795,7 @@ class Target:
 
 
 class SystemLibrary(Target):
-    def __init__(self, name):
+    def __init__(self, name, key=None, libpath=None):
         super().__init__(
                 name=name,
                 type='system_library',
@@ -786,8 +806,11 @@ class SystemLibrary(Target):
                 tags=['lang:cc', 'type:library', 'type:system'],
                 kwargs={})
         self.path = '#'
-        self.key = '#:' + name
+        self.key = key if key else '#:' + name
         self.fullname = '//' + self.key
+        # When libpath is set, it overrides name for linker flags
+        # (used for absolute-path prebuilt libraries).
+        self.libpath = libpath if libpath else name
 
     def generate(self):
         pass

@@ -19,7 +19,7 @@ from blade import console
 from blade import java_targets  # lgtm[py/cyclic-import]
 from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget  # lgtm[py/cyclic-import]
-from blade.util import var_to_list, var_to_list_or_none
+from blade.util import to_unix_path, var_to_list, var_to_list_or_none
 
 
 class ProtocPlugin:
@@ -340,7 +340,8 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
     def _proto_descriptor_rules(self):
         inputs = [self._source_file_path(s) for s in self.srcs]
         output = self._proto_gen_descriptor_file(self.name)
-        self.generate_build('protodescriptors', output, inputs=inputs, variables={'first': inputs[0]})
+        self.generate_build('protodescriptors', output, inputs=inputs,
+                            variables={'srcdir': to_unix_path(os.path.dirname(inputs[0]))})
 
     def _protoc_plugin_parameters(self, language):
         """Return a tuple of (plugin paths, vars) used as parameters for ninja build."""
@@ -379,6 +380,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         cpp_sources = []
         for src in self.srcs:
             full_sources, full_headers = self._proto_gen_cpp_files(src)
+            vars['srcdir'] = to_unix_path(os.path.dirname(self._source_file_path(src)))
             self.generate_build('proto', full_sources + full_headers,
                                 inputs=self._source_file_path(src),
                                 implicit_deps=implicit_deps, variables=vars)
@@ -396,6 +398,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             input = self._source_file_path(src)
             package_dir, java_name = self.src_java_info[src]
             output = self._target_file_path(os.path.join(os.path.dirname(src), package_dir, java_name))
+            vars['srcdir'] = to_unix_path(os.path.dirname(input))
             self.generate_build('protojava', output, inputs=input,
                                 implicit_deps=implicit_deps, variables=vars)
             java_sources.append(output)
@@ -410,7 +413,8 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         for proto in self.srcs:
             input = self._source_file_path(proto)
             output = self._proto_gen_python_file(proto)
-            self.generate_build('protopython', output, inputs=input)
+            self.generate_build('protopython', output, inputs=input,
+                                variables={'srcdir': to_unix_path(os.path.dirname(input))})
             generated_pys.append(output)
         pylib = self._target_file_path(self.name + '.pylib')
         self.generate_build('pythonlibrary', pylib, inputs=generated_pys,
@@ -430,7 +434,8 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
                 self.warning(f'go_package "{package}" is not starting with "{protobuf_go_path}" in {src}')
             basename = os.path.basename(src)
             output = os.path.join(go_home, 'src', package, '%s.pb.go' % basename[:-6])
-            self.generate_build('protogo', output, inputs=path)
+            self.generate_build('protogo', output, inputs=path,
+                                variables={'srcdir': to_unix_path(os.path.dirname(path))})
             generated_goes.append(output)
         self._add_target_file('gopkg', generated_goes)
 

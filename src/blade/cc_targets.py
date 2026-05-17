@@ -506,7 +506,7 @@ class CcTarget(Target):
         for key in self.expanded_deps:
             dep = targets[key]
             if dep.path == '#':
-                sys_libs.append(dep.name)
+                sys_libs.append(getattr(dep, 'libpath', dep.name))
                 continue
 
             lib = dep._get_target_file('so')
@@ -535,7 +535,7 @@ class CcTarget(Target):
         for key in self.expanded_deps:
             dep = targets[key]
             if dep.path == '#':
-                sys_libs.append(dep.name)
+                sys_libs.append(getattr(dep, 'libpath', dep.name))
                 continue
 
             lib = dep._get_target_file('a')
@@ -703,7 +703,7 @@ class CcTarget(Target):
             vars['target_linkflags'] = ' '.join(target_linkflags)
         if cmd:
             vars['cmd'] = cmd
-        extra_linkflags = ['-l%s' % lib for lib in sys_libs]
+        extra_linkflags = [lib if os.path.isabs(lib) else '-l%s' % lib for lib in sys_libs]
         extra_linkflags += self.attr.get('extra_linkflags')  # pyright: ignore[reportOperatorIssue]
         if implicit_deps is None:
             implicit_deps = []
