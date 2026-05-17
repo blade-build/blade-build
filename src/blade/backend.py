@@ -14,7 +14,9 @@ objects to generate build rules.
 """
 
 
+import glob
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -333,11 +335,11 @@ class _NinjaFileHeaderGenerator:
         self._add_line('linkflags = %s\n' % ' '.join(linkflags))
 
         self.generate_rule(name='link',
-                           command=f'{ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{in}}',
+                           command=f'{ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{in}}',
                            description='LINK EXE ${out}')
 
         self.generate_rule(name='solink',
-                           command=f'{ld} /nologo /DLL /out:${{out}} ${{linkflags}} {libpath_flags} ${{in}}',
+                           command=f'{ld} /nologo /DLL /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{in}}',
                            description='LINK DLL ${out}')
 
     def _generate_cc_vars(self):
@@ -773,12 +775,37 @@ class _NinjaFileHeaderGenerator:
                            description='SHELL TEST DATA ${out}')
 
     def generate_lex_yacc_rules(self):
+        if os.name == 'nt':
+            lex_cmd = 'win_flex --wincompat'
+            yacc_cmd = 'win_bison'
+            # win_bison may be invoked via WinGet Links hardlink, which causes
+            # bison to look for data/m4sugar/ next to the link instead of the
+            # real install dir. Set BISON_PKGDATADIR to the actual data dir.
+            bison_data_dir = self._find_win_bison_data_dir()
+            if bison_data_dir:
+                yacc_cmd = f'cmd /c set "BISON_PKGDATADIR={bison_data_dir}" && win_bison'
+        else:
+            lex_cmd = 'flex'
+            yacc_cmd = 'bison'
         self.generate_rule(name='lex',
-                           command='flex ${lexflags} -o ${out} ${in}',
+                           command=f'{lex_cmd} ${{lexflags}} -o ${{out}} ${{in}}',
                            description='LEX ${in}')
         self.generate_rule(name='yacc',
-                           command='bison ${yaccflags} -o ${out} ${in}',
+                           command=f'{yacc_cmd} ${{yaccflags}} -o ${{out}} ${{in}}',
                            description='YACC ${in}')
+
+    @staticmethod
+    def _find_win_bison_data_dir():
+        for pattern in [
+            os.path.join(os.path.dirname(shutil.which('win_bison') or ''), 'data'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''),
+                         'Microsoft', 'WinGet', 'Packages',
+                         'WinFlexBison*', 'data'),
+        ]:
+            matches = glob.glob(pattern)
+            if matches and os.path.isdir(matches[0]):
+                return matches[0]
+        return None
 
     def generate_package_rules(self):
         args = '${out} ${in} ${entries}'

@@ -61,6 +61,7 @@ Blade integrates with the following tools for enhanced build performance:
 - **Python:** Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
 - **Ninja:** Download from [ninja-build.org](https://ninja-build.org/) or install via `pip install ninja`
 - **Git:** Required for SCM integration (revision embedding)
+- **WinFlexBison** *(optional, for `lex_yacc_library` targets)*: Install via `winget install -e --id WinFlexBison.win_flex_bison`
 - Add the Blade directory to `PATH`, or launch via `blade.bat`
 
 ## Version Compatibility Matrix

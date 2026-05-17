@@ -490,6 +490,8 @@ class CcTarget(Target):
             return []
         if sys.platform == 'darwin':
             return ['-Wl,-force_load,' + lib for lib in libs]
+        if os.name == 'nt':
+            return ['/WHOLEARCHIVE:' + lib for lib in libs]
         return ['-Wl,--whole-archive'] + libs + ['-Wl,--no-whole-archive']
 
     def _dynamic_dependencies(self):

@@ -69,6 +69,7 @@ Blade 可与以下工具集成，从而提升构建性能：
 - **Python：** 从 [python.org](https://www.python.org/downloads/) 安装 Python 3.10+
 - **Ninja：** 从 [ninja-build.org](https://ninja-build.org/) 下载或通过 `pip install ninja` 安装
 - **Git：** 用于版本控制集成（SCM 信息嵌入）
+- **WinFlexBison** *（可选，仅 `lex_yacc_library` 目标需要）*：通过 `winget install -e --id WinFlexBison.win_flex_bison` 安装
 - 将 Blade 目录加入 `PATH`，或直接使用 `blade.bat` 启动
 
 ## 版本兼容性对照表
