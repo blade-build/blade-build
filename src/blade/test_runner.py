@@ -17,6 +17,7 @@ import datetime
 import json
 import os
 import re
+import sys
 import time
 from collections import namedtuple
 
@@ -442,7 +443,11 @@ class TestRunner(binary_runner.BinaryRunner):
         for target_key in self.test_jobs:
             target = self.target_database[target_key]
             test_env = self._prepare_env(target)
-            cmd = [os.path.abspath(self._executable(target))]
+            executable = os.path.abspath(self._executable(target))
+            if os.name == 'nt' and target.type in ('py_binary', 'py_test'):
+                cmd = [sys.executable, executable]
+            else:
+                cmd = [executable]
             cmd += self.options.args
             if console.color_enabled():
                 test_env['GTEST_COLOR'] = 'yes'
