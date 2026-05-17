@@ -12,6 +12,7 @@ input and provides hint for users.
 
 
 import argparse
+import os
 
 # https://pypi.org/project/argcomplete/
 try:
@@ -471,7 +472,12 @@ class CommandLineParser:
         return arg_parser
 
     def _compiler_target_arch(self):
-        """Compiler(gcc) target architecture."""
+        """Compiler target architecture (platform-aware)."""
+        if os.name == 'nt':
+            # On Windows the toolchain is discovered from the installation,
+            # not from running gcc. Use host arch as the default.
+            from blade.toolchain import create_toolchain
+            return create_toolchain().get_cc_target_arch()
         arch = ToolChain.get_cc_target_arch()
         pos = arch.find('-')
         if pos == -1:

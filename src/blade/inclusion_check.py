@@ -10,6 +10,7 @@ import os
 import pickle
 
 from blade import console
+from blade import util
 from blade.util import to_unix_path
 
 

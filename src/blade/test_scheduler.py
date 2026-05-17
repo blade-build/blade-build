@@ -30,9 +30,13 @@ def _signal_map():
     for name in dir(signal):
         if not name.startswith('SIG') or name.startswith('SIG_'):
             continue
-        # SIGIOT and SIGABRT has the same value under linux and mac, but SIGABRT is more common.
-        if signal.SIGABRT == signal.SIGIOT and name == 'SIGIOT':
-            continue
+        # SIGIOT and SIGABRT share the same value on some platforms;
+        # SIGABRT is the more common name. Also, SIGIOT is absent on Windows.
+        if name == 'SIGIOT':
+            if not hasattr(signal, name):
+                continue
+            if signal.SIGABRT == signal.SIGIOT:
+                continue
         result[-getattr(signal, name)] = name
 
     return result

@@ -234,52 +234,73 @@ class _NinjaFileHeaderGenerator:
         cc, cxx, ld = self.build_accelerator.get_cc_commands()
         self._generate_windows_cc_vars()
         self._generate_windows_cc_compile_rules(cc, cxx)
+        self._generate_cc_inclusion_check_rule()
         self._generate_windows_ar_rules()
-        self._generate_windows_link_rules(ld)
+        self._generate_windows_link_rules()
 
     def _generate_windows_cc_vars(self):
         """Generate Windows-specific CC variables."""
         windows_config = config.get_section('windows_config')
-        warnings = windows_config['warnings']
+        cc_config = config.get_section('cc_config')
+        # Combine windows_config warnings with filtered cc_config warnings
+        c_warnings = (windows_config['warnings'] +
+                      self.build_toolchain.filter_cc_flags(cc_config['c_warnings'], 'c'))
+        cxx_warnings = (windows_config['warnings'] +
+                        self.build_toolchain.filter_cc_flags(cc_config['cxx_warnings'], 'c++'))
         self._add_line(textwrap.dedent('''\
                 c_warnings = %s
                 cxx_warnings = %s
-                ''') % (' '.join(warnings), ' '.join(warnings)))
+                ''') % (' '.join(c_warnings), ' '.join(cxx_warnings)))
 
     def _generate_windows_cc_compile_rules(self, cc, cxx):
         """Generate Windows CC compilation rules."""
         windows_config = config.get_section('windows_config')
-        cppflags = windows_config['cppflags']
-        cflags = windows_config['cflags']
-        cxxflags = windows_config['cxxflags']
-
         cc_config = config.get_section('cc_config')
+
+        # Combine windows_config flags with filtered cc_config flags.
+        # cc_config flags (from BLADE_ROOT) typically use GCC syntax and get
+        # mapped/filtered by the toolchain (e.g. -std=c++17 → /std:c++17).
+        filtered_cc_cflags = self.build_toolchain.filter_cc_flags(cc_config['cflags'], 'c')
+        filtered_cc_cxxflags = self.build_toolchain.filter_cc_flags(cc_config['cxxflags'], 'c++')
+        filtered_cc_cppflags = self.build_toolchain.filter_cc_flags(cc_config['cppflags'])
+
+        cppflags = windows_config['cppflags'] + filtered_cc_cppflags
+        cflags = windows_config['cflags'] + filtered_cc_cflags
+        cxxflags = windows_config['cxxflags'] + filtered_cc_cxxflags
         # System includes (MSVC + Windows SDK) discovered by the toolchain,
         # then user-specified extra_incs, then build directory.
         system_includes = self.build_toolchain.get_system_include_paths()
         includes = system_includes + cc_config['extra_incs'] + ['.', self.build_dir]
-        include_flags = ' '.join(['/I%s' % inc for inc in includes])
+        # MSVC accepts /I"path with spaces" (quoted, no space after /I).
+        # Use a helper that quotes paths containing spaces.
+        def _quote_if_needed(p):
+            return f'/I"{p}"' if ' ' in p else f'/I{p}'
+        include_flags = ' '.join([_quote_if_needed(inc) for inc in includes])
 
         optimize_flags = windows_config['optimize']
         optimize = ' '.join(optimize_flags.get(self.options.profile, []))
 
-        cc_command = ('%s /nologo /c %s %s %s /Fo${out} ${c_warnings} ${in}' % (
-            cc, ' '.join(cppflags), ' '.join(cflags), include_flags))
+        cc_command = ('%s /nologo /c %s %s %s %s /Fo${out} ${c_warnings} ${in}' % (
+            cc, optimize, ' '.join(cppflags), ' '.join(cflags), include_flags))
         self.generate_rule(name='cc',
                            command=cc_command,
                            description='CC ${in}',
                            deps='msvc')
 
-        cxx_command = ('%s /nologo /c %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
-            cxx, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
+        cxx_command = ('%s /nologo /c %s %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
+            cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxx',
                            command=cxx_command,
                            description='CXX ${in}',
                            deps='msvc')
 
-        # For cxxhdrs: use /showIncludes to generate inclusion info
-        hdrs_command = ('%s /nologo /c /showIncludes %s %s %s /Fo${out} ${in} > ${out}.incl 2>&1' % (
-            cxx, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
+        # For cxxhdrs: use /showIncludes to generate inclusion info.
+        # /P preprocesses (like GCC -E), /Tp forces C++ treatment of .h files.
+        # Wrap with cmd /c because Ninja on Windows can't handle shell redirections directly.
+        # Fall back to empty output on failure so the build can continue.
+        hdrs_command = ('cmd /c "%s /nologo /P /Tp${in} /showIncludes %s %s %s %s /Fi${out} 2> ${out}.incl'
+                        ' || (echo. > ${out} & echo. > ${out}.incl)"' % (
+            cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxxhdrs',
                            command=hdrs_command,
                            description='CXX HDRS ${in}',
@@ -287,27 +308,32 @@ class _NinjaFileHeaderGenerator:
 
     def _generate_windows_ar_rules(self):
         """Generate Windows static library rules."""
+        ar = self.build_accelerator.get_ar_command()
         self.generate_rule(name='ar',
-                           command='lib /nologo /out:${out} ${in}',
+                           command=f'{ar} /nologo /out:${{out}} ${{in}}',
                            description='LIB ${out}')
 
     def _generate_windows_link_rules(self):
         """Generate Windows linking rules."""
+        _, _, ld = self.build_accelerator.get_cc_commands()
         windows_config = config.get_section('windows_config')
-        linkflags = ' '.join(windows_config['linkflags'])
+        cc_config = config.get_section('cc_config')
+        # Combine windows_config linkflags with filtered cc_config linkflags
+        linkflags = (windows_config['linkflags'] +
+                     self.build_toolchain.filter_cc_flags(cc_config['linkflags']))
 
         # System library paths (MSVC + Windows SDK) discovered by the toolchain
         lib_paths = self.build_toolchain.get_system_lib_paths()
         libpath_flags = ' '.join(['/LIBPATH:%s' % p for p in lib_paths])
 
-        self._add_line('linkflags = %s\n' % linkflags)
+        self._add_line('linkflags = %s\n' % ' '.join(linkflags))
 
         self.generate_rule(name='link',
-                           command='link /nologo /out:${out} ${linkflags} %s ${in}' % libpath_flags,
+                           command=f'{ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{in}}',
                            description='LINK EXE ${out}')
 
         self.generate_rule(name='solink',
-                           command='link /nologo /DLL /out:${out} ${linkflags} %s ${in}' % libpath_flags,
+                           command=f'{ld} /nologo /DLL /out:${{out}} ${{linkflags}} {libpath_flags} ${{in}}',
                            description='LINK DLL ${out}')
 
     def _generate_cc_vars(self):
@@ -826,9 +852,9 @@ class _NinjaFileHeaderGenerator:
     def _builtin_command(self, builder, args=''):
         python = os.environ.get('BLADE_PYTHON_INTERPRETER') or sys.executable
         if os.name == 'nt':
-            # On Windows, PYTHONPATH uses ';' and cmd.exe syntax
-            cmd = ['set PYTHONPATH=%s;%%PYTHONPATH%% &&' % self.blade_path]
-            cmd.append(f'{python} -m blade.builtin_tools {builder}')
+            # On Windows, PYTHONPATH uses ';' and cmd.exe must be explicit
+            python_cmd = f'set PYTHONPATH={self.blade_path};%PYTHONPATH% && {python} -m blade.builtin_tools {builder}'
+            cmd = ['cmd /c', python_cmd]
         else:
             cmd = ['PYTHONPATH=%s:$$PYTHONPATH' % self.blade_path]
             cmd.append(f'{python} -m blade.builtin_tools {builder}')
@@ -888,5 +914,5 @@ class NinjaFileGenerator:
     def generate_build_script(self):
         """Generate build script for underlying build system."""
         code = self.generate_build_code()
-        with open(self.script_path, 'w') as script:
+        with open(self.script_path, 'w', encoding='utf-8') as script:
             script.writelines(code)

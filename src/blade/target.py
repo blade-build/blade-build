@@ -150,12 +150,12 @@ class Target:
         self.cmd = cmd
 
         current_source_path = self.blade.get_current_source_path()
-        self.path = current_source_path
+        self.path = current_source_path.replace('\\', '/')
         self.build_dir = self.blade.get_build_dir()
         self.target_dir = os.path.normpath(os.path.join(self.build_dir, current_source_path))
 
         # The unique key of this target, for internal use mainly.
-        self.key = f'{current_source_path}:{name}'
+        self.key = f'{self.path}:{name}'
         # The full qualified target id, to be displayed in diagnostic message
         self.fullname = '//' + self.key
         self.source_location = source_location(os.path.join(current_source_path, 'BUILD'))

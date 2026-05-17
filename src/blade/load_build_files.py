@@ -333,7 +333,7 @@ def _load_build_file(source_dir, processed_dirs, blade):
     The parameters processed_dirs refers to a dict defined in the
     caller and used to avoid duplicated execution of BUILD files.
     """
-    source_dir = os.path.normpath(source_dir)
+    source_dir = os.path.normpath(source_dir).replace('\\', '/')
     if source_dir in processed_dirs:
         return processed_dirs[source_dir]
     result = __load_build_file(source_dir, blade)

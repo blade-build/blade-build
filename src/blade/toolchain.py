@@ -616,9 +616,55 @@ class MsvcToolChain(ToolChain):
     # Flag filtering
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _map_gcc_flags_to_msvc(flag_list):
+        """Map well-known GCC-style flags to MSVC equivalents."""
+        _STD_MAP = {
+            '-std=c90': '/std:c90',
+            '-std=c99': '/std:c99',
+            '-std=c11': '/std:c11',
+            '-std=c17': '/std:c17',
+            '-std=c++98': '/std:c++14',
+            '-std=c++11': '/std:c++14',
+            '-std=c++14': '/std:c++14',
+            '-std=c++17': '/std:c++17',
+            '-std=c++20': '/std:c++20',
+            '-std=c++2a': '/std:c++20',
+        }
+        _OPT_MAP = {
+            '-O0': '/Od',
+            '-O1': '/O1',
+            '-O2': '/O2',
+            '-O3': '/O2',
+            '-Os': '/O1',
+            '-Og': '/Od',
+            '-g': '/Zi',
+            '-g0': '/Zi',
+        }
+        _SKIP_FLAGS = frozenset(['-fPIC', '-fPIE', '-fpie', '-fpic',
+                                  '-pipe', '-rdynamic'])
+        mapped = []
+        for flag in var_to_list(flag_list):
+            if flag in _SKIP_FLAGS:
+                continue
+            if flag in _STD_MAP:
+                mapped.append(_STD_MAP[flag])
+            elif flag in _OPT_MAP:
+                mapped.append(_OPT_MAP[flag])
+            elif flag.startswith('-D') and len(flag) > 2:
+                mapped.append('/D' + flag[2:])
+            elif flag.startswith('-U') and len(flag) > 2:
+                mapped.append('/U' + flag[2:])
+            elif flag.startswith('-I') and len(flag) > 2:
+                mapped.append('/I' + flag[2:])
+            else:
+                mapped.append(flag)
+        return mapped
+
     def filter_cc_flags(self, flag_list, language='c'):
         """Filter MSVC-specific flags by testing each against the compiler."""
         flag_list = var_to_list(flag_list)
+        flag_list = self._map_gcc_flags_to_msvc(flag_list)
         valid_flags, unrecognized_flags = [], []
 
         fd, obj = tempfile.mkstemp('.obj', 'filter_cc_flags_test')

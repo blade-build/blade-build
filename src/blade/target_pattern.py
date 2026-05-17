@@ -26,7 +26,7 @@ def _split(target):
     else:
         path = target
         name = '*'
-    path = os.path.normpath(path)
+    path = os.path.normpath(path).replace('\\', '/')
     if path == '.':
         path = ''
     return path, name

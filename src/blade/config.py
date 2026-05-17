@@ -280,7 +280,7 @@ class BladeConfig:
                 'visual_studio__help__': 'Visual Studio edition (auto, Community, Professional, Enterprise)',
                 'cppflags': ['/MD', '/EHsc'],
                 'cflags': [],
-                'cxxflags': [],
+                'cxxflags': ['/std:c++17'],
                 'linkflags': ['/SUBSYSTEM:CONSOLE'],
                 'warnings': ['/W3'],
                 'optimize': {
