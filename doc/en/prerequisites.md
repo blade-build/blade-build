@@ -7,6 +7,9 @@ Blade requires the following core dependencies for basic operation:
 ### Operating System Support
 - **Linux:** All major distributions (Ubuntu, CentOS, Debian, etc.)
 - **macOS:** macOS 10.12+ with Xcode Command Line Tools
+- **Windows:** Windows 10/11 with Visual Studio Build Tools (MSVC toolchain)
+  - Developer Mode is recommended (Settings → Privacy & security → For developers)
+    to enable NTFS symlink support; if not enabled, `blade-bin` symlink is skipped
 
 ### Core Runtime Dependencies
 - **Python:** Version 3.10 or newer
@@ -22,7 +25,8 @@ Blade integrates with the following tools for enhanced build performance:
 ## Language-Specific Build Requirements
 
 ### C/C++ Development
-- **GCC:** Version 4.0+ or compatible compiler (Clang supported)
+- **GCC:** Version 4.0+ or compatible compiler (Clang supported), Linux/macOS
+- **MSVC:** Visual Studio 2019/2022 Build Tools, Windows
 - **Standard Libraries:** C++ standard library development packages
 
 ### Java Development
@@ -49,6 +53,15 @@ Blade integrates with the following tools for enhanced build performance:
 - **Xcode:** Install Xcode Command Line Tools (`xcode-select --install`)
 - **Homebrew:** Recommended for package management
 - **Python:** Use Homebrew Python or system Python with pip
+
+### Windows Installation
+
+- **MSVC Toolchain:** Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) with "MSVC v143" and "Windows SDK" components
+- **Developer Mode:** Recommended (Settings → Privacy & security → For developers) to enable NTFS symlink support. When not enabled, the `blade-bin` symlink is skipped and a warning is emitted; this does not affect normal builds
+- **Python:** Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
+- **Ninja:** Download from [ninja-build.org](https://ninja-build.org/) or install via `pip install ninja`
+- **Git:** Required for SCM integration (revision embedding)
+- Add the Blade directory to `PATH`, or launch via `blade.bat`
 
 ## Version Compatibility Matrix
 

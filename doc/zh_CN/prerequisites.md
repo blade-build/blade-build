@@ -8,6 +8,9 @@ Blade 的基本运行需要以下核心依赖：
 
 - **Linux：** 主流发行版（Ubuntu、CentOS、Debian 等）
 - **macOS：** macOS 10.12+，并安装 Xcode Command Line Tools
+- **Windows：** Windows 10/11，需安装 Visual Studio Build Tools（MSVC 工具链）
+  - 建议启用**开发人员模式**（设置 → 隐私和安全性 → 开发者选项）以支持 NTFS 符号链接
+  - 如未启用开发人员模式，部分功能（如 `blade-bin` 符号链接）将降级为警告并跳过
 
 ### 核心运行时依赖
 
@@ -25,7 +28,8 @@ Blade 可与以下工具集成，从而提升构建性能：
 
 ### C/C++ 开发
 
-- **GCC：** 4.0+ 或兼容的编译器（也支持 Clang）
+- **GCC：** 4.0+ 或兼容的编译器（也支持 Clang），Linux/macOS
+- **MSVC：** Visual Studio 2019/2022 Build Tools，Windows
 - **标准库：** C++ 标准库开发包
 
 ### Java 开发
@@ -57,6 +61,15 @@ Blade 可与以下工具集成，从而提升构建性能：
 - **Xcode：** 安装 Xcode Command Line Tools（`xcode-select --install`）
 - **Homebrew：** 推荐用于包管理
 - **Python：** 使用 Homebrew 提供的 Python，或系统自带 Python 配合 `pip`
+
+### Windows 安装
+
+- **MSVC 工具链：** 安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)，勾选 "MSVC v143" 和 "Windows SDK"
+- **开发人员模式：** 建议启用（设置 → 隐私和安全性 → 开发者选项 → 开发人员模式），以支持 NTFS 符号链接。未启用时 `blade-bin` 符号链接会跳过，不影响正常构建
+- **Python：** 从 [python.org](https://www.python.org/downloads/) 安装 Python 3.10+
+- **Ninja：** 从 [ninja-build.org](https://ninja-build.org/) 下载或通过 `pip install ninja` 安装
+- **Git：** 用于版本控制集成（SCM 信息嵌入）
+- 将 Blade 目录加入 `PATH`，或直接使用 `blade.bat` 启动
 
 ## 版本兼容性对照表
 
