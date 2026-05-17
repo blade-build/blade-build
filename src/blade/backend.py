@@ -240,7 +240,7 @@ class _NinjaFileHeaderGenerator:
 
     def _generate_windows_cc_vars(self):
         """Generate Windows-specific CC variables."""
-        windows_config = config.get_section('windows_config')
+        windows_config = config.get_section('msvc_config')
         cc_config = config.get_section('cc_config')
         # Combine windows_config warnings with filtered cc_config warnings
         c_warnings = (windows_config['warnings'] +
@@ -254,7 +254,7 @@ class _NinjaFileHeaderGenerator:
 
     def _generate_windows_cc_compile_rules(self, cc, cxx):
         """Generate Windows CC compilation rules."""
-        windows_config = config.get_section('windows_config')
+        windows_config = config.get_section('msvc_config')
         cc_config = config.get_section('cc_config')
 
         # Combine windows_config flags with filtered cc_config flags.
@@ -316,7 +316,7 @@ class _NinjaFileHeaderGenerator:
     def _generate_windows_link_rules(self):
         """Generate Windows linking rules."""
         _, _, ld = self.build_accelerator.get_cc_commands()
-        windows_config = config.get_section('windows_config')
+        windows_config = config.get_section('msvc_config')
         cc_config = config.get_section('cc_config')
         # Combine windows_config linkflags with filtered cc_config linkflags
         linkflags = (windows_config['linkflags'] +

@@ -287,7 +287,7 @@ class MsvcToolChain(ToolChain):
 
     Detects VS installation, MSVC tools, and Windows SDK without relying on
     vcvarsall.bat or pre-set environment variables. Target architecture is
-    specified via ``windows_config.target_arch`` (default: ``'auto'``, which
+    specified via ``msvc_config.target_arch`` (default: ``'auto'``, which
     matches the host architecture).
     """
 
@@ -325,7 +325,7 @@ class MsvcToolChain(ToolChain):
                 console.warning(
                     'MSVC has no %s-targeting compiler on this host; '
                     'falling back to target_arch=%s. '
-                    'Set windows_config.target_arch explicitly to suppress '
+                    'Set msvc_config.target_arch explicitly to suppress '
                     'this warning.' % (self._msvc_target, fallback))
                 self._msvc_target = fallback
                 # Update target_arch to stay consistent
@@ -618,7 +618,13 @@ class MsvcToolChain(ToolChain):
 
     @staticmethod
     def _map_gcc_flags_to_msvc(flag_list):
-        """Map well-known GCC-style flags to MSVC equivalents."""
+        """Map well-known GCC-style flags to MSVC equivalents.
+
+        Only maps flags with clear MSVC counterparts (std, optimize, debug).
+        GCC warning flags (-W*), machine flags (-m*), and Linux/glibc macros
+        (-D_FILE_OFFSET_BITS, etc.) are intentionally dropped — they have no
+        meaning on Windows.
+        """
         _STD_MAP = {
             '-std=c90': '/std:c90',
             '-std=c99': '/std:c99',
@@ -640,25 +646,50 @@ class MsvcToolChain(ToolChain):
             '-Og': '/Od',
             '-g': '/Zi',
             '-g0': '/Zi',
+            '-g1': '/Zi',
+            '-g2': '/Zi',
+            '-g3': '/Zi',
         }
-        _SKIP_FLAGS = frozenset(['-fPIC', '-fPIE', '-fpie', '-fpic',
-                                  '-pipe', '-rdynamic'])
+        # GCC flags with no MSVC equivalent — silently dropped
+        _SKIP_PREFIXES = (
+            '-W',           # GCC warning flags
+            '-m',           # -m64, -m32, -msse, etc.
+            '-f',           # -fno-omit-frame-pointer, -fstack-protector, etc.
+        )
+        _SKIP_FLAGS = frozenset([
+            '-pipe', '-rdynamic', '-gsplit-dwarf',
+        ])
+        # Linux/glibc feature macros — meaningless on Windows
+        _SKIP_DEFINES = frozenset([
+            '_FILE_OFFSET_BITS=64',
+            '__STDC_CONSTANT_MACROS',
+            '__STDC_FORMAT_MACROS',
+            '__STDC_LIMIT_MACROS',
+        ])
+
         mapped = []
         for flag in var_to_list(flag_list):
             if flag in _SKIP_FLAGS:
                 continue
             if flag in _STD_MAP:
                 mapped.append(_STD_MAP[flag])
-            elif flag in _OPT_MAP:
+                continue
+            if flag in _OPT_MAP:
                 mapped.append(_OPT_MAP[flag])
-            elif flag.startswith('-D') and len(flag) > 2:
-                mapped.append('/D' + flag[2:])
-            elif flag.startswith('-U') and len(flag) > 2:
-                mapped.append('/U' + flag[2:])
-            elif flag.startswith('-I') and len(flag) > 2:
+                continue
+            if flag.startswith(_SKIP_PREFIXES):
+                continue
+            if flag.startswith('-D') and len(flag) > 2:
+                name = flag[2:]
+                if name in _SKIP_DEFINES:
+                    continue
+                if ' ' not in name:
+                    mapped.append('/D' + name)
+                    continue
+            if flag.startswith('-I') and len(flag) > 2:
                 mapped.append('/I' + flag[2:])
-            else:
-                mapped.append(flag)
+                continue
+            mapped.append(flag)
         return mapped
 
     def filter_cc_flags(self, flag_list, language='c'):
@@ -719,7 +750,7 @@ class MsvcToolChain(ToolChain):
 def create_toolchain(m=None):
     """Create the appropriate toolchain for the current platform.
 
-    On Windows, reads ``windows_config.target_arch`` to determine the target
+    On Windows, reads ``msvc_config.target_arch`` to determine the target
     architecture. The *m* parameter (bits, ``'32'`` or ``'64'``) is reserved
     for future cross-compilation support.
 
@@ -728,7 +759,7 @@ def create_toolchain(m=None):
     """
     if os.name == 'nt':
         from blade import config as blade_config
-        windows_config = blade_config.get_section('windows_config')
-        target_arch = windows_config.get('target_arch', 'auto')
+        msvc_config = blade_config.get_section('msvc_config')
+        target_arch = msvc_config.get('target_arch', 'auto')
         return MsvcToolChain(target_arch=target_arch)
     return ToolChain()

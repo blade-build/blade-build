@@ -267,8 +267,8 @@ class BladeConfig:
                 'thrift_gen_params': 'cpp:include_prefix,pure_enums'
             },
 
-            'windows_config': {
-                '__help__': 'Windows-specific Configuration',
+            'msvc_config': {
+                '__help__': 'MSVC-specific Configuration',
                 'target_arch': 'auto',
                 'target_arch__help__':
                     'Target architecture: auto (detect from host), x64, x86, arm64, arm64ec',
@@ -661,8 +661,8 @@ def fbthrift_library_config(append=None, **kwargs):
 
 
 @config_rule
-def windows_config(append=None, **kwargs):
-    """windows_config section."""
-    _blade_config.update_config('windows_config', append, kwargs)
+def msvc_config(append=None, **kwargs):
+    """msvc_config section."""
+    _blade_config.update_config('msvc_config', append, kwargs)
 
 
