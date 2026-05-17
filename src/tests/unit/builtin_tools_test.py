@@ -84,14 +84,14 @@ class GeneratePythonBinaryBootstrapTest(unittest.TestCase):
         return pybin
 
     def _read_bootstrap(self, pybin):
-        """Return the #!/bin/sh header (everything before the zip magic)."""
-        with open(pybin, 'rb') as f:
-            blob = f.read()
-        # The zip segment starts at the first PK\x03\x04 local-file header.
-        zip_start = blob.find(b'PK\x03\x04')
-        self.assertNotEqual(
-            zip_start, -1, 'expected a zip segment after the sh bootstrap')
-        return blob[:zip_start].decode('utf-8')
+        """Return the #!/bin/sh wrapper script contents.
+
+        The zip is now a separate file (``pybin.zip``) — the wrapper is a
+        standalone shell script that adds it to PYTHONPATH and invokes
+        python3 with the entry module.
+        """
+        with open(pybin, 'r', encoding='utf-8') as f:
+            return f.read()
 
     def test_bootstrap_uses_python3_not_bare_python(self):
         """Regression pin: hardcoding ``python`` breaks on macOS & modern Debian.
@@ -131,10 +131,11 @@ class GeneratePythonBinaryBootstrapTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             pybin = self._build_pybin('suites.py_basic.greeter_test', tmpdir)
             bootstrap = self._read_bootstrap(pybin)
-        self.assertIn('-m "suites.py_basic.greeter_test"', bootstrap)
+        self.assertIn('-m suites.py_basic.greeter_test', bootstrap)
         self.assertIn('"$@"', bootstrap)
         # PYTHONPATH prepend is what lets the zip-embedded modules import.
-        self.assertIn('PYTHONPATH="$0:$PYTHONPATH"', bootstrap)
+        # The zip is a sibling file (pybin.zip), referenced via ZIP variable.
+        self.assertIn('PYTHONPATH="$ZIP:$PYTHONPATH"', bootstrap)
 
     def test_bootstrap_starts_with_posix_shebang(self):
         """The bootstrap is parsed by /bin/sh, not bash. Pin the shebang."""
