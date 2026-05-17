@@ -107,15 +107,6 @@ jobs:
       # ahead of the suite PRs keeps later commits focused.
       run: |
         sudo apt-get install -y flex bison protobuf-compiler libprotobuf-dev python3-protobuf
-    - name: Install googletest at BLADE_ROOT-expected prefix
-      # blade-test/BLADE_ROOT points cc search paths at
-      # /usr/local/opt/googletest/{include,lib} on Linux. Ubuntu's
-      # libgtest-dev ships sources only, so build and stage them there.
-      run: |
-        sudo apt-get install -y libgtest-dev libgmock-dev cmake
-        sudo cmake -S /usr/src/googletest -B /tmp/gtest-build \
-          -DCMAKE_INSTALL_PREFIX=/usr/local/opt/googletest
-        sudo cmake --build /tmp/gtest-build --target install -j
     - name: Run blade-test suites
       working-directory: blade-test
       run: |
