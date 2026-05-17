@@ -692,15 +692,39 @@ class MsvcToolChain(ToolChain):
             mapped.append(flag)
         return mapped
 
+    # Flags that are known-valid MSVC syntax but may fail the stdin compiler
+    # test (e.g. /Zi can't write a PDB from stdin, /WX turns padding warnings
+    # into errors when the source is piped).  Bypass the test for these.
+    _KNOWN_VALID_PREFIXES = (
+        '/D',       # Preprocessor defines
+        '/I',       # Include paths
+        '/Zi', '/ZI', '/Z7',  # Debug info
+        '/FS',      # Force synchronous PDB writes
+        '/MP',      # Multi-process compilation
+        '/std:',    # Language standard
+    )
+
     def filter_cc_flags(self, flag_list, language='c'):
         """Filter MSVC-specific flags by testing each against the compiler."""
         flag_list = var_to_list(flag_list)
         flag_list = self._map_gcc_flags_to_msvc(flag_list)
+
+        # Separate flags into known-valid (bypass test) and need-test.
+        trusted, to_test = [], []
+        for flag in flag_list:
+            if flag.startswith(self._KNOWN_VALID_PREFIXES):
+                trusted.append(flag)
+            else:
+                to_test.append(flag)
+
+        if not to_test:
+            return trusted + to_test
+
         valid_flags, unrecognized_flags = [], []
 
         fd, obj = tempfile.mkstemp('.obj', 'filter_cc_flags_test')
         try:
-            argv = [self.cc, '/nologo', '/c', '/Fo' + obj, '/WX', '/Tc-'] + list(flag_list)
+            argv = [self.cc, '/nologo', '/c', '/Fo' + obj, '/WX', '/Tc-'] + to_test
             proc = subprocess.Popen(
                 argv,
                 stdin=subprocess.PIPE,
@@ -716,10 +740,10 @@ class MsvcToolChain(ToolChain):
             os.close(fd)
 
         if returncode == 0:
-            return flag_list
+            return trusted + to_test
         # When a flag is unrecognized, MSVC puts it in the error output.
         # Re-test each flag individually to identify bad ones.
-        for flag in flag_list:
+        for flag in to_test:
             fd2, obj2 = tempfile.mkstemp('.obj', 'filter_cc_flags_test')
             try:
                 test_argv = [self.cc, '/nologo', '/c', '/Fo' + obj2, '/WX', '/Tc-', flag]

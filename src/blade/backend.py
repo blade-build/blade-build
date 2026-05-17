@@ -324,7 +324,11 @@ class _NinjaFileHeaderGenerator:
 
         # System library paths (MSVC + Windows SDK) discovered by the toolchain
         lib_paths = self.build_toolchain.get_system_lib_paths()
-        libpath_flags = ' '.join(['/LIBPATH:%s' % p for p in lib_paths])
+        def _libpath_flag(p):
+            if ' ' in p:
+                return '/LIBPATH:"%s"' % p
+            return '/LIBPATH:%s' % p
+        libpath_flags = ' '.join([_libpath_flag(p) for p in lib_paths])
 
         self._add_line('linkflags = %s\n' % ' '.join(linkflags))
 
@@ -795,11 +799,12 @@ class _NinjaFileHeaderGenerator:
                   profile = %s
                   compiler = %s
                 ''') % (scm, revision, url, self.options.profile, f'{cc} {cc_version}'))
+        scm_obj = self.build_toolchain.object_file_of(scm)
         self._add_line(textwrap.dedent('''\
                 build %s: cxx %s
                   cppflags = -w -O2
                   cxx_warnings =
-                ''') % (scm + '.o', scm))
+                ''') % (scm_obj, scm))
 
     def generate_cuda_rules(self):
         nvcc_cmd = '${cmd}'

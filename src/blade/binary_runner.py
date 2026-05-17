@@ -50,6 +50,22 @@ class BinaryRunner:
         """Returns runfiles dir."""
         return '%s.runfiles' % self._executable(target)
 
+    @staticmethod
+    def _symlink_or_copy_file(src, dst):
+        """Create a symlink from dst to src, or copy the file on failure."""
+        try:
+            os.symlink(src, dst)
+        except OSError:
+            shutil.copy2(src, dst)
+
+    @staticmethod
+    def _symlink_or_copy_dir(src, dst):
+        """Create a symlink from dst to src, or copy the directory tree on failure."""
+        try:
+            os.symlink(src, dst)
+        except OSError:
+            shutil.copytree(src, dst, symlinks=False)
+
     def __check_test_data_dest(self, target, dest, dest_list):
         """Check whether the destination of test data is valid or not."""
         dest_norm = os.path.normpath(dest)
@@ -95,14 +111,11 @@ class BinaryRunner:
     def _prepare_shared_libraries(self, target, runfiles_dir):
         """Prepare correct shared libraries for running target"""
 
-        # Make symbolic links for shared libraries of the executable.
-
-        # For normal built shared libraries, their paths have been written into the executable.
-        # For example, `build64_release/common/crypto/hash/libhash.so`, we need to put a symbolic
-        # link `build64_release` pointing to its absolute path.
-        build_dir_name = os.path.basename(self.build_dir)
-        os.symlink(os.path.abspath(self.build_dir),
-                   os.path.join(runfiles_dir, build_dir_name))
+        # Shared library symlink preparation is Linux/ELF-specific (RPATH/RUNPATH).
+        # On Windows, DLL lookup uses a different mechanism (exe directory, PATH),
+        # so we skip the build_dir and soname symlinks.
+        if os.name == 'nt':
+            return
 
         # For shared libraries with a `soname`, their paths are not written into the executable;
         # they are always searched for in a set of configured directories.
@@ -119,7 +132,7 @@ class BinaryRunner:
                                 'libraries'
                                 % (dst, src, dst, os.path.realpath(dst)))
                 continue
-            os.symlink(src, dst)
+            self._symlink_or_copy_file(src, dst)
 
     def _get_shared_libraries_with_soname(self, target):
         """Get shared libraries with soname for one target that it depends."""

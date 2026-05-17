@@ -1482,7 +1482,8 @@ class CcBinary(CcTarget):
             order_only_deps.append(inclusion_check_result)
 
         if self.attr['embed_version']:
-            scm = os.path.join(self.build_dir, 'scm.cc.o')
+            scm = self.blade.get_build_toolchain().object_file_of(
+                os.path.join(self.build_dir, 'scm.cc'))
             objs.append(scm)
             order_only_deps.append(scm)
         output = self._target_file_path(
