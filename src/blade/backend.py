@@ -600,11 +600,22 @@ class _NinjaFileHeaderGenerator:
                 javacflags =
                 '''))
         jarflags = 'cf' + config.get_item('java_config', 'jar_compression_level')
+        if os.name == 'nt':
+            javac_opts = ''
+            if source_version:
+                javac_opts += f'-source {source_version} '
+            if target_version:
+                javac_opts += f'-target {target_version} '
+            command = self._builtin_command('javac_compile',
+                                            f'${{classes_dir}} ${{out}} ${{source_encoding}} '
+                                            f'${{classpath}} {javac_opts}${{javacflags}} -- ${{in}}')
+        else:
+            command = ('rm -fr ${classes_dir} && mkdir -p ${classes_dir} && '
+                       '%s && sleep 0.01 && '
+                       '%s %s ${out} -C ${classes_dir} .' % (
+                           ' '.join(cmd), jar, jarflags))
         self.generate_rule(name='javac',
-                           command='rm -fr ${classes_dir} && mkdir -p ${classes_dir} && '
-                                   '%s && sleep 0.01 && '
-                                   '%s %s ${out} -C ${classes_dir} .' % (
-                                       ' '.join(cmd), jar, jarflags),
+                           command=command,
                            description='JAVAC ${out}')
 
     def generate_java_resource_rules(self):

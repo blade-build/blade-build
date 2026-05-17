@@ -16,6 +16,7 @@ import getpass
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import tarfile
 import textwrap
@@ -248,6 +249,34 @@ def generate_resource_index(args):
     return _generate_resource_index(targets, sources, name, path)
 
 
+def generate_javac_compile(args):
+    """Compile Java sources and create a jar file.
+
+    Arguments are positional:
+        classes_dir  output_jar  source_encoding  classpath  [javacflags...] -- [sources...]
+
+    The ``--`` sentinel separates javac flags from source files so that
+    multi-word Ninja variables (``${javacflags}``, ``${in}``) can be
+    unpacked unambiguously.
+    """
+    sep = args.index('--')
+    classes_dir = args[0]
+    output = args[1]
+    source_encoding = args[2]
+    classpath = args[3]
+    javacflags = args[4:sep]
+    sources = args[sep + 1:]
+
+    _declare_outputs(output)
+    shutil.rmtree(classes_dir, ignore_errors=True)
+    os.makedirs(classes_dir, exist_ok=True)
+
+    cmd = ['javac', '-encoding', source_encoding, '-d', classes_dir,
+           '-classpath', classpath] + javacflags + sources
+    subprocess.check_call(cmd)
+    subprocess.check_call(['jar', 'cf', output, '-C', classes_dir, '.'])
+
+
 def generate_java_jar(compression_level, args):
     jar, target = args[0], args[1]
     _declare_outputs(target)
@@ -318,8 +347,15 @@ def generate_java_test(script, main_class, jacocoagent, packages_under_test, arg
     jars = args
     test_jar = jars[0]
     test_classes = ' '.join(_get_all_test_class_names_in_jar(test_jar))
+    if os.name == 'nt':
+        _generate_java_test_bat(script, main_class, jacocoagent, packages_under_test, jars, test_classes)
+    else:
+        _generate_java_test_sh(script, main_class, jacocoagent, packages_under_test, jars, test_classes)
+
+
+def _generate_java_test_sh(script, main_class, jacocoagent, packages_under_test, jars, test_classes):
+    coverage_flags = _jacoco_test_coverage_flag(jacocoagent, packages_under_test)
     with open(script, 'w') as f:
-        coverage_flags = _jacoco_test_coverage_flag(jacocoagent, packages_under_test)
         f.write(textwrap.dedent('''\
                 #!/bin/sh
                 # Auto generated wrapper shell script by blade
@@ -331,6 +367,21 @@ def generate_java_test(script, main_class, jacocoagent, packages_under_test, arg
                 exec java $coverage_options -classpath %s %s %s $@''') % (
                 coverage_flags, ':'.join(jars), main_class, test_classes))
     os.chmod(script, 0o755)
+
+
+def _generate_java_test_bat(script, main_class, jacocoagent, packages_under_test, jars, test_classes):
+    coverage_flags = _jacoco_test_coverage_flag(jacocoagent, packages_under_test)
+    abs_jars = [os.path.abspath(j) for j in jars]
+    with open(script, 'w') as f:
+        f.write('@echo off\r\n')
+        f.write('rem Auto generated wrapper batch script by blade\r\n')
+        f.write('\r\n')
+        f.write('setlocal\r\n')
+        f.write('set "coverage_options="\r\n')
+        f.write('if defined BLADE_COVERAGE set "coverage_options=%s"\r\n' % coverage_flags)
+        f.write('java %%coverage_options%% -classpath %s %s %s %%*\r\n' % (
+            ';'.join(abs_jars), main_class, test_classes))
+        f.write('endlocal\r\n')
 
 
 def generate_fat_jar(output, **kwargs):
@@ -600,6 +651,7 @@ def generate_dwp(args):
 _BUILTIN_TOOLS = {
     'scm': generate_scm,
     'package': generate_package,
+    'javac_compile': generate_javac_compile,
     'cc_inclusion_check': generate_cc_inclusion_check,
     'resource_index': generate_resource_index,
     'java_jar': generate_java_jar,

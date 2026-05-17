@@ -36,7 +36,8 @@ class JacocoReporter:
 
     def _executable(self, target):
         """Returns the executable path."""
-        return os.path.join(self.__build_dir, target.path, target.name)
+        executable_name = target.attr.get('executable_name', target.name)
+        return os.path.join(self.__build_dir, target.path, executable_name)
 
     # Copied from BinaryRunner
     def _runfiles_dir(self, target):

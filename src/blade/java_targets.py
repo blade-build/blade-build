@@ -594,7 +594,7 @@ class JavaTargetMixIn:
         implicit_deps = self._java_implicit_dependencies(dep_jars, maven_jars)
         jars = dep_jars + maven_jars
         if jars:
-            vars['classpath'] = ':'.join(jars)
+            vars['classpath'] = os.pathsep.join(jars)
         if source_encoding:
             vars['source_encoding'] = source_encoding
         self.generate_build(rule, output, inputs=inputs,
@@ -758,8 +758,7 @@ class JavaLibrary(JavaTarget):
 
     def generate(self):
         if self.type == 'prebuilt_java_library':
-            jar = os.path.join(self.blade.get_root_dir(),
-                               self.attr['binary_jar'])
+            jar = self.attr['binary_jar']
         else:
             jar = self._generate_jar()
         if jar:
@@ -939,7 +938,11 @@ class JavaTest(JavaBinary):
             return
         vars = self._java_test_vars()
         jar = self._generate_jar()
-        output = self._target_file_path(self.name)
+        if os.name == 'nt':
+            self.attr['executable_name'] = self.name + '.bat'
+            output = self._target_file_path(self.name + '.bat')
+        else:
+            output = self._target_file_path(self.name)
         dep_jars, maven_jars = self._get_test_deps()
         self.generate_build('javatest', output, inputs=[jar] + dep_jars + maven_jars, variables=vars)
 
