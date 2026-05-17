@@ -70,7 +70,7 @@ jobs:
         "
 
   e2e-smoke:
-    name: E2E smoke (blade-test)
+    name: E2E smoke (blade-test) — cc, java, lex_yacc, py
     runs-on: windows-latest
     steps:
     - name: Checkout blade-build
@@ -86,12 +86,30 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
+    - name: Set up JDK 17 (for Java test suite)
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
     - name: Install ninja
       run: |
         python -m pip install ninja
+    - name: Install WinFlexBison (for lex_yacc test suite)
+      shell: cmd
+      run: |
+        winget install -e --id WinFlexBison.win_flex_bison --accept-source-agreements --accept-package-agreements
+    - name: Verify tools
+      shell: cmd
+      run: |
+        where javac
+        java -version
+        where win_flex
+        win_flex --version
+        where win_bison
+        win_bison --version
     - name: Run blade-test suites
       shell: cmd
       run: |
         set PYTHONPATH=%GITHUB_WORKSPACE%\blade-build\src
         cd /d %GITHUB_WORKSPACE%\blade-test
-        call %GITHUB_WORKSPACE%\blade-build\blade.bat test //suites/cc_basic:hello_test //suites/cc_basic:hello-bin //suites/py_basic:greeter_test
+        call %GITHUB_WORKSPACE%\blade-build\blade.bat test //suites/cc_basic:hello_test //suites/cc_basic:hello-bin //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test
