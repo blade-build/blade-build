@@ -79,6 +79,9 @@ def generate_scm(scm, revision, url, profile, compiler, args):
 
     _declare_outputs(scm)
 
+    def _escape_c_str(s):
+        return s.replace('\\', '\\\\')
+
     version = f'{url}@{revision}'
     with open(scm, 'w') as f:
         f.write(textwrap.dedent(r'''\
@@ -94,13 +97,13 @@ def generate_scm(scm, revision, url, profile, compiler, args):
                 extern const char kBuilderName[] = "%s";
                 extern const char kHostName[] = "%s";
                 extern const char kCompiler[] = "%s";
-                }}''') % (version,
-                          version,
+                }}''') % (_escape_c_str(version),
+                          _escape_c_str(version),
                           profile,
                           time.asctime(),
                           getpass.getuser(),
                           socket.gethostname(),
-                          compiler))
+                          _escape_c_str(compiler)))
 
 
 def generate_cc_inclusion_check(args):
