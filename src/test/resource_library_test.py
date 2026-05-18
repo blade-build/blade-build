@@ -28,8 +28,8 @@ class TestResourceLibrary(blade_test.TargetTest):
         com_poppy_line = self.findCommand(['poppy.html.c.o', '-c'])
         static_so_line = self.findCommand(['-shared', 'libstatic_resource.so'])
         lower_depends_libs = self.findCommand(['-shared', 'liblowercase.so'])
-        gen_forms_line = self.findCommand(['forms.js.c', ' forms.js'])
-        gen_poppy_line = self.findCommand(['poppy.html.c', ' poppy.html'])
+        gen_forms_line = self.findCommand(['forms.js.c', 'blade.builtin_tools resource'])
+        gen_poppy_line = self.findCommand(['poppy.html.c', 'blade.builtin_tools resource'])
 
         self.assertTrue(gen_forms_line)
         self.assertTrue(gen_poppy_line)
