@@ -284,14 +284,14 @@ class _NinjaFileHeaderGenerator:
         optimize_flags = windows_config['optimize']
         optimize = ' '.join(optimize_flags.get(self.options.profile, []))
 
-        cc_command = ('%s /nologo /c %s %s %s %s /Fo${out} ${c_warnings} ${in}' % (
+        cc_command = ('%s /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} ${in}' % (
             cc, optimize, ' '.join(cppflags), ' '.join(cflags), include_flags))
         self.generate_rule(name='cc',
                            command=cc_command,
                            description='CC ${in}',
                            deps='msvc')
 
-        cxx_command = ('%s /nologo /c %s %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
+        cxx_command = ('%s /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxx',
                            command=cxx_command,
@@ -302,8 +302,8 @@ class _NinjaFileHeaderGenerator:
         # /P preprocesses (like GCC -E), /Tp forces C++ treatment of .h files.
         # Wrap with cmd /c because Ninja on Windows can't handle shell redirections directly.
         # Fall back to empty output on failure so the build can continue.
-        hdrs_command = ('cmd /c "%s /nologo /P /Tp${in} /showIncludes %s %s %s %s /Fi${out} 2> ${out}.incl'
-                        ' || (echo. > ${out} & echo. > ${out}.incl)"' % (
+        hdrs_command = ('cmd /c "%s /nologo /P /Tp${in} /showIncludes %s %s %s %s /Fi${out}.pre 2> ${out}'
+                        ' || (echo. > ${out}.pre & echo. > ${out})"' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxxhdrs',
                            command=hdrs_command,

@@ -641,8 +641,6 @@ class CcTarget(Target):
     def _generate_inclusion_check(self, objs_dir, objs, vars, order_only_deps):
         implicit_deps = objs[:]
         # Generate inclusion stack file for header files.
-        # The source file does not need to generate this file separately, because it is generated
-        # at the same time during compilation.
         for hdr, full_hdr in self.attr['expanded_hdrs']:
             if path_under_dir(full_hdr, self.build_dir):  # Don't check generated header files
                 continue
@@ -650,6 +648,16 @@ class CcTarget(Target):
             implicit_deps.append(output)
             self.generate_build('cxxhdrs', output, inputs=full_hdr,
                                 order_only_deps=order_only_deps, variables=vars, clean=[])
+        # MSVC does not generate .H files during compilation (unlike GCC's -H wrapper),
+        # so we need an explicit cxxhdrs preprocess step for source files too.
+        if os.name == 'nt':
+            for src, full_src in self.attr['expanded_srcs']:
+                if path_under_dir(full_src, self.build_dir):
+                    continue
+                output = os.path.join(objs_dir, src + '.o.H')
+                implicit_deps.append(output)
+                self.generate_build('cxxhdrs', output, inputs=full_src,
+                                    order_only_deps=order_only_deps, variables=vars, clean=[])
 
         check_info_file = self.data['inclusion_check_info_file']
         check_result_file = check_info_file + '.result'
