@@ -1721,7 +1721,10 @@ class CcPlugin(CcTarget):
                           target_linkflags=target_linkflags,
                           implicit_deps=link_all_symbols_libs, order_only_deps=incchk_deps)
             if self.attr['strip']:
-                self.generate_build('strip', output, inputs=link_output)
+                if self.blade.get_build_toolchain().cc_is('gcc'):
+                    self.generate_build('strip', output, inputs=link_output)
+                else:
+                    console.notice('strip is not supported on this toolchain, skipping')
             self._add_default_target_file('so', output)
 
 
