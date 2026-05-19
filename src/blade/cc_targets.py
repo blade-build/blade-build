@@ -21,6 +21,7 @@ from typing import Any
 from blade import build_manager
 from blade import build_rules
 from blade import config  # lgtm[py/cyclic-import]
+from blade import console
 from blade import inclusion_check
 from blade.blade_types import StrOrListOpt
 from blade.constants import HEAP_CHECK_VALUES
@@ -1513,6 +1514,9 @@ class CcBinary(CcTarget):
     def _generate_dwp(self, binary_path, objs, implicit_deps, order_only_deps):
         """Generate dwp file."""
         if not is_fission():
+            return
+        if not self.blade.get_build_toolchain().cc_is('gcc'):
+            console.warning('fission/dwp is not supported on this toolchain, skipping')
             return
 
         _, usr_libs, link_all_symbols_libs, _ = self._static_dependencies()
