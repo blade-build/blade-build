@@ -265,7 +265,7 @@ def environ_add_path(env, key, path):
     """Add path to PATH link environments, such as PATH, LD_LIBRARY_PATH, etc"""
     old = env.get(key)
     if old:
-        env[key] = path + ':' + old
+        env[key] = path + os.pathsep + old
     else:
         env[key] = path
 
