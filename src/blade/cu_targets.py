@@ -148,7 +148,7 @@ class CuTarget(CcTarget):
         objs_dir = self._target_file_path(self.name + '.objs')
         objs = []
         for src, full_src in expanded_srcs:
-            obj = os.path.join(objs_dir, src + '.o')
+            obj = os.path.join(objs_dir, self.blade.get_build_toolchain().object_file_of(src))
             self.generate_build("cudacc", obj, inputs=full_src,
                                 implicit_deps=implicit_deps,
                                 order_only_deps=order_only_deps,
@@ -170,7 +170,7 @@ class CuTarget(CcTarget):
             self._dynamic_cuda_library(objs, inclusion_check_result)
 
     def _dynamic_cuda_library(self, objs, inclusion_check_result):
-        output = self._target_file_path('lib%s.so' % self.name)
+        output = self._target_file_path(self.blade.get_build_toolchain().dynamic_library_name(self.name))
         target_linkflags = self._generate_link_flags()
         sys_libs, usr_libs, incchk_deps = self._dynamic_dependencies()
         if inclusion_check_result:
@@ -358,7 +358,7 @@ class CuBinary(CuTarget):
         if inclusion_check_result:
             order_only_deps.append(inclusion_check_result)
 
-        output = self._target_file_path(self.name)
+        output = self._target_file_path(self.blade.get_build_toolchain().executable_file_name(self.name))
         self._cc_link(output, 'cudalink', objs=objs, deps=usr_libs,
                       sys_libs=sys_libs,
                       linker_scripts=self.attr.get('lds_fullpath'),

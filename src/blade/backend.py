@@ -848,6 +848,12 @@ class _NinjaFileHeaderGenerator:
                 ''') % (scm_obj, scm))
 
     def generate_cuda_rules(self):
+        if self.build_toolchain.cc_is('msvc'):
+            self._generate_msvc_cuda_rules()
+        else:
+            self._generate_gcc_cuda_rules()
+
+    def _generate_gcc_cuda_rules(self):
         nvcc_cmd = '${cmd}'
 
         cc_config = config.get_section('cc_config')
@@ -865,7 +871,7 @@ class _NinjaFileHeaderGenerator:
         template = self._cc_compile_command_wrapper_template('${out}.H', cuda=True)
 
         _, cxx, _ = self.build_accelerator.get_cc_commands()
-        cu_command = '%s -ccbin %s -o ${out} -MMD -MF ${out}.d ' \
+        cu_command = '%s -ccbin "%s" -o ${out} -MMD -MF ${out}.d ' \
             '-Xcompiler -fPIC %s %s %s ${optimize} ${cu_warnings} ' \
             '%s ${includes} ${cppflags} ${cuflags} -c ${in}' % (
                 nvcc_cmd, cxx, ' '.join(cxxflags), ' '.join(cppflags),
@@ -891,6 +897,83 @@ class _NinjaFileHeaderGenerator:
         self.generate_rule(
             name='cudasolink',
             command=nvcc_cmd + ' -shared ' + link_args,
+            rspfile='${out}.rsp',
+            rspfile_content='${target_linkflags} ${in}',
+            description='CUDA LINK SHARED ${out}')
+
+    def _generate_msvc_cuda_rules(self):
+        """Generate CUDA rules for MSVC host compiler on Windows.
+
+        NVCC on Windows delegates host code to cl.exe.  Flags that pass
+        through to the host compiler via -Xcompiler must be MSVC-compatible.
+        """
+        nvcc_cmd = '${cmd}'
+
+        cc_config = config.get_section('cc_config')
+        ms_config = config.get_section('msvc_config')
+        cuda_config = config.get_section('cuda_config')
+
+        # Build MSVC-compatible host compiler flags, filtered through the
+        # toolchain so that GCC-isms from cc_config get mapped or dropped.
+        filtered_cppflags = self.build_toolchain.filter_cc_flags(cc_config['cppflags'])
+        filtered_cxxflags = self.build_toolchain.filter_cc_flags(cc_config['cxxflags'], 'c++')
+        cppflags = ms_config['cppflags'] + filtered_cppflags
+        cxxflags = ms_config['cxxflags'] + filtered_cxxflags
+
+        # NVCC's cudafe++ (which preprocesses host code before MSVC) has a
+        # limited C++ STL understanding.  /EHsc and /std:c++17 pull in STL
+        # internal headers (e.g. xtr1common) that trigger an assertion in
+        # cudafe++ — this is an NVCC limitation, not an MSVC version issue.
+        cppflags = [f for f in cppflags if not f.startswith('/EH')]
+        cxxflags = [f for f in cxxflags if not f.startswith('/EH')]
+        cppflags = [f for f in cppflags if not f.startswith('/std:')]
+        cxxflags = [f for f in cxxflags if not f.startswith('/std:')]
+
+        # -Xcompiler passes flags to the host compiler (cl.exe); NVCC
+        # itself understands -I / -D / etc. natively.
+        host_cppflags = ' '.join('-Xcompiler %s' % f for f in cppflags)
+        host_cxxflags = ' '.join('-Xcompiler %s' % f for f in cxxflags)
+
+        cuflags = cuda_config['cuflags']
+        system_includes = self.build_toolchain.get_system_include_paths()
+        includes = system_includes + cc_config['extra_incs'] + ['.', self.build_dir]
+        # NVCC uses -I natively, same across platforms.
+        # Quote paths with spaces so nvcc parses them as a single argument.
+        def _quote_if_needed(p):
+            return '-I"%s"' % p if ' ' in p else '-I%s' % p
+        include_flags = ' '.join(_quote_if_needed(inc) for inc in includes)
+
+        # NVCC -Xcompiler /showIncludes lets Ninja deps=msvc track headers.
+        _, cxx, _ = self.build_accelerator.get_cc_commands()
+        cu_command = ('%s -ccbin "%s" -o ${out} -c '
+                      '-Xcompiler /nologo -Xcompiler /showIncludes '
+                      '%s %s %s '
+                      '%s ${includes} %s ${cu_warnings} ${in}' % (
+                          nvcc_cmd, cxx,
+                          host_cppflags, host_cxxflags,
+                          ' '.join(cuflags),
+                          include_flags, '${cppflags}'))
+        self.generate_rule(
+            name='cudacc',
+            command=cu_command,
+            description='CUDA LIBRARY ${in}',
+            deps='msvc',
+        )
+
+        # NVCC linking delegates to the host linker automatically.
+        # Include -ccbin so nvcc can find cl.exe even without a VS dev shell.
+        link_args = ('-o ${out} %s ${cppflags} '
+                     '--options-file ${out}.rsp ${extra_linkflags}' % include_flags)
+        self.generate_rule(
+            name='cudalink',
+            command=nvcc_cmd + ' -ccbin "%s" ' % cxx + link_args,
+            rspfile='${out}.rsp',
+            rspfile_content='${target_linkflags} ${in}',
+            description='CUDA LINK BINARY ${out}')
+
+        self.generate_rule(
+            name='cudasolink',
+            command=nvcc_cmd + ' -ccbin "%s" -shared ' % cxx + link_args,
             rspfile='${out}.rsp',
             rspfile_content='${target_linkflags} ${in}',
             description='CUDA LINK SHARED ${out}')

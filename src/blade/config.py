@@ -273,7 +273,7 @@ class BladeConfig:
                 'target_arch__help__':
                     'Target architecture: auto (detect from host), x64, x86, arm64, arm64ec',
                 'msvc_version': 'auto',
-                'msvc_version__help__': 'MSVC compiler version to use (auto, 2019, 2022)',
+                'msvc_version__help__': 'MSVC compiler version prefix (auto, 14.44, 14.51, ...)',
                 'windows_sdk': 'auto',
                 'windows_sdk__help__': 'Windows SDK version (auto, 10.0, etc.)',
                 'visual_studio': 'auto',

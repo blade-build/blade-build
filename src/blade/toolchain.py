@@ -325,15 +325,16 @@ class MsvcToolChain(ToolChain):
         'ARM64': 'arm64',
     }
 
-    def __init__(self, target_arch='auto'):
+    def __init__(self, target_arch='auto', msvc_version='auto'):
         super().__init__()
         self.host_arch = self._detect_host_arch()
         self.target_arch = self._resolve_target_arch(target_arch)
+        self.msvc_version = msvc_version
         self._msvc_host = 'Host' + self.host_arch
         self._msvc_target = self._ARCH_MAP[self.target_arch]['msvc_dir']
 
         # Locate installations
-        self._vs_path = self._find_vs_path()
+        self._vs_path = self._find_vs_path(msvc_version=self.msvc_version)
         self._msvc_path, self._msvc_ver = self._find_msvc_tools()
         self._sdk_path, self._sdk_ver = self._find_windows_sdk()
 
@@ -405,8 +406,12 @@ class MsvcToolChain(ToolChain):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _find_vs_path():
+    def _find_vs_path(msvc_version='auto'):
         """Find Visual Studio or BuildTools installation root.
+
+        Args:
+            msvc_version: 'auto' for latest, or an MSVC compiler version
+                prefix like '14.44' to match a specific toolchain.
 
         Returns the installation path, or None.
         """
@@ -427,34 +432,69 @@ class MsvcToolChain(ToolChain):
             r'Microsoft Visual Studio\Installer')
         vswhere = os.path.join(vs_installer, 'vswhere.exe')
         if os.path.exists(vswhere):
-            return MsvcToolChain._find_vs_with_vswhere(vswhere)
+            return MsvcToolChain._find_vs_with_vswhere(vswhere, msvc_version)
 
         return None
 
     @staticmethod
-    def _find_vs_with_vswhere(vswhere):
-        """Find a VS installation path with the VC toolchain component."""
-        base_args = [
-            vswhere, '-latest',
+    def _find_vs_with_vswhere(vswhere, msvc_version='auto'):
+        """Find a VS installation whose VC toolchain matches *msvc_version*.
+
+        When *msvc_version* is ``'auto'``, the latest installed VS is returned.
+        Otherwise, all VS installations are enumerated and the first one whose
+        ``VC/Tools/MSVC/`` directory starts with *msvc_version* wins.
+        """
+        # When 'auto', just pick the latest.
+        if msvc_version == 'auto':
+            base_args = [
+                vswhere, '-latest',
+                '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+                '-property', 'installationPath',
+                '-nologo',
+            ]
+            for products in [None, 'Microsoft.VisualStudio.Product.BuildTools']:
+                args = base_args[:]
+                if products:
+                    args[1:1] = ['-products', products]
+                try:
+                    result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+                    if result.returncode == 0 and result.stdout.strip():
+                        return result.stdout.strip()
+                except Exception:
+                    pass
+            return None
+
+        # For a specific MSVC version, enumerate all VS installs and check
+        # which one provides a matching VC/Tools/MSVC/<version> directory.
+        all_args = [
+            vswhere, '-all', '-products', '*',
             '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
             '-property', 'installationPath',
             '-nologo',
         ]
-        for products in [None, 'Microsoft.VisualStudio.Product.BuildTools']:
-            args = base_args[:]
-            if products:
-                args[1:1] = ['-products', products]
-            try:
-                result = subprocess.run(args, capture_output=True, text=True, timeout=30)
-                if result.returncode == 0 and result.stdout.strip():
-                    return result.stdout.strip()
-            except Exception:
-                # vswhere may not be present; fall through to next candidate.
-                pass
+        try:
+            result = subprocess.run(all_args, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                return None
+            install_paths = [p.strip() for p in result.stdout.splitlines() if p.strip()]
+        except Exception:
+            return None
+
+        for vs_path in install_paths:
+            msvc_root = os.path.join(vs_path, 'VC', 'Tools', 'MSVC')
+            if not os.path.isdir(msvc_root):
+                continue
+            for ver in sorted(os.listdir(msvc_root), reverse=True):
+                if ver.startswith(msvc_version):
+                    return vs_path
         return None
 
     def _find_msvc_tools(self):
         """Find the MSVC tools directory under the VS installation.
+
+        When ``msvc_version`` is set to a specific version (e.g. ``'14.44'``),
+        only a matching directory is returned.  When ``'auto'``, the highest
+        available version wins.
 
         Returns (msvc_path, msvc_version) or (None, None).
         """
@@ -464,6 +504,8 @@ class MsvcToolChain(ToolChain):
         if not os.path.isdir(vc_msvc):
             return None, None
         for ver in sorted(os.listdir(vc_msvc), reverse=True):
+            if self.msvc_version != 'auto' and not ver.startswith(self.msvc_version):
+                continue
             msvc_path = os.path.join(vc_msvc, ver)
             if os.path.isdir(msvc_path):
                 return msvc_path, ver
@@ -812,5 +854,6 @@ def create_toolchain(m=None):
         from blade import config as blade_config
         msvc_config = blade_config.get_section('msvc_config')
         target_arch = msvc_config.get('target_arch', 'auto')
-        return MsvcToolChain(target_arch=target_arch)
+        msvc_version = msvc_config.get('msvc_version', 'auto')
+        return MsvcToolChain(target_arch=target_arch, msvc_version=msvc_version)
     return GccToolChain()

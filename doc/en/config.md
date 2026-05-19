@@ -328,6 +328,105 @@ Note:
 - Or include the source code in your source tree, such as thirdparty, you can write
   `gtest_libs='//thirdparty/gtest:gtest'`.
 
+### msvc_config
+
+MSVC-specific configuration, only effective on Windows:
+
+```python
+msvc_config(
+    target_arch = 'x64',
+    msvc_version = 'auto',
+    cppflags = ['/MD', '/EHsc'],
+    cxxflags = ['/std:c++17'],
+    linkflags = ['/SUBSYSTEM:CONSOLE'],
+    warnings = ['/W3'],
+)
+```
+
+#### `target_arch`: string = 'auto'
+
+**Target architecture to build for.**
+
+**Valid values:** `'auto'` (detect from host), `'x64'`, `'x86'`, `'arm64'`, `'arm64ec'`
+
+#### `msvc_version`: string = 'auto'
+
+**MSVC compiler toolset version prefix.**
+
+**Valid values:** `'auto'` (pick the latest available), or a specific MSVC version prefix
+such as `'14.44'`, `'14.51'`.
+
+Each Visual Studio release ships a specific range of MSVC toolset versions:
+
+- **VS 2019** (product version 16.x) ships MSVC 14.2x (14.20 – 14.29)
+- **VS 2022** (product version 17.x) ships MSVC 14.3x – 14.4x (14.30 – 14.44)
+- **VS 2026** (product version 18.x) ships MSVC 14.50+ (starting at 14.50, versioning is
+  [decoupled](https://aka.ms/msvc/lifecycle) from Visual Studio starting with this release)
+
+> **Relationship between VS and MSVC version numbers:**
+> Prior to VS 2026, the MSVC toolset version is derived from the Visual Studio product
+> version: MSVC 14.**XX** where **XX** = 30 + VS minor version.  For example,
+> VS 2022 17.14 ships MSVC 14.44 (= 14.30 + 14).  Starting with VS 2026, MSVC
+> versioning is independent and ships on its own [six-month cadence](https://aka.ms/msvc/lifecycle).
+> The complete mapping is documented at
+> [Microsoft C/C++ compiler versioning](https://learn.microsoft.com/en-us/cpp/overview/compiler-versions).
+
+When `msvc_version` is set to a specific prefix (e.g. `'14.44'`), Blade searches
+all installed Visual Studio instances and selects the first one that provides a
+matching `VC/Tools/MSVC/<version>` directory.  This is useful for pinning a
+compatible toolset — for example, NVIDIA CUDA 13.2 officially supports MSVC 14.4x
+(VS 2022) but not MSVC 14.5x (VS 2026).
+
+#### `cppflags`: list = ['/MD', '/EHsc']
+
+**MSVC-specific C/C++ common compiler flags.**
+
+These are appended to the cross-platform `cc_config.cppflags` after filtering.
+
+#### `cflags`: list = []
+
+**MSVC-specific C-only compiler flags.**
+
+#### `cxxflags`: list = ['/std:c++17']
+
+**MSVC-specific C++-only compiler flags.**
+
+#### `linkflags`: list = ['/SUBSYSTEM:CONSOLE']
+
+**MSVC-specific linker flags.**
+
+#### `warnings`: list = ['/W3']
+
+**MSVC warning level flags.**
+
+#### `optimize`: dict
+
+**MSVC optimization flags for Debug and Release builds.**
+
+Default:
+
+```python
+{
+    'debug': ['/Od'],
+    'release': ['/O2'],
+}
+```
+
+#### `debug_info_levels`: dict
+
+**MSVC debug information flags per level.**
+
+Default:
+
+```python
+{
+    'no':   [],
+    'low':  ['/Zi'],
+    'mid':  ['/Zi', '/DEBUG'],
+    'high': ['/Zi', '/DEBUG', '/RTC1'],
+}
+```
+
 ### cuda_config
 
 Common configuration of all cuda targets:

@@ -338,6 +338,101 @@ cc_test_config(
 - gtest 库还依赖 pthread，因此 `gtest_libs` 可以写成 `['#gtest', '#pthread']`。
 - 也可以将源码纳入自己的源码树（如 `thirdparty` 目录），然后写作 `gtest_libs='//thirdparty/gtest:gtest'`。
 
+### msvc_config
+
+MSVC 专有配置，仅在 Windows 下生效：
+
+```python
+msvc_config(
+    target_arch = 'x64',
+    msvc_version = 'auto',
+    cppflags = ['/MD', '/EHsc'],
+    cxxflags = ['/std:c++17'],
+    linkflags = ['/SUBSYSTEM:CONSOLE'],
+    warnings = ['/W3'],
+)
+```
+
+#### `target_arch`：string = 'auto'
+
+**目标架构**
+
+**合法取值：** `'auto'`（自动检测宿主机架构）、`'x64'`、`'x86'`、`'arm64'`、`'arm64ec'`
+
+#### `msvc_version`：string = 'auto'
+
+**MSVC 编译器工具集版本前缀**
+
+**合法取值：** `'auto'`（自动选取最新版本），或指定 MSVC 版本号前缀，如 `'14.44'`、`'14.51'`。
+
+各 Visual Studio 版本与 MSVC 工具集的对应关系：
+
+- **VS 2019**（产品版本 16.x）搭载 MSVC 14.2x（14.20 – 14.29）
+- **VS 2022**（产品版本 17.x）搭载 MSVC 14.3x – 14.4x（14.30 – 14.44）
+- **VS 2026**（产品版本 18.x）搭载 MSVC 14.50+（从 14.50 开始，MSVC 版本与 VS 产品版本
+  [解耦](https://aka.ms/msvc/lifecycle)，按独立的半年周期发布）
+
+> **VS 与 MSVC 版本号的对应关系：**
+> 在 VS 2026 之前，MSVC 工具集版本由 VS 产品版本派生：MSVC 14.**XX**，其中
+> **XX** = 30 + VS 次要版本号。例如 VS 2022 17.14 搭载 MSVC 14.44（= 14.30 + 14）。
+> 从 VS 2026 开始，MSVC 版本独立发布，遵循[半年发布周期](https://aka.ms/msvc/lifecycle)。
+> 完整的对应关系参见 Microsoft 官方文档
+> [Microsoft C/C++ 编译器版本管理](https://learn.microsoft.com/en-us/cpp/overview/compiler-versions)。
+
+当 `msvc_version` 设置为特定前缀（如 `'14.44'`）时，Blade 会枚举所有已安装的 Visual Studio
+实例，选择首个 `VC/Tools/MSVC/<version>` 目录匹配的版本。这对于锁定兼容的工具集非常有用——
+例如 NVIDIA CUDA 13.2 官方支持 MSVC 14.4x（VS 2022），但不支持 MSVC 14.5x（VS 2026）。
+
+#### `cppflags`：list = ['/MD', '/EHsc']
+
+**MSVC 专有 C/C++ 公共编译选项**
+
+这些选项经过 Flag 过滤后会追加到跨平台的 `cc_config.cppflags` 之后。
+
+#### `cflags`：list = []
+
+**MSVC 专有 C 编译选项**
+
+#### `cxxflags`：list = ['/std:c++17']
+
+**MSVC 专有 C++ 编译选项**
+
+#### `linkflags`：list = ['/SUBSYSTEM:CONSOLE']
+
+**MSVC 专有链接选项**
+
+#### `warnings`：list = ['/W3']
+
+**MSVC 警告级别选项**
+
+#### `optimize`：dict
+
+**MSVC Debug / Release 优化选项**
+
+默认：
+
+```python
+{
+    'debug': ['/Od'],
+    'release': ['/O2'],
+}
+```
+
+#### `debug_info_levels`：dict
+
+**MSVC 各调试级别的调试信息选项**
+
+默认：
+
+```python
+{
+    'no':   [],
+    'low':  ['/Zi'],
+    'mid':  ['/Zi', '/DEBUG'],
+    'high': ['/Zi', '/DEBUG', '/RTC1'],
+}
+```
+
 ### cuda_config
 
 所有 CUDA 目标的公共配置：
