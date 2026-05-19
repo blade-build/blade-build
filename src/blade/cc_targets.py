@@ -687,6 +687,8 @@ class CcTarget(Target):
 
     def _soname_of(self, so_path):
         """Get the `soname` of a shared library."""
+        if os.name == 'nt':
+            return None  # Windows DLLs don't have ELF-style soname
         returncode, output, unused_stderr = run_command(['objdump', '-p', so_path])
         if returncode != 0:
             return None
