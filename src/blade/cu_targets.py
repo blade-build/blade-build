@@ -179,7 +179,7 @@ class CuTarget(CcTarget):
                       order_only_deps=incchk_deps,
                       target_linkflags=target_linkflags,
                       cmd=self.cmd)
-        self._add_target_file('so', output)
+        self._add_target_file(self.blade.get_build_toolchain().DYNAMIC_LIB_LABEL, output)
 
 
 class CuLibrary(CuTarget):

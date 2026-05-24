@@ -126,6 +126,47 @@ class ToolChain:
     cc_version: str
     _cc_vendor: str
 
+    # ------------------------------------------------------------------
+    # Target file labels — internal keys used by cc_targets to register
+    # and look up output files.  These are conventional and do not need
+    # to match file extensions (e.g. MSVC keeps 'so' even though the
+    # file ends in .dll).
+    # ------------------------------------------------------------------
+    STATIC_LIB_LABEL = 'a'
+    DYNAMIC_LIB_LABEL = 'so'
+
+    # ------------------------------------------------------------------
+    # File naming properties — subclasses override to match their host OS.
+    # ------------------------------------------------------------------
+
+    @property
+    def obj_suffix(self) -> str:
+        """Object file suffix ('.o' / '.obj')."""
+        return '.o'
+
+    @property
+    def static_lib_suffix(self) -> str:
+        """Static library suffix ('.a' / '.lib')."""
+        return '.a'
+
+    @property
+    def dynamic_lib_suffix(self) -> str:
+        """Dynamic library suffix ('.so' / '.dll' / '.dylib')."""
+        return '.so'
+
+    @property
+    def lib_prefix(self) -> str:
+        """Library file name prefix ('lib' / '')."""
+        return 'lib'
+
+    @property
+    def all_dynamic_lib_suffixes(self) -> tuple[str, ...]:
+        """All dynamic-library suffixes across supported platforms.
+
+        Used for diagnostic checks (e.g. detecting ambiguous cc_plugin names).
+        """
+        return ('.so', '.dylib', '.dll')
+
     def __init__(self):
         pass
 
@@ -635,6 +676,26 @@ class MsvcToolChain(ToolChain):
 
     def supports_resource_compilation(self):
         return True
+
+    # ------------------------------------------------------------------
+    # File naming properties — MSVC conventions
+    # ------------------------------------------------------------------
+
+    @property
+    def obj_suffix(self) -> str:
+        return '.obj'
+
+    @property
+    def static_lib_suffix(self) -> str:
+        return '.lib'
+
+    @property
+    def dynamic_lib_suffix(self) -> str:
+        return '.dll'
+
+    @property
+    def lib_prefix(self) -> str:
+        return ''
 
     # ------------------------------------------------------------------
     # System include / library paths (so callers don't need vcvarsall)
