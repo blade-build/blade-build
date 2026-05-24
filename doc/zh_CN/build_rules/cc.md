@@ -528,6 +528,39 @@ local:  # 其余为局部符号，对外不可见
 `cc_plugin` 主要是为 `JNI`，python 扩展等需要运行期间通过调用某些函数动态加载的场合而设计的，不应该用于其他目的。
 即使它出现在其他 cc 目标的 `deps` 里，链接时也会被忽略。
 
+## windows_resources
+
+使用 Windows SDK 资源编译器 (`rc.exe`) 将 `.rc` 资源脚本文件编译为 `.res` 目标文件。
+生成的 `.res` 文件会自动链接到任何通过 `deps` 依赖此目标的 `cc_binary` 中。
+
+在非 Windows 平台上，此规则是**空操作**：它不产生任何构建输出，对构建没有影响。
+
+```python
+windows_resources(
+    name = 'hello_res',
+    rc_files = ['hello_gui.rc', 'version.rc'],
+    hdrs = ['resource.h'],
+    resources = ['image/blade.ico'],
+)
+```
+
+参数：
+
+- `rc_files` (必选): **string[]** — 要编译的资源脚本文件 (`.rc`)。
+- `hdrs` (可选): **string[]** — `.rc` 脚本包含的头文件。
+- `resources` (可选): **string[]** — `.rc` 脚本引用的二进制资源文件 (如 `.ico`, `.bmp`)。这些文件的变化会触发重建。
+
+此目标生成的 `.res` 文件会像目标文件和库文件一样出现在链接器的输入中。与 `cc_binary` 配合使用：
+
+```python
+cc_binary(
+    name = 'hello_gui',
+    srcs = ['hello_gui.c'],
+    extra_linkflags = ['/SUBSYSTEM:WINDOWS', 'user32.lib'],
+    deps = [':hello_res'],
+)
+```
+
 ## resource_library
 
 把数据文件编译成静态资源，可以在程序中读取。

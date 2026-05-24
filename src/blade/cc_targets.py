@@ -515,6 +515,12 @@ class CcTarget(Target):
                 usr_libs.append(lib)
                 continue
 
+            # Windows .res files from windows_resources deps (CcInfo-like propagation)
+            res_files = dep.data.get('res_files', [])
+            if res_files:
+                usr_libs.extend(res_files)
+                continue
+
             # '.so' file is not generated for header only libraries, use this file as implicit dep.
             incchk_result = dep._get_target_file('incchk.result')
             if incchk_result:
@@ -545,6 +551,12 @@ class CcTarget(Target):
                     link_all_symbols_libs.append(lib)
                 else:
                     usr_libs.append(lib)
+                continue
+
+            # Windows .res files from windows_resources deps (CcInfo-like propagation)
+            res_files = dep.data.get('res_files', [])
+            if res_files:
+                usr_libs.extend(res_files)
                 continue
 
             # '.a' file is not generated for header only libraries, use this file as implicit dep.

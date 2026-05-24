@@ -543,6 +543,39 @@ The second column is the symbol type. If lowercase, the symbol is usually local;
 that are dynamically loaded by calling certain functions during runtime.
 It will be ignored when linking even if it appears in the `deps` of other cc targets.
 
+## windows_resources
+
+Compile Windows resource (`.rc`) files into `.res` object files using the Windows SDK Resource Compiler (`rc.exe`).
+The resulting `.res` files are automatically linked into any `cc_binary` that depends on this target via `deps`.
+
+On non-Windows platforms this rule is a **no-op**: it resolves to nothing and has no effect on the build.
+
+```python
+windows_resources(
+    name = 'hello_res',
+    rc_files = ['hello_gui.rc', 'version.rc'],
+    hdrs = ['resource.h'],
+    resources = ['image/blade.ico'],
+)
+```
+
+Attributes:
+
+- `rc_files` (required): **string[]** — Resource script files (`.rc`) to compile.
+- `hdrs` (optional): **string[]** — Header files included by the `.rc` scripts.
+- `resources` (optional): **string[]** — Binary resource files (e.g., `.ico`, `.bmp`) referenced by the `.rc` scripts. Changes to these files trigger a rebuild.
+
+The `.res` files produced by this target appear as inputs to the linker command, just like object and library files. Use it with `cc_binary`:
+
+```python
+cc_binary(
+    name = 'hello_gui',
+    srcs = ['hello_gui.c'],
+    extra_linkflags = ['/SUBSYSTEM:WINDOWS', 'user32.lib'],
+    deps = [':hello_res'],
+)
+```
+
 ## resource_library
 
 Compile static data file to be resource, which can be accessed in the program directly.

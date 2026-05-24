@@ -579,6 +579,28 @@ class MsvcToolChain(ToolChain):
 
         return tool  # Let it fail with a clear error later
 
+    def get_resource_compiler(self):
+        """Return path to Windows Resource Compiler (``rc.exe``).
+
+        Detection order:
+        1. Windows SDK bin directory (discovered from the installation)
+        2. Fallback to ``where rc.exe`` on PATH
+        """
+        if self._sdk_path and self._sdk_ver:
+            arch_dir = self._ARCH_MAP[self.target_arch]['msvc_dir']
+            tool_path = os.path.join(self._sdk_path, 'Bin', self._sdk_ver,
+                                     arch_dir, 'rc.exe')
+            if os.path.exists(tool_path):
+                return tool_path
+
+        result = subprocess.run(['where', 'rc'], capture_output=True, text=True)
+        if result.returncode == 0:
+            first_path = result.stdout.strip().split('\n')[0].strip()
+            if os.path.isfile(first_path):
+                return first_path
+
+        return 'rc'  # Let it fail with a clear error later
+
     # ------------------------------------------------------------------
     # Compiler metadata
     # ------------------------------------------------------------------

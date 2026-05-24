@@ -52,6 +52,7 @@ def _load_build_rules():
     import blade.sh_test_target
     import blade.swig_library_target
     import blade.thrift_library
+    import blade.windows_resources_target
 
     build_rules.register_variable('build_target', build_attributes.attributes)
 
