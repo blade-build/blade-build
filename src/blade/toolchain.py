@@ -13,6 +13,7 @@ This module deals with the build toolchains.
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 from blade import console
@@ -345,6 +346,10 @@ class GccToolChain(ToolChain):
         self.cc_version = self._get_cc_version()
         self.ar = self._get_cc_command('AR', 'ar')
         self._cc_vendor = self._detect_cc_vendor()
+
+    @property
+    def dynamic_lib_suffix(self) -> str:
+        return '.dylib' if sys.platform == 'darwin' else '.so'
 
 
 class MsvcToolChain(ToolChain):
