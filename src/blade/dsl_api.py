@@ -94,6 +94,64 @@ def _safe_workspace_module():
     return module
 
 
+class _CCToolchainProxy:
+    """Read-only toolchain proxy exposed as ``blade.cc_toolchain`` in BUILD files.
+
+    Only properties relevant to BUILD-level decisions (file naming, platform
+    detection) are surfaced.  Command lines and internal path lists are
+    deliberately excluded.
+    """
+
+    # Accessed lazily to avoid ordering issues at module-import time.
+    @property
+    def _tc(self):
+        return blade.build_manager.instance.get_build_toolchain()
+
+    # -- file naming ------------------------------------------------
+
+    @property
+    def obj_suffix(self) -> str:
+        return self._tc.obj_suffix
+
+    @property
+    def static_lib_suffix(self) -> str:
+        return self._tc.static_lib_suffix
+
+    @property
+    def dynamic_lib_suffix(self) -> str:
+        return self._tc.dynamic_lib_suffix
+
+    @property
+    def lib_prefix(self) -> str:
+        return self._tc.lib_prefix
+
+    @property
+    def all_dynamic_lib_suffixes(self) -> tuple[str, ...]:
+        return self._tc.all_dynamic_lib_suffixes
+
+    # -- capability queries -----------------------------------------
+
+    def supports_resource_compilation(self) -> bool:
+        return self._tc.supports_resource_compilation()
+
+    def cc_is(self, vendor: str) -> bool:
+        return self._tc.cc_is(vendor)
+
+    # -- output name helpers ----------------------------------------
+
+    def object_file_of(self, src: str) -> str:
+        return self._tc.object_file_of(src)
+
+    def static_library_name(self, name: str) -> str:
+        return self._tc.static_library_name(name)
+
+    def dynamic_library_name(self, name: str) -> str:
+        return self._tc.dynamic_library_name(name)
+
+    def executable_file_name(self, name: str) -> str:
+        return self._tc.executable_file_name(name)
+
+
 def _safe_blade_module():
     """Make the safe blade module."""
     module = _new_module('blade')
@@ -106,6 +164,7 @@ def _safe_blade_module():
     module.re = re
     module.util = _safe_util_module()
     module.workspace = _safe_workspace_module()
+    module.cc_toolchain = _CCToolchainProxy()
     return module
 
 
