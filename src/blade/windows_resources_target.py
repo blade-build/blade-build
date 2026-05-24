@@ -72,18 +72,15 @@ class WindowsResourcesTarget(Target):
         self.attr['hdrs'] = hdrs
         self.attr['resources'] = resources
 
-        self._windows = (os.name == 'nt')
-
     def _allow_duplicate_source(self):
         return True
 
     def generate(self):
         """Generate Ninja build edges for compiling .rc files."""
-        if not self._windows:
-            # No-op on non-Windows: no build edges, no target files.
-            return
-
         toolchain = self.blade.get_build_toolchain()
+        if not toolchain.supports_resource_compilation():
+            # No-op when the toolchain doesn't support .rc compilation.
+            return
 
         rc_exe = toolchain.get_resource_compiler()
 

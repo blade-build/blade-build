@@ -229,6 +229,10 @@ class ToolChain:
         """Whether the compiler generates a .d depfile."""
         return True
 
+    def supports_resource_compilation(self):
+        """Whether the toolchain can compile Windows .rc resource files."""
+        return False
+
     def get_system_include_paths(self):
         """Return system include paths, or empty list if not applicable."""
         return []
@@ -628,6 +632,9 @@ class MsvcToolChain(ToolChain):
     def cc_is(self, vendor):
         """Check if compiler matches vendor."""
         return vendor == 'msvc'
+
+    def supports_resource_compilation(self):
+        return True
 
     # ------------------------------------------------------------------
     # System include / library paths (so callers don't need vcvarsall)
