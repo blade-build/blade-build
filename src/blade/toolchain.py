@@ -275,6 +275,13 @@ class ToolChain:
         """Whether the toolchain can compile Windows .rc resource files."""
         return False
 
+    def get_resource_compiler(self):
+        """Return path to the Windows Resource Compiler (``rc.exe``).
+
+        Only meaningful when ``supports_resource_compilation()`` returns
+        ``True``; callers must guard accordingly."""
+        return 'rc'  # let it fail if called unsafely
+
     def get_system_include_paths(self):
         """Return system include paths, or empty list if not applicable."""
         return []

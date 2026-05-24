@@ -1292,8 +1292,8 @@ class ForeignCcLibrary(CcTarget):
 
     def _library_full_path(self, suffix):
         """Return full path of the library file with specified suffix"""
-        assert suffix in ('.so', '.a', '.dll', '.lib'), suffix
         tc = self.blade.get_build_toolchain()
+        assert suffix in tc.all_dynamic_lib_suffixes + (tc.static_lib_suffix,), suffix
         return self._target_file_path(os.path.join(
             self.attr['install_dir'], self.attr['lib_dir'],
             f'{tc.lib_prefix}{self.name}{suffix}'))

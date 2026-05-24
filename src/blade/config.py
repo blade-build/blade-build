@@ -662,7 +662,9 @@ def fbthrift_library_config(append=None, **kwargs):
 
 @config_rule
 def msvc_config(append=None, **kwargs):
-    """msvc_config section."""
+    """msvc_config section. No-op on non-Windows platforms."""
+    if os.name != 'nt':
+        return
     _blade_config.update_config('msvc_config', append, kwargs)
 
 
