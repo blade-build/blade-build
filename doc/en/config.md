@@ -111,6 +111,17 @@ global_config(
 
 Common configuration parameters for all C/C++ build targets:
 
+#### `toolchain`: str = ""
+
+**Default Toolchain**
+
+**Purpose:** Specifies the default ``cc_toolchain_config`` name to use when
+``--cc-toolchain=`` is not given on the command line. The value must match
+the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
+(``gcc`` / ``clang`` / ``msvc`` / ``mingw`` / ``cygwin``).
+
+**Override:** ``blade build --cc-toolchain=<name>`` takes precedence.
+
 #### `extra_incs`: list = []
 **Additional Include Directories**
 
@@ -322,8 +333,7 @@ cc_test_config(
 
 Note:
 
-- gtest 1.6 starts, remove install install, but can be bypassed, see
-  [gtest1.6.0 installation method](http://blog.csdn.net/chengwenyao18/article/details/7181514).
+- Since gtest 1.6, `make install` was removed but can be bypassed.
 - The gtest library also relies on pthreads, so gtest_libs needs to be written as `['#gtest', '#pthread']`
 - Or include the source code in your source tree, such as thirdparty, you can write
   `gtest_libs='//thirdparty/gtest:gtest'`.

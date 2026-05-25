@@ -82,6 +82,8 @@ class BladeConfig:
 
             'cc_config': {
                 '__help__': 'C/C++ Configuration',
+                'toolchain': '',
+                'toolchain__help__': 'Default toolchain name, overridable via --cc-toolchain=',
                 'extra_incs': [],
                 'cppflags': [],
                 'cflags': [],

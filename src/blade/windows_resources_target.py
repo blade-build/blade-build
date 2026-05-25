@@ -79,11 +79,10 @@ class WindowsResourcesTarget(Target):
     def generate(self):
         """Generate Ninja build edges for compiling .rc files."""
         toolchain = self.blade.get_build_toolchain()
-        if not toolchain.supports_resource_compilation():
+        rc_exe = toolchain.tool('rc')
+        if not rc_exe:
             # No-op when the toolchain doesn't support .rc compilation.
             return
-
-        rc_exe = toolchain.get_resource_compiler()
 
         # Gather SDK include paths (um/, shared/ subdirs) for rc.exe
         system_includes = toolchain.get_system_include_paths()

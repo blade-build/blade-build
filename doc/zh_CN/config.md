@@ -122,6 +122,17 @@ global_config(
 
 所有 C/C++ 构建目标的公共配置：
 
+#### `toolchain`：str = ""
+
+**默认工具链**
+
+**用途：** 指定命令行未提供 ``--cc-toolchain=`` 时使用的默认
+``cc_toolchain_config`` 名称。值必须匹配某个 ``cc_toolchain_config()``
+的 ``name``，或者是一种工具链种类（``gcc`` / ``clang`` / ``msvc`` /
+``mingw`` / ``cygwin``）。
+
+**覆盖：** ``blade build --cc-toolchain=<name>`` 优先级更高。
+
 #### `extra_incs`：list = []
 
 **额外的头文件搜索路径**
@@ -334,7 +345,7 @@ cc_test_config(
 
 注意：
 
-- 从 gtest 1.6 起移除了 `make install`，但可以绕过，参见 [gtest 1.6.0 安装方法](http://blog.csdn.net/chengwenyao18/article/details/7181514)。
+- 从 gtest 1.6 起移除了 `make install`，但可以绕过。
 - gtest 库还依赖 pthread，因此 `gtest_libs` 可以写成 `['#gtest', '#pthread']`。
 - 也可以将源码纳入自己的源码树（如 `thirdparty` 目录），然后写作 `gtest_libs='//thirdparty/gtest:gtest'`。
 

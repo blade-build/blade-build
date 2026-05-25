@@ -280,17 +280,6 @@ class ToolChain:
         """Whether the compiler generates a .d depfile."""
         return True
 
-    def supports_resource_compilation(self):
-        """Whether the toolchain can compile Windows .rc resource files."""
-        return self.tool('rc') is not None
-
-    def get_resource_compiler(self):
-        """Return path to the Windows Resource Compiler (``rc.exe``).
-
-        Only meaningful when ``supports_resource_compilation()`` returns
-        ``True``; callers must guard accordingly."""
-        return self.tool('rc') or 'rc'
-
     def get_system_include_paths(self):
         """Return system include paths, or empty list if not applicable."""
         return []
@@ -741,9 +730,6 @@ class MsvcToolChain(ToolChain):
         """Check if compiler matches vendor."""
         return vendor == 'msvc'
 
-    def supports_resource_compilation(self):
-        return True
-
     # ------------------------------------------------------------------
     # File naming properties — MSVC conventions
     # ------------------------------------------------------------------
@@ -1103,14 +1089,18 @@ def create_toolchain(cc_toolchain=''):
 
     Selection priority:
     1. ``--cc-toolchain=`` CLI flag (match by *name* then *kind*)
-    2. ``cc_toolchain_config()`` in BLADE_ROOT (named or unnamed)
-    3. Auto-detection from host platform
+    2. ``cc_config.toolchain`` in BLADE_ROOT (default toolchain name)
+    3. ``cc_toolchain_config()`` in BLADE_ROOT (named or unnamed)
+    4. Auto-detection from host platform
 
     Args:
         cc_toolchain: Value of ``--cc-toolchain`` CLI flag (``''`` if not set).
     """
     from blade import config as blade_config
     tc_section = blade_config.get_section('cc_toolchain_config')
+
+    if not cc_toolchain:
+        cc_toolchain = blade_config.get_section('cc_config').get('toolchain', '')
 
     cfg, kind = _lookup_config(tc_section, cc_toolchain)
 
