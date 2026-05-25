@@ -55,6 +55,7 @@ A subset of the `os.path` module, including `abspath()`, `basename()`, `dirname(
 Some auxiliary functions, including:
 
 - `var_to_list()` function: If type of the argument is `str`, turn it into `list` contains a single element
+- `var_to_list_or_none()` function: Like `var_to_list()`, but passes `None` through unchanged
 
 ### `blade.workspace` module
 
@@ -62,3 +63,27 @@ Get some information about the current [workspace](workspace.md), including:
 
 - `root_dir()` function: Returns the directory of the current root workspace
 - `build_dir()` function: Returns the name of the build subdirectory under the workspace, such as `build64_release`
+
+### `blade.cc_toolchain` Object
+
+A read-only proxy to the current platform's C/C++ toolchain, for making platform-aware decisions in BUILD files.
+
+**File naming properties** (all return `str`):
+
+- `obj_suffix`: Object file suffix (e.g. `.o` on Linux/macOS, `.obj` on MSVC)
+- `static_lib_suffix`: Static library suffix (e.g. `.a` on Linux/macOS, `.lib` on MSVC)
+- `dynamic_lib_suffix`: Dynamic library suffix (e.g. `.so` on Linux, `.dylib` on macOS, `.dll` on MSVC)
+- `lib_prefix`: Library name prefix (e.g. `lib` on Linux/macOS, `""` on MSVC)
+- `all_dynamic_lib_suffixes`: Tuple of all recognized dynamic library suffixes
+
+**Capability queries:**
+
+- `supports_resource_compilation()` → `bool`: Whether the toolchain can compile `.rc` resource files
+- `cc_is(vendor)` → `bool`: Test compiler vendor (e.g. `cc_is('gcc')`, `cc_is('msvc')`)
+
+**Output name helpers:**
+
+- `object_file_of(src)` → `str`: Object file name for a given source file
+- `static_library_name(name)` → `str`: Static library file name for a given logical name
+- `dynamic_library_name(name)` → `str`: Dynamic library file name for a given logical name
+- `executable_file_name(name)` → `str`: Executable file name for a given logical name (adds `.exe` on Windows)

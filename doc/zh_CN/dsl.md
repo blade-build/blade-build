@@ -56,6 +56,7 @@
 一些辅助函数，包括：
 
 - `var_to_list()` 函数：如果是 `str`，将其转为单个元素的 `list`
+- `var_to_list_or_none()` 函数：与 `var_to_list()` 类似，但 `None` 值原样透传
 
 ### `blade.workspace` 模块
 
@@ -63,3 +64,27 @@
 
 - `root_dir()` 函数：返回当前根工作空间的目录
 - `build_dir()` 函数：返回工作空间下的 build 子目录名，比如 `build64_release`
+
+### `blade.cc_toolchain` 对象
+
+当前平台 C/C++ 工具链的只读代理对象，用于在 BUILD 文件中做出跨平台兼容的判断。
+
+**文件名属性**（均返回 `str`）：
+
+- `obj_suffix`：目标文件后缀（Linux/macOS 为 `.o`，MSVC 为 `.obj`）
+- `static_lib_suffix`：静态库后缀（Linux/macOS 为 `.a`，MSVC 为 `.lib`）
+- `dynamic_lib_suffix`：动态库后缀（Linux 为 `.so`，macOS 为 `.dylib`，MSVC 为 `.dll`）
+- `lib_prefix`：库名前缀（Linux/macOS 为 `lib`，MSVC 为 `""`）
+- `all_dynamic_lib_suffixes`：所有可识别的动态库后缀元组
+
+**能力查询：**
+
+- `supports_resource_compilation()` → `bool`：工具链是否支持编译 `.rc` 资源文件
+- `cc_is(vendor)` → `bool`：测试编译器厂商（如 `cc_is('gcc')`、`cc_is('msvc')`）
+
+**输出文件名辅助方法：**
+
+- `object_file_of(src)` → `str`：给定源文件对应的目标文件名
+- `static_library_name(name)` → `str`：给定逻辑名称对应的静态库文件名
+- `dynamic_library_name(name)` → `str`：给定逻辑名称对应的动态库文件名
+- `executable_file_name(name)` → `str`：给定逻辑名称对应的可执行文件名（Windows 上自动添加 `.exe`）

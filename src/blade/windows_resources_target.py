@@ -27,7 +27,7 @@ from blade import build_rules
 from blade import console
 from blade.blade_types import StrOrListOpt
 from blade.target import Target
-from blade.util import var_to_list, regular_variable_name
+from blade.util import var_to_list, var_to_list_or_none, regular_variable_name
 
 
 class WindowsResourcesTarget(Target):
@@ -50,6 +50,7 @@ class WindowsResourcesTarget(Target):
         hdrs = var_to_list(hdrs) if hdrs else []
         resources = var_to_list(resources) if resources else []
         deps = var_to_list(deps) if deps else []
+        visibility = var_to_list_or_none(visibility)
 
         # Validate file extensions
         for rc in rc_files:
