@@ -1,0 +1,106 @@
+name: macOS CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  unit-tests:
+    name: Unit tests (macOS, Python ${{ matrix.python-version }})
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements-dev.txt
+    - name: Run cross-platform unit tests
+      run: |
+        PYTHONPATH=src python -m pytest src/tests/unit/toolchain_test.py src/tests/unit/util_test.py src/tests/unit/blade_types_test.py src/tests/unit/cc_targets_test.py src/tests/unit/java_targets_test.py src/tests/unit/scala_targets_test.py src/tests/unit/test_scheduler_test.py src/tests/unit/builtin_tools_test.py -v
+
+  smoke-test:
+    name: macOS smoke test
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install ninja
+      run: |
+        brew install ninja
+    - name: Verify imports and toolchain
+      run: |
+        PYTHONPATH=src python -c "
+        import blade.toolchain, blade.config, blade.util, blade.console
+        import blade.inclusion_check, blade.target, blade.workspace
+        print('All core imports OK')
+
+        tc = blade.toolchain.create_toolchain()
+        assert tc.cc_is('clang'), f'Expected Clang toolchain, got: {type(tc).__name__}'
+        assert tc.object_file_of('test.c') == 'test.c.o'
+        assert tc.static_library_name('foo') == 'libfoo.a'
+        assert tc.dynamic_library_name('foo') == 'libfoo.dylib'
+        assert tc.executable_file_name('foo') == 'foo'
+        print(f'Clang toolchain: cc={tc.cc}')
+        print(f'cc version: {tc.cc_version}')
+        print(f'dynamic_lib_suffix: {tc.dynamic_lib_suffix}')
+
+        # Verify BuildArchitecture recognizes common archs
+        import blade.toolchain
+        arch = blade.toolchain.BuildArchitecture.get_canonical_architecture('x86_64')
+        assert arch == 'x86_64', f'x86_64 should map to x86_64, got: {arch}'
+        assert blade.toolchain.BuildArchitecture.get_architecture_bits('x86_64') == '64'
+        arch = blade.toolchain.BuildArchitecture.get_canonical_architecture('arm64')
+        assert arch == 'aarch64', f'arm64 should map to aarch64, got: {arch}'
+        print(f'BuildArchitecture: x86_64 -> x86_64, arm64 -> aarch64')
+
+        print('All smoke tests passed.')
+        "
+
+  e2e-smoke:
+    name: E2E smoke (blade-test) — cc, java, lex_yacc, py
+    runs-on: macos-latest
+    steps:
+    - name: Checkout blade-build
+      uses: actions/checkout@v6
+      with:
+        path: blade-build
+    - name: Checkout blade-test (sibling)
+      uses: actions/checkout@v6
+      with:
+        repository: blade-build/blade-test
+        path: blade-test
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Set up JDK 17 (for Java test suite)
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
+    - name: Install toolchain dependencies
+      run: |
+        brew install ninja flex bison protobuf
+    - name: Verify tools
+      run: |
+        javac -version
+        flex --version
+        bison --version
+        protoc --version
+    - name: Run blade-test suites
+      run: |
+        PYTHONPATH="$GITHUB_WORKSPACE/blade-build/src"
+        cd "$GITHUB_WORKSPACE/blade-test"
+        ../blade-build/blade.sh test //suites/cc_basic:hello_test //suites/cc_basic:hello-bin //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test
