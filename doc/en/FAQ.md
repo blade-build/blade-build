@@ -124,23 +124,48 @@ gcc -shared *.o -o mylib.so
 - Dynamic libraries cannot be converted back to static libraries
 - For third-party code, obtain both static and dynamic library variants whenever possible
 
-### Using Specific GCC Version via Environment Variables
+### Using a Specific GCC or Clang Version
 
 **Requirement:**
-Compile projects using a specific GCC version.
+Compile projects using a specific GCC or Clang version.
 
 **Implementation:**
-Set environment variables to specify compiler paths:
+Configure the toolchain via `cc_toolchain_config` in BLADE_ROOT:
+
+```python
+# Use GCC 13
+cc_toolchain_config(
+    name   = 'gcc-13',
+    kind   = 'gcc',
+    prefix = '/opt/gcc-13',
+)
+
+# Use Clang 17
+cc_toolchain_config(
+    name   = 'clang-17',
+    kind   = 'clang',
+    prefix = '/opt/clang-17',
+)
+```
+
+Select at build time with `--cc-toolchain`:
 
 ```bash
-CC=/usr/bin/gcc CXX=/usr/bin/g++ CPP=/usr/bin/cpp LD=/usr/bin/g++ blade targets
+blade build --cc-toolchain=gcc-13   # Select by name
+blade build --cc-toolchain=clang    # Select by kind (auto-detect paths)
+```
+
+For a single toolchain, omit `name` to use it as the default:
+
+```python
+cc_toolchain_config(kind='clang')
 ```
 
 **Best Practices:**
 
 - Ensure you're using the latest Blade version
-- Maintain consistency across all compiler-related environment variables
 - Use matching versions for compiler and linker components
+- Commit toolchain configuration to BLADE_ROOT for team-wide consistency
 
 ### Persistent Compilation Errors After Code Modifications
 

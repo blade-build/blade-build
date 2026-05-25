@@ -267,6 +267,21 @@ class BladeConfig:
                 'thrift_gen_params': 'cpp:include_prefix,pure_enums'
             },
 
+            'cc_toolchain_config': {
+                '__help__': 'C/C++ Toolchain Configuration',
+                'name': '',
+                'kind': '',
+                'target': '',
+                'prefix': '',
+                'tool_prefix': '',
+                'cc': '',
+                'cxx': '',
+                'ld': '',
+                'ar': '',
+                'msvc_version': 'auto',
+                'target_arch': 'auto',
+            },
+
             'msvc_config': {
                 '__help__': 'MSVC-specific Configuration',
                 'target_arch': 'auto',
@@ -658,6 +673,34 @@ def fbthrift_library_config(append=None, **kwargs):
     # cause a NameError during config parsing. All arguments are
     # silently ignored.
     pass
+
+
+_CC_TOOLCHAIN_KIND_VALUES = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin'}
+
+
+@config_rule
+def cc_toolchain_config(append=None, **kwargs):
+    """C/C++ toolchain configuration.
+
+    Supports multiple named configs, selectable via ``--cc-toolchain=<name>``::
+
+        cc_toolchain_config(name='gcc-13', kind='gcc', prefix='/opt/gcc-13')
+        cc_toolchain_config(name='clang-17', kind='clang', prefix='/opt/clang-17')
+
+    An unnamed config sets the default toolchain::
+
+        cc_toolchain_config(kind='clang')
+    """
+    _check_kwarg_enum_value(kwargs, 'kind', _CC_TOOLCHAIN_KIND_VALUES)
+    name = kwargs.get('name', '')
+    if name:
+        section = _blade_config.get_section('cc_toolchain_config')
+        if name in section:
+            _blade_config.warning(
+                f'cc_toolchain_config: duplicate name "{name}", overwriting')
+        section[name] = kwargs
+    else:
+        _blade_config.update_config('cc_toolchain_config', append, kwargs)
 
 
 @config_rule

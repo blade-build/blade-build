@@ -403,6 +403,9 @@ class CommandLineParser:
                 choices=([''] + [str(i) for i in range(9)]),
                 help=constants.HELP.fat_jar_compression_level)
             parser.add_argument(
+                '--cc-toolchain', dest='cc_toolchain', type=str, default='',
+                help='Select C/C++ toolchain by name or kind')
+            parser.add_argument(
                 '--tags-filter', dest='tags_filter', type=str,
                 help='Tags filter expression, see documents for details')
 

@@ -73,17 +73,26 @@ A read-only proxy to the current platform's C/C++ toolchain, for making platform
 - `obj_suffix`: Object file suffix (e.g. `.o` on Linux/macOS, `.obj` on MSVC)
 - `static_lib_suffix`: Static library suffix (e.g. `.a` on Linux/macOS, `.lib` on MSVC)
 - `dynamic_lib_suffix`: Dynamic library suffix (e.g. `.so` on Linux, `.dylib` on macOS, `.dll` on MSVC)
-- `lib_prefix`: Library name prefix (e.g. `lib` on Linux/macOS, `""` on MSVC)
-- `all_dynamic_lib_suffixes`: Tuple of all recognized dynamic library suffixes
+- `lib_prefix`: Library name prefix (e.g. `lib` on Linux/macOS, `""` on Windows)
+- `exe_suffix`: Executable file suffix (e.g. `""` on Linux/macOS, `.exe` on Windows)
 
-**Capability queries:**
+**Tool lookup:**
 
-- `supports_resource_compilation()` → `bool`: Whether the toolchain can compile `.rc` resource files
-- `cc_is(vendor)` → `bool`: Test compiler vendor (e.g. `cc_is('gcc')`, `cc_is('msvc')`)
+- `tool(key)` → `str | None`: Return the path to a tool identified by *key*.
+  Supported keys: `'cc'`, `'cxx'`, `'ld'`, `'ar'`, `'rc'`, `'as'`.
+  Returns `None` when the tool is unavailable (e.g. `tool('rc')` is `None` on Linux).
 
-**Output name helpers:**
+**Examples:**
 
-- `object_file_of(src)` → `str`: Object file name for a given source file
-- `static_library_name(name)` → `str`: Static library file name for a given logical name
-- `dynamic_library_name(name)` → `str`: Dynamic library file name for a given logical name
-- `executable_file_name(name)` → `str`: Executable file name for a given logical name (adds `.exe` on Windows)
+```python
+cc = blade.cc_toolchain
+
+# Compose output file names
+obj = src + cc.obj_suffix
+static_lib = cc.lib_prefix + 'foo' + cc.static_lib_suffix
+binary = 'myapp' + cc.exe_suffix
+
+# Query tool availability
+if cc.tool('rc'):
+    print('Resource compiler:', cc.tool('rc'))
+```

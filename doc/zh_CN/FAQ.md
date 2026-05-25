@@ -124,23 +124,48 @@ gcc -shared *.o -o mylib.so
 - 动态库无法反过来转换为静态库
 - 对于第三方代码，建议尽量同时获取静态和动态两种版本
 
-### 使用环境变量指定特定版本的 GCC
+### 使用特定版本的 GCC 或 Clang
 
 **需求：**
-使用特定版本的 GCC 编译项目。
+使用特定版本的 GCC 或 Clang 编译项目。
 
 **实现方式：**
-通过环境变量指定编译器路径：
+通过 `cc_toolchain_config` 在 BLADE_ROOT 中配置工具链：
+
+```python
+# 使用 GCC 13
+cc_toolchain_config(
+    name   = 'gcc-13',
+    kind   = 'gcc',
+    prefix = '/opt/gcc-13',
+)
+
+# 使用 Clang 17
+cc_toolchain_config(
+    name   = 'clang-17',
+    kind   = 'clang',
+    prefix = '/opt/clang-17',
+)
+```
+
+构建时通过 `--cc-toolchain` 选择：
 
 ```bash
-CC=/usr/bin/gcc CXX=/usr/bin/g++ CPP=/usr/bin/cpp LD=/usr/bin/g++ blade targets
+blade build --cc-toolchain=gcc-13   # 按名称选择
+blade build --cc-toolchain=clang    # 按类型选择（自动检测路径）
+```
+
+如果只有一个工具链，可以不写 `name`，作为默认工具链：
+
+```python
+cc_toolchain_config(kind='clang')
 ```
 
 **最佳实践：**
 
 - 使用最新版的 Blade
-- 所有编译器相关的环境变量保持一致
 - 编译器与链接器使用匹配的版本
+- 将工具链配置提交到 BLADE_ROOT，团队共享
 
 ### 代码改过之后 Blade 仍然编译报错
 

@@ -99,7 +99,7 @@ class Blade:
         # Indicate whether the deps list is expanded by expander or not
         self.__targets_expanded = False
 
-        self.__build_toolchain = create_toolchain(options.m)
+        self.__build_toolchain = create_toolchain(options.cc_toolchain)
         self.build_accelerator = BuildAccelerator(self.__build_toolchain)
         self.__build_jobs_num = 0
 

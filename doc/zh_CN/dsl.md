@@ -74,17 +74,26 @@
 - `obj_suffix`：目标文件后缀（Linux/macOS 为 `.o`，MSVC 为 `.obj`）
 - `static_lib_suffix`：静态库后缀（Linux/macOS 为 `.a`，MSVC 为 `.lib`）
 - `dynamic_lib_suffix`：动态库后缀（Linux 为 `.so`，macOS 为 `.dylib`，MSVC 为 `.dll`）
-- `lib_prefix`：库名前缀（Linux/macOS 为 `lib`，MSVC 为 `""`）
-- `all_dynamic_lib_suffixes`：所有可识别的动态库后缀元组
+- `lib_prefix`：库名前缀（Linux/macOS 为 `lib`，Windows 为 `""`）
+- `exe_suffix`：可执行文件后缀（Linux/macOS 为 `""`，Windows 为 `.exe`）
 
-**能力查询：**
+**工具查询：**
 
-- `supports_resource_compilation()` → `bool`：工具链是否支持编译 `.rc` 资源文件
-- `cc_is(vendor)` → `bool`：测试编译器厂商（如 `cc_is('gcc')`、`cc_is('msvc')`）
+- `tool(key)` → `str | None`：返回由 *key* 指定的工具路径。
+  支持的 key：`'cc'`、`'cxx'`、`'ld'`、`'ar'`、`'rc'`、`'as'`。
+  工具不可用时返回 `None`（如 Linux 上 `tool('rc')` 返回 `None`）。
 
-**输出文件名辅助方法：**
+**示例：**
 
-- `object_file_of(src)` → `str`：给定源文件对应的目标文件名
-- `static_library_name(name)` → `str`：给定逻辑名称对应的静态库文件名
-- `dynamic_library_name(name)` → `str`：给定逻辑名称对应的动态库文件名
-- `executable_file_name(name)` → `str`：给定逻辑名称对应的可执行文件名（Windows 上自动添加 `.exe`）
+```python
+cc = blade.cc_toolchain
+
+# 组合输出文件名
+obj = src + cc.obj_suffix
+static_lib = cc.lib_prefix + 'foo' + cc.static_lib_suffix
+binary = 'myapp' + cc.exe_suffix
+
+# 查询工具可用性
+if cc.tool('rc'):
+    print('Resource compiler:', cc.tool('rc'))
+```

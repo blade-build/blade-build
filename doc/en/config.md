@@ -603,32 +603,108 @@ cc_config(
 
 The value must conform to the Python literal specification and cannot contain execution statements.
 
-## Environment Variable
+## C/C++ Toolchain Configuration
 
-Blade also supports the following environment variables:
+The `cc_toolchain_config()` function selects the C/C++ compiler toolchain. You can define multiple named toolchains and select one via the `--cc-toolchain` command-line flag.
 
-- `TOOLCHAIN_DIR`, default is empty
-- `CPP`, default is `cpp`
-- `CXX`, defaults to `g++`
-- `CC`, the default is `gcc`
-- `LD`, default is `g++`
+### `kind` — toolchain family
 
-`TOOLCHAIN_DIR` and `CPP` are combined to form the full path of the calling tool, for example:
+`kind` determines the **ToolChain class**, **flag syntax**, **deps style**, and **default target platform**:
 
-Call gcc under `/usr/bin` (original gcc on development machine)
+| kind     | flag syntax | deps style | default target |
+|----------|-------------|------------|----------------|
+| `gcc`    | GCC         | `gcc`      | host platform  |
+| `clang`  | GCC         | `gcc`      | host platform  |
+| `mingw`  | GCC         | `gcc`      | `windows`      |
+| `cygwin` | GCC         | `gcc`      | `windows`      |
+| `msvc`   | MSVC        | `msvc`     | `windows`      |
 
-```bash
-TOOLCHAIN_DIR=/usr/bin blade
+`gcc` and `clang` both use the GCC-family toolchain class — they differ only in the compiler binary and detected vendor. `mingw` and `cygwin` are GCC-family toolchains targeting Windows.
+
+### `prefix` — install prefix
+
+- **When set**: tools are looked up only under `<prefix>/bin/<tool>` and `<prefix>/<tool>`. PATH is **never** searched.
+- **When not set**: tools are resolved via `which()` on PATH, falling back to the bare tool name.
+
+This ensures a configured toolchain always pins to its own installation and won't accidentally pick up a different version from the system PATH.
+
+### Configuration reference
+
+```python
+cc_toolchain_config(
+    name   = 'gcc-13',      # Optional — used with --cc-toolchain=gcc-13 to select this config
+    kind   = 'gcc',         # 'gcc' | 'clang' | 'msvc' | 'mingw' | 'cygwin' (see table above)
+
+    target = 'linux',       # Optional — target platform: 'linux' | 'darwin' | 'windows'
+                            # Default: derived from host (mingw/cygwin/msvc always 'windows')
+
+    prefix     = '/opt/gcc-13',   # Optional — install prefix, scopes tool lookup (no PATH search)
+    tool_prefix = '',             # Optional — tool name prefix for cross-compilation
+                                  # e.g. 'arm-linux-gnueabihf-' → arm-linux-gnueabihf-gcc
+
+    cc     = '/usr/bin/gcc-13',   # Optional — override individual tools
+    cxx    = '/usr/bin/g++-13',
+    ld     = ...,                 # Optional — derived from kind/target by default
+    ar     = ...,
+
+    # MSVC-only (when kind='msvc')
+    msvc_version = '14.44',       # 'auto' or MSVC version prefix like '14.44'
+    target_arch  = 'x64',         # 'auto' | 'x64' | 'x86' | 'arm64' | 'arm64ec'
+)
 ```
 
-Using clang
+> **MSVC version numbers** refer to the C/C++ compiler toolchain version
+> (e.g. `14.44`, `14.38`, `14.28`), not the Visual Studio product year. See
+> [Microsoft C++ compiler versions](https://learn.microsoft.com/en-us/cpp/overview/compiler-versions)
+> for the full mapping. When set to `'auto'` (the default), the highest installed
+> version is used.
 
-```bash
-CPP='clang -E' CC=clang CXX=clang++ LD=clang++ blade
+### Multiple toolchain configs
+
+Define several toolchains and select at build time:
+
+```python
+cc_toolchain_config(
+    name   = 'gcc-13',
+    kind   = 'gcc',
+    prefix = '/opt/gcc-13',
+)
+
+cc_toolchain_config(
+    name   = 'clang-17',
+    kind   = 'clang',
+    prefix = '/opt/clang-17',
+)
 ```
 
-As with all environment variable setting rules, the environment variables placed before the command
-line only work for this call. If you want to follow up, use `export`, and put it in `~/.profile`.
+```bash
+blade build --cc-toolchain=gcc-13    # Select by name
+blade build --cc-toolchain=clang     # Select by kind (auto-detect paths)
+```
 
-Support for environment variables will be removed in the future, instead of configuring the compiler
-version, so it is recommended to only use it to test different compilers temporarily.
+A config without a `name` serves as the default (used when `--cc-toolchain` is not
+specified):
+
+```python
+cc_toolchain_config(kind='clang')   # default toolchain
+```
+
+### Selection priority
+
+1. `--cc-toolchain=` CLI flag (match by name, then by kind)
+2. Named or unnamed `cc_toolchain_config()` in BLADE_ROOT
+3. Auto-detection from host platform
+
+### Using clang-cl on Windows
+
+No special `kind` is needed — use `kind='msvc'` with a custom compiler:
+
+```python
+cc_toolchain_config(
+    kind = 'msvc',
+    cc   = 'clang-cl.exe',
+    cxx  = 'clang-cl.exe',
+)
+```
+
+This skips Visual Studio auto-detection and uses clang-cl with MSVC-style flags.

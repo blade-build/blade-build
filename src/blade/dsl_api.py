@@ -97,17 +97,14 @@ def _safe_workspace_module():
 class _CCToolchainProxy:
     """Read-only toolchain proxy exposed as ``blade.cc_toolchain`` in BUILD files.
 
-    Only properties relevant to BUILD-level decisions (file naming, platform
-    detection) are surfaced.  Command lines and internal path lists are
-    deliberately excluded.
+    Five file-naming properties plus a unified ``.tool(key)`` lookup that
+    returns a path string or ``None`` for toolchain-specific tools (``'rc'``,
+    ``'as'``, etc.).
     """
 
-    # Accessed lazily to avoid ordering issues at module-import time.
     @property
     def _tc(self):
         return blade.build_manager.instance.get_build_toolchain()
-
-    # -- file naming ------------------------------------------------
 
     @property
     def obj_suffix(self) -> str:
@@ -126,30 +123,15 @@ class _CCToolchainProxy:
         return self._tc.lib_prefix
 
     @property
-    def all_dynamic_lib_suffixes(self) -> tuple[str, ...]:
-        return self._tc.all_dynamic_lib_suffixes
+    def exe_suffix(self) -> str:
+        return self._tc.exe_suffix
 
-    # -- capability queries -----------------------------------------
+    def tool(self, key: str) -> str | None:
+        """Return tool path for *key*, or ``None`` if not available.
 
-    def supports_resource_compilation(self) -> bool:
-        return self._tc.supports_resource_compilation()
-
-    def cc_is(self, vendor: str) -> bool:
-        return self._tc.cc_is(vendor)
-
-    # -- output name helpers ----------------------------------------
-
-    def object_file_of(self, src: str) -> str:
-        return self._tc.object_file_of(src)
-
-    def static_library_name(self, name: str) -> str:
-        return self._tc.static_library_name(name)
-
-    def dynamic_library_name(self, name: str) -> str:
-        return self._tc.dynamic_library_name(name)
-
-    def executable_file_name(self, name: str) -> str:
-        return self._tc.executable_file_name(name)
+        Supported keys: ``'cc'``, ``'cxx'``, ``'ld'``, ``'ar'``, ``'rc'``, ``'as'``.
+        """
+        return self._tc.tool(key)
 
 
 def _safe_blade_module():
@@ -159,7 +141,6 @@ def _safe_blade_module():
     module.console = _safe_console_module()
     module.current_source_dir = blade.current_source_dir
     module.current_target_dir = blade.current_target_dir
-    module.environ = os.environ
     module.path = _safe_path_module()
     module.re = re
     module.util = _safe_util_module()

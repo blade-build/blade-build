@@ -613,30 +613,106 @@ cc_config(
 
 加载的值必须符合 Python 字面量规范，不能包含可执行语句。
 
-## 环境变量
+## C/C++ 工具链配置
 
-Blade 还支持以下环境变量：
+`cc_toolchain_config()` 函数用于选择 C/C++ 编译工具链。支持定义多个命名工具链，并通过 `--cc-toolchain` 命令行参数选择。
 
-- `TOOLCHAIN_DIR`：默认为空
-- `CPP`：默认为 `cpp`
-- `CXX`：默认为 `g++`
-- `CC`：默认为 `gcc`
-- `LD`：默认为 `g++`
+### `kind` — 工具链家族
 
-`TOOLCHAIN_DIR` 和 `CPP` 等组合起来，构成调用工具的完整路径。例如：
+`kind` 决定 **ToolChain 类**、**编译选项风格**、**依赖风格**和**默认目标平台**：
 
-调用 `/usr/bin` 下的 `gcc`（开发机上的原版 `gcc`）：
+| kind     | 选项风格 | 依赖风格 | 默认目标   |
+|----------|----------|----------|------------|
+| `gcc`    | GCC      | `gcc`    | 宿主机平台 |
+| `clang`  | GCC      | `gcc`    | 宿主机平台 |
+| `mingw`  | GCC      | `gcc`    | `windows`  |
+| `cygwin` | GCC      | `gcc`    | `windows`  |
+| `msvc`   | MSVC     | `msvc`   | `windows`  |
 
-```bash
-TOOLCHAIN_DIR=/usr/bin blade
+`gcc` 和 `clang` 使用相同的 GCC 家族工具链类，区别仅在于编译器二进制文件和检测到的厂商。`mingw` 和 `cygwin` 是面向 Windows 的 GCC 家族工具链。
+
+### `prefix` — 安装前缀
+
+- **指定时**：仅在 `<prefix>/bin/<tool>` 和 `<prefix>/<tool>` 下查找工具，**绝不**搜索 PATH。
+- **未指定时**：通过 `which()` 在 PATH 中查找，找不到时回退到裸工具名。
+
+这确保已配置的工具链始终固定使用其自带的安装版本，不会意外从系统 PATH 中获取其他版本。
+
+### 配置参考
+
+```python
+cc_toolchain_config(
+    name   = 'gcc-13',      # 可选 — 配合 --cc-toolchain=gcc-13 选择此配置
+    kind   = 'gcc',         # 'gcc' | 'clang' | 'msvc' | 'mingw' | 'cygwin'（参见上表）
+
+    target = 'linux',       # 可选 — 目标平台: 'linux' | 'darwin' | 'windows'
+                            # 默认: 由 host 推导 (mingw/cygwin/msvc 始终为 'windows')
+
+    prefix     = '/opt/gcc-13',   # 可选 — 安装前缀，限定工具查找范围（不搜索 PATH）
+    tool_prefix = '',             # 可选 — 交叉编译工具名前缀
+                                  # 例如 'arm-linux-gnueabihf-' → arm-linux-gnueabihf-gcc
+
+    cc     = '/usr/bin/gcc-13',   # 可选 — 单独覆盖各工具路径
+    cxx    = '/usr/bin/g++-13',
+    ld     = ...,                 # 可选 — 默认由 kind/target 推导
+    ar     = ...,
+
+    # 仅 MSVC (kind='msvc' 时)
+    msvc_version = '14.44',       # 'auto' 或 MSVC 版本前缀，如 '14.44'
+    target_arch  = 'x64',         # 'auto' | 'x64' | 'x86' | 'arm64' | 'arm64ec'
+)
 ```
 
-使用 `clang`：
+> **MSVC 版本号**指的是 C/C++ 编译器工具链版本（如 `14.44`、`14.38`、`14.28`），
+> 而非 Visual Studio 产品年份。完整说明参见
+> [Microsoft C++ 编译器版本](https://learn.microsoft.com/zh-cn/cpp/overview/compiler-versions)。
+> 设为 `'auto'`（默认值）时，自动选择已安装的最高版本。
 
-```bash
-CPP='clang -E' CC=clang CXX=clang++ LD=clang++ blade
+### 多工具链配置
+
+定义多个工具链，构建时选择：
+
+```python
+cc_toolchain_config(
+    name   = 'gcc-13',
+    kind   = 'gcc',
+    prefix = '/opt/gcc-13',
+)
+
+cc_toolchain_config(
+    name   = 'clang-17',
+    kind   = 'clang',
+    prefix = '/opt/clang-17',
+)
 ```
 
-与所有环境变量的规则一致：放在命令行前的环境变量只在本次调用生效；如需持续生效，请使用 `export`，并放入 `~/.profile`。
+```bash
+blade build --cc-toolchain=gcc-13    # 按名称选择
+blade build --cc-toolchain=clang     # 按类型选择（自动检测路径）
+```
 
-环境变量支持将来计划逐步淘汰，取而代之的是通过配置显式指定编译器版本，因此建议只在临时测试不同编译器时使用。
+不带 `name` 的配置作为默认工具链（未指定 `--cc-toolchain` 时使用）：
+
+```python
+cc_toolchain_config(kind='clang')   # 默认工具链
+```
+
+### 选择优先级
+
+1. `--cc-toolchain=` 命令行参数（先按名称匹配，再按类型匹配）
+2. BLADE_ROOT 中的 `cc_toolchain_config()`（命名或未命名）
+3. 宿主机平台自动检测
+
+### 在 Windows 上使用 clang-cl
+
+无需新增 kind，使用 `kind='msvc'` 并指定自定义编译器即可：
+
+```python
+cc_toolchain_config(
+    kind = 'msvc',
+    cc   = 'clang-cl.exe',
+    cxx  = 'clang-cl.exe',
+)
+```
+
+这会跳过 Visual Studio 自动检测，直接使用 clang-cl 并采用 MSVC 风格的编译选项。
