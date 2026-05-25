@@ -1,82 +1,157 @@
 # Development
 
+## Code Structure
+
+```text
+src/
+├── blade/              # Main source package
+│   ├── main.py         # CLI entry point
+│   ├── command_line.py # Argument parsing
+│   ├── config.py       # Configuration loading (blade.conf, BLADE_ROOT, etc.)
+│   ├── workspace.py    # Workspace discovery and management
+│   ├── load_build_files.py  # BUILD file loading and DSL sandbox
+│   ├── dependency_analyzer.py  # Topological sort and dependency resolution
+│   ├── backend.py      # Backend build system generation (Ninja)
+│   ├── build_manager.py     # Build orchestration
+│   ├── ninja_runner.py      # Ninja invocation
+│   ├── binary_runner.py     # Executing built binaries
+│   ├── test_runner.py       # Test sandbox and execution
+│   ├── test_scheduler.py    # Parallel test scheduling
+│   ├── toolchain.py    # Compiler toolchain abstraction (GCC, MSVC, Clang)
+│   ├── *_targets.py    # Build rule implementations (cc, java, py, go, etc.)
+│   ├── target.py       # Base Target class
+│   ├── build_rules.py  # Rule registration infrastructure
+│   ├── dsl_api.py      # Safe `blade.*` DSL module exposed to BUILD files
+│   ├── blade_types.py  # Shared type aliases (StrOrList, StrOrListOpt)
+│   ├── util.py         # General-purpose helpers
+│   ├── console.py      # Logging and diagnostic output
+│   ├── config.py       # Configuration schema
+│   └── inclusion_check.py  # Header dependency checking for C/C++
+├── tests/
+│   ├── unit/           # Unit tests (pytest, fast, offline)
+│   └── (integration)   # See src/test/
+└── test/               # Integration / end-to-end tests (pytest, require toolchain)
+```
+
+**Rule-target modules** (`*_targets.py`) each define one or more build rule types:
+
+| Module | Rule(s) |
+| --- | --- |
+| `cc_targets.py` | `cc_library`, `cc_binary`, `cc_test`, `cc_plugin`, `prebuilt_cc_library`, `foreign_cc_library` |
+| `java_targets.py` | `java_library`, `java_binary`, `java_test` |
+| `py_targets.py` | `py_library`, `py_binary`, `py_test` |
+| `proto_library_target.py` | `proto_library` |
+| `go_targets.py` | `go_library`, `go_binary`, `go_test` |
+| `scala_targets.py` | `scala_library`, `scala_test` |
+| `cu_targets.py` | `cu_library`, `cu_binary`, `cu_test` |
+| `gen_rule_target.py` | `gen_rule` |
+| `lex_yacc_target.py` | `lex_yacc_library` |
+| `resource_library_target.py` | `resource_library` |
+| `windows_resources_target.py` | `windows_resources` |
+| `package_target.py` | `package` |
+| `sh_test_target.py` | `sh_test` |
+
 ## How It Works
 
 ### Loading Configuration
 
-After the Blade starts, it will try to load the configuration files in multiple paths through the `execfile` function. These configuration files are all Python source files, and the predefined configuration functions in the blade are called.
-Update the configuration item to the configuration dict of blade.config for later use.
+After Blade starts, it loads configuration files from multiple paths via `execfile`. These are Python source files that call predefined configuration functions, updating the configuration dict in `blade.config`.
 
-After the configuration file is loaded, the blade will also try to update the options in the command line options with the same name as global_config to the configuration, so that the configuration information from the command line has the highest priority.
+Command-line options matching `global_config` keys are then applied with the highest priority.
 
-### Loading BUILD files
+### Loading BUILD Files
 
-Blade will be expanded from the build target specified by the command line, and the `BUILD` file will be executed one by one through the `execfile` function. When the code in the BUILD file is executed,
-The predefined rule function inside the blade is called to register the target in the data structure inside the blade.
+Blade expands from the command-line targets, executing `BUILD` files one by one via a restricted `execfile` sandbox. When BUILD code runs, it calls rule functions (e.g., `cc_library(...)`) which register targets into Blade's internal data structures.
 
-For targets that are directly or indirectly dependent on the target specified in the command line, the blade will load the BUILD file in the corresponding directory until all dependencies are loaded.
+BUILD files are loaded recursively for all transitive dependencies.
 
 ### Dependency Analysis
 
-The Blade starts the topological sorting of the loaded target from the root specified by the command line, and obtains a list of targets to be built and the correct build order.
+Blade performs a topological sort from the command-line target roots, producing an ordered build target list.
 
-### Generating backend build files
+### Generating Backend Build Files
 
-After the Blade gets the target list to be built, it can gradually generate the target action of the corresponding build rule according to each target, and output it to the backend build script file.
+Each target generates backend actions (Ninja rules) which are written to a backend build file (e.g. `build.ninja`).
 
-### Executing the backend build system
+### Executing the Backend Build
 
-Blade calls the backend build tool to perform the actual build, and after the execution is complete, deletes the backend build script file.
+Blade invokes the backend build tool (Ninja) to perform the actual build, then removes the generated build file.
 
-### Running tests
+### Running Tests
 
-From the command line collected test target list, build execution environment test one by one, Blade supports multi-task concurrent test, then the background will be multiple threads to execute the test file.
-After all tests have been performed, collect the test results and output a report.
+Test targets are built, then executed in parallel within sandbox environments. Results are collected and reported.
 
-## How To Contribute
+## Testing
 
-Welcome to contribute code to Blade! Whether it is a bugfix or a feature. Large features can be mentioned first to avoid repeated iterations caused by poor communication.
+### Unit tests (`src/tests/unit/`)
 
-### Pull Code
-
-Modify and test with github's Fork function fork to your own repository.
-
-### Modifying a File
-
-We follow the Google Python code style and modify the code to check the code with pylint.
-
-### Test Verification
-
-In the source code development directory, Blade first runs the code in development. You can perform src/test/runalltests.sh for global verification.
-
-### Commissioning and Diagnostics
-
-Most subcommands support the `--stop-after` option. The optional parameters are {load, analyze, generate, build}, which can control the blade to end after the completion phase. such as
+Fast, offline tests that exercise individual modules. No toolchain or system dependencies required.
 
 ```bash
-blade build --stop-after generate generate
+pip install -r requirements-dev.txt
+PYTHONPATH=src python -m pytest src/tests/unit/ -v
 ```
 
-This makes the blade end after generating the backend build system description file (such as `build.ninja`), which can be used to check the generated file.
+### Integration tests (`src/test/`)
 
-### Performance Analysis
+End-to-end tests that drive real build/test cycles against fixture data in `src/test/testdata/`. Requires a working C/C++ toolchain (GCC, MSVC, or Clang).
 
-Most subcommands support the `--profiling` option, which outputs a performance analysis report after the blade ends. If you need a more detailed analysis, you can turn the blade.pstats left by the performance analysis into a map.
+```bash
+src/test/runall.sh          # Run all integration tests
+src/test/run.sh <test_name> # Run a single test (e.g. cc_library_test)
+```
 
-Combined with the --stop-after option, it can be used to analyze performance at different stages.
+### Type checking
 
-### Distribute
+```bash
+pip install -r requirements-dev.txt
+pyright
+```
 
-The `dist_blade` in the root directory of the code can be packaged into a zip for easy deployment, and can be placed together with the `blade`bash script and `blade.conf` in the same directory.
+## Adding a New Build Rule
 
-### Pull Request
+1. **Create a target class** in a new or existing `*_targets.py` module. Inherit from `Target` (or a suitable subclass) and implement `generate()`.
+2. **Define the rule-entry function** (e.g., `windows_resources()`) — this function normalizes BUILD-file-friendly types (`StrOrListOpt`) into `list[str]` via `var_to_list` / `var_to_list_or_none`, creates the target instance, and registers it via `build_manager.instance.register_target()`.
+3. **Expose it in the DSL** by adding the function to `blade/__init__.py` and [dsl_api.py](src/blade/dsl_api.py).
+4. **Add integration test data** under `src/test/testdata/<rule_name>/` with a `BUILD` file and source fixtures, then add a test class in `src/test/<rule_name>_test.py`.
+5. **Update documentation** in [doc/en/build_rules/cc.md](doc/en/build_rules/cc.md) (or a new file for a new category).
 
-After the code is modified locally, push to your own github repository and you can initiate a Pull Request to us. We will review quickly, but due to busy work, time is not guaranteed.
-It's a good idea to check the code style to make sure that there are unnecessary and redundant comments to avoid unnecessary reviews.
+### Key design patterns
 
-## Other Information
+- **`StrOrList` / `StrOrListOpt`** — Rule-entry functions accept `str | list[str]` unions for BUILD-file ergonomics. Always normalize to `list[str]` via `var_to_list()` (or `var_to_list_or_none()` for optional params) before passing to parent constructors.
+- **Toolchain abstraction** (`toolchain.py`) — Platform-specific build details (compiler, linker, file suffixes) are encapsulated behind the `ToolChain` base class. Rule implementations query the toolchain rather than branching on `os.name`.
+- **`blade.cc_toolchain`** — A read-only proxy exposed to BUILD files via the DSL for platform-aware decisions (file naming, capability queries).
 
-There are also two other netizens' analysis of Blade's implementation principle, which is based on the earlier version of Blade. Although it is somewhat outdated, it still has reference value.
+## Debugging and Diagnostics
 
-* [On the design and implementation of C++Build in Blade](https://tsgsz.github.io/2013/11/01/2013-11-01-thinking-in-design-of-blade-cpp-build/)
-* [Where is the sharp blade in the end](http://blog.sina.com.cn/s/blog_4af176450101bg69.html)
+Most subcommands support `--stop-after` with options `{load, analyze, generate, build}` to stop after a specific phase:
+
+```bash
+blade build --stop-after generate
+```
+
+This stops after generating the backend build file (e.g. `build.ninja`), letting you inspect the generated output.
+
+`--profiling` outputs a performance analysis report after execution. Combine with `--stop-after` to profile specific phases.
+
+## CI
+
+GitHub Actions workflows run on every PR and push to `master`:
+
+| Workflow | Purpose |
+| --- | --- |
+| **Python package** | Unit tests + integration tests + pyright on Ubuntu (Python 3.10–3.14) |
+| **Windows CI** | Unit tests + smoke tests + E2E on Windows (Python 3.10–3.13) |
+| **CodeQL** | Security analysis |
+| **Check Markdown links** | Link validation for documentation |
+
+## Distribution
+
+`dist_blade` in the repository root packages the source into a zip for deployment. Place it alongside the `blade` bootstrap script and `blade.conf`.
+
+## Other Resources
+
+Community analyses of Blade's internals (based on earlier versions, still informative):
+
+- [On the design and implementation of C++Build in Blade](https://tsgsz.github.io/2013/11/01/2013-11-01-thinking-in-design-of-blade-cpp-build/)
+- [Where is the sharp blade in the end](http://blog.sina.com.cn/s/blog_4af176450101bg69.html)

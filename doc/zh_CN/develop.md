@@ -1,82 +1,156 @@
 # 开发
 
+## 代码结构
+
+```text
+src/
+├── blade/              # 主源码包
+│   ├── main.py         # CLI 入口
+│   ├── command_line.py # 命令行参数解析
+│   ├── config.py       # 配置加载（blade.conf, BLADE_ROOT 等）
+│   ├── workspace.py    # 工作空间发现与管理
+│   ├── load_build_files.py  # BUILD 文件加载与 DSL 沙箱
+│   ├── dependency_analyzer.py # 拓扑排序与依赖解析
+│   ├── backend.py      # 后端构建系统生成（Ninja）
+│   ├── build_manager.py     # 构建编排
+│   ├── ninja_runner.py      # Ninja 调用
+│   ├── binary_runner.py     # 执行构建产物
+│   ├── test_runner.py       # 测试沙箱与执行
+│   ├── test_scheduler.py    # 并行测试调度
+│   ├── toolchain.py    # 编译工具链抽象（GCC、MSVC、Clang）
+│   ├── *_targets.py    # 构建规则实现（cc、java、py、go 等）
+│   ├── target.py       # 目标基类
+│   ├── build_rules.py  # 规则注册基础设施
+│   ├── dsl_api.py      # 暴露给 BUILD 文件的 safe `blade.*` DSL 模块
+│   ├── blade_types.py  # 共享类型别名（StrOrList、StrOrListOpt）
+│   ├── util.py         # 通用工具函数
+│   ├── console.py      # 日志与诊断输出
+│   ├── config.py       # 配置模式定义
+│   └── inclusion_check.py  # C/C++ 头文件依赖检查
+├── tests/
+│   └── unit/           # 单元测试（pytest，无需工具链）
+└── test/               # 集成/端到端测试（pytest，需要工具链）
+```
+
+**规则模块**（`*_targets.py`）各自定义一个或多个构建规则：
+
+| 模块 | 规则 |
+| --- | --- |
+| `cc_targets.py` | `cc_library`、`cc_binary`、`cc_test`、`cc_plugin`、`prebuilt_cc_library`、`foreign_cc_library` |
+| `java_targets.py` | `java_library`、`java_binary`、`java_test` |
+| `py_targets.py` | `py_library`、`py_binary`、`py_test` |
+| `proto_library_target.py` | `proto_library` |
+| `go_targets.py` | `go_library`、`go_binary`、`go_test` |
+| `scala_targets.py` | `scala_library`、`scala_test` |
+| `cu_targets.py` | `cu_library`、`cu_binary`、`cu_test` |
+| `gen_rule_target.py` | `gen_rule` |
+| `lex_yacc_target.py` | `lex_yacc_library` |
+| `resource_library_target.py` | `resource_library` |
+| `windows_resources_target.py` | `windows_resources` |
+| `package_target.py` | `package` |
+| `sh_test_target.py` | `sh_test` |
+
 ## 基本原理
 
 ### 加载配置
 
-Blade 启动后，会依次尝试通过`execfile`函数执行多个路径下的配置文件，这些配置文件都是 python 源文件，调用 blade 里预先定义好的配置函数，
-把配置项更新到 blade.config 的配置 dict 里，供后续使用。
+Blade 启动后，依次尝试通过 `execfile` 函数执行多个路径下的配置文件。这些配置文件都是 Python 源文件，调用 blade 里预先定义好的配置函数，把配置项更新到 `blade.config` 的配置 dict 里。
 
-配置文件加载完毕后，blade 还会尝试把命令行选项里和 global_config 同名的选项更新到配置里，使得来自命令行的配置信息优先级最高。
+然后，命令行选项里与 `global_config` 同名的选项会覆盖更新到配置中，使得命令行参数的优先级最高。
 
 ### 加载 BUILD 文件
 
-Blade 会从命令行指定的构建目标展开，通过`execfile`函数逐个执行`BUILD`文件，BUILD 文件里的代码被执行的时候，
-就会调用 blade 内部预先定义好的规则函数，把目标注册到 blade 内部的数据结构里。
+Blade 从命令行指定的构建目标展开，通过受限的 `execfile` 沙箱逐个执行 `BUILD` 文件。BUILD 文件代码被执行时，调用规则函数（如 `cc_library(...)`）把目标注册到 blade 内部的数据结构里。
 
-对于被命令行里指定的目标直接或者间接依赖的目标，blade 都会加载相应目录下的 BUILD 文件，直到所有的依赖都被加载。
+所有传递依赖对应的 BUILD 文件都会被递归加载，直到所有依赖都被加载。
 
 ### 依赖分析
 
-Blade 会对加载后的目标，从命令行指定的目标为根出发，进行拓扑排序，得出一个要构建的目标列表及其正确的构建顺序。
+Blade 从命令行指定的目标根出发，进行拓扑排序，得出有序的构建目标列表。
 
 ### 生成后端构建文件
 
-Blade 得到要构建的目标列表后，就可以逐渐根据各个目标来生成相应的构建规则的目标动作，并输出到后端构建脚本文件。
+各目标逐一生成后端构建动作（Ninja 规则），写入后端构建文件（如 `build.ninja`）。
 
 ### 执行后端构建系统
 
-Blade 调用后端构建工具执行实际的构建，执行完毕后，删除后端构建脚本文件。
+Blade 调用后端构建工具（Ninja）执行实际构建，完成后删除生成的构建文件。
 
 ### 运行测试
 
-从命令行收集到的测试目标列表，逐个构建执行环境运行测试，Blade 支持多任务并发测试，这时后台会起多个线程去执行测试文件。
-所有测试都执行完毕后，收集测试结果汇总并输出报告。
+测试目标先被构建，然后在沙箱环境中并行执行。所有测试完毕后汇总结果并输出报告。
 
-## 如何参与开发
+## 测试
 
-欢迎给 Blade 贡献代码！无论是 bugfix 还是 feature。大的 feature 可以先提 issue，以避免沟通不畅带来的反复。
+### 单元测试（`src/tests/unit/`）
 
-### 拉取代码
+快速的离线测试，验证独立模块。不依赖工具链或系统环境。
 
-通过 github 的 Fork 功能 fork 到你自己的仓库，即可进行修改和测试。
+```bash
+pip install -r requirements-dev.txt
+PYTHONPATH=src python -m pytest src/tests/unit/ -v
+```
 
-### 修改文件
+### 集成测试（`src/test/`）
 
-我们遵守 Google Python 代码风格，修改代码请用 pylint 进行代码检查。
+端到端测试，对 `src/test/testdata/` 下的夹具数据驱动真实的构建/测试流程。需要可用的 C/C++ 工具链（GCC、MSVC 或 Clang）。
 
-### 测试验证
+```bash
+src/test/runall.sh          # 运行全部集成测试
+src/test/run.sh <test_name> # 运行单个测试（如 cc_library_test）
+```
 
-在源代码开发目录中，Blade 优先运行开发中的代码。可以执行 src/test/runalltests.sh 进行全局验证。
+### 类型检查
 
-### 调试与诊断
+```bash
+pip install -r requirements-dev.txt
+pyright
+```
 
-大多数子命令支持`--stop-after`选项，可选的参数有{load, analyze, generate, build}，可以控制 blade 在完成此阶段后就结束。比如
+## 新增构建规则
+
+1. **创建目标类** — 在新增或已有的 `*_targets.py` 模块中创建目标类，继承 `Target`（或合适的子类）并实现 `generate()` 方法。
+2. **定义规则入口函数**（如 `windows_resources()`）—— 此函数负责将 BUILD 友好的类型（`StrOrListOpt`）通过 `var_to_list` / `var_to_list_or_none` 规范化为 `list[str]`，创建目标实例，通过 `build_manager.instance.register_target()` 注册。
+3. **暴露到 DSL** — 将规则函数加入 `blade/__init__.py` 和 [dsl_api.py](src/blade/dsl_api.py)。
+4. **添加集成测试数据** — 在 `src/test/testdata/<rule_name>/` 下放置 BUILD 文件和源文件夹具，在 `src/test/<rule_name>_test.py` 添加测试类。
+5. **更新文档** — 在 [doc/zh_CN/build_rules/cc.md](doc/zh_CN/build_rules/cc.md)（或新规则类别对应的新文件）中添加说明。
+
+### 核心设计模式
+
+- **`StrOrList` / `StrOrListOpt`** — 规则入口函数接受 `str | list[str]` 联合类型，以方便 BUILD 文件书写。始终在传入父类构造函数之前，通过 `var_to_list()`（可选参数用 `var_to_list_or_none()`）规范化为 `list[str]`。
+- **工具链抽象**（`toolchain.py`）— 平台相关的构建细节（编译器、链接器、文件后缀）封装在 `ToolChain` 基类之后。规则实现通过查询工具链对象而非分支判断 `os.name`。
+- **`blade.cc_toolchain`** — 通过 DSL 暴露给 BUILD 文件的只读代理对象，用于跨平台判断（文件命名、能力查询等）。
+
+## 调试与诊断
+
+大多数子命令支持 `--stop-after` 选项，可选参数为 `{load, analyze, generate, build}`，控制在指定阶段完成后停止：
 
 ```bash
 blade build --stop-after generate
 ```
 
-使得 blade 在生成后端构建系统描述文件（比如`build.ninja`）后即结束，可以用于检查生成的文件的问题。
+此命令在生成后端构建系统描述文件（如 `build.ninja`）后停止，可用于检查生成结果。
 
-### 性能分析
+`--profiling` 选项在 blade 结束后输出性能分析报告。可与 `--stop-after` 组合用于分析不同阶段的性能。
 
-大多数子命令支持`--profiling`选项，在 blade 结束后会输出性能分析报告。如果需要更详细的分析，可以把性能分析留下的 blade.pstats 按指示转为图。
+## CI
 
-和--stop-after 选项组合，可以用于分析不同阶段的性能。
+GitHub Actions 工作流在每次 PR 和 push 到 `master` 时运行：
 
-### 打包
+| 工作流 | 用途 |
+| --- | --- |
+| **Python package** | Ubuntu 上的单元测试 + 集成测试 + pyright（Python 3.10–3.14） |
+| **Windows CI** | Windows 上的单元测试 + smoke 测试 + E2E（Python 3.10–3.13） |
+| **CodeQL** | 安全分析 |
+| **Check Markdown links** | 文档链接有效性检查 |
 
-代码根目录下的`dist_blade`可以用来打包成 zip 方便部署，和同目录下的`blade`bash 脚本以及`blade.conf`放在一起即可。
+## 打包
 
-### Pull Request
-
-代码本地修改后，Push 到你自己的 github 仓库，再向我们发起 Pull Request 即可。我们会尽快进行 review，但是由于工作繁忙，时间不好保证。
-最好检查一下代码风格，确保有必要而不冗余的注释，避免不必要的评审往复。
+代码根目录下的 `dist_blade` 可将源码打包为 zip 用于部署，与 `blade` 启动脚本和 `blade.conf` 放在同一目录即可。
 
 ## 其他资料
 
-这里还有两篇其他网友对 Blade 实现原理的分析，是基于 Blade 早期版本，虽然有些过时，但是依然有参考价值。
+以下两篇社区对 Blade 实现原理的分析，基于 Blade 早期版本，有些过时，仍有参考价值：
 
-* [浅谈 blade 中 C++Build 的设计与实现](https://tsgsz.github.io/2013/11/01/2013-11-01-thinking-in-design-of-blade-cpp-build/)
-* [锋利的 blade 到底锋利在哪里](http://blog.sina.com.cn/s/blog_4af176450101bg69.html)
+- [浅谈 blade 中 C++Build 的设计与实现](https://tsgsz.github.io/2013/11/01/2013-11-01-thinking-in-design-of-blade-cpp-build/)
+- [锋利的 blade 到底锋利在哪里](http://blog.sina.com.cn/s/blog_4af176450101bg69.html)
