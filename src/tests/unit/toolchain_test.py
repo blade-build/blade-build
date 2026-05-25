@@ -215,10 +215,18 @@ class CreateToolchainMultiConfigTest(unittest.TestCase):
 
     def setUp(self):
         # Build a fake config section with named entries, mimicking what
-        # cc_toolchain_config(name=...) produces.
+        # cc_toolchain_config(name=...) produces. All entries, including the
+        # unnamed default, are stored as dicts keyed by name.
         self._section = {
-            'name': '',
-            'kind': '',
+            '': {
+                'name': '',
+                'kind': '',
+                'prefix': '',
+                'tool_prefix': '',
+                'target': '',
+                'cc': '', 'cxx': '', 'ld': '', 'ar': '',
+                'msvc_version': 'auto', 'target_arch': 'auto',
+            },
             'gcc-13': {
                 'name': 'gcc-13',
                 'kind': 'gcc',
@@ -275,12 +283,14 @@ class ResolveConfigFallbackTest(unittest.TestCase):
 
     def setUp(self):
         self._section = {
-            'kind': 'gcc',
-            'target': 'linux',
-            'prefix': '/default',
-            'tool_prefix': '',
-            'cc': '', 'cxx': '', 'ld': '', 'ar': '',
-            'msvc_version': 'auto', 'target_arch': 'auto',
+            '': {
+                'kind': 'gcc',
+                'target': 'linux',
+                'prefix': '/default',
+                'tool_prefix': '',
+                'cc': '', 'cxx': '', 'ld': '', 'ar': '',
+                'msvc_version': 'auto', 'target_arch': 'auto',
+            },
         }
 
     def test_falls_back_to_section_when_cfg_is_none(self):

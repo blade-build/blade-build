@@ -1068,19 +1068,20 @@ def _resolve_config(cfg, tc_section):
     """Given an optional named *cfg* dict, return (kind, target, prefix,
     tool_prefix, cc, cxx, ld, ar, target_arch, msvc_version).
 
-    Falls back to the default section items when *cfg* is None.
+    Falls back to the unnamed default entry (key ``''``) when *cfg* is None.
     """
-    get = cfg.get if cfg else tc_section.get
-    kind = get('kind', '') or _auto_detect_kind()
-    target = get('target', '') or _default_target_for_kind(kind)
-    prefix = get('prefix', '')
-    tool_prefix = get('tool_prefix', '')
-    cc = get('cc', '')
-    cxx = get('cxx', '')
-    ld = get('ld', '')
-    ar = get('ar', '')
-    target_arch = get('target_arch', '')
-    msvc_version = get('msvc_version', '')
+    if cfg is None:
+        cfg = tc_section.get('', {})
+    kind = cfg.get('kind', '') or _auto_detect_kind()
+    target = cfg.get('target', '') or _default_target_for_kind(kind)
+    prefix = cfg.get('prefix', '')
+    tool_prefix = cfg.get('tool_prefix', '')
+    cc = cfg.get('cc', '')
+    cxx = cfg.get('cxx', '')
+    ld = cfg.get('ld', '')
+    ar = cfg.get('ar', '')
+    target_arch = cfg.get('target_arch', '')
+    msvc_version = cfg.get('msvc_version', '')
     return kind, target, prefix, tool_prefix, cc, cxx, ld, ar, target_arch, msvc_version
 
 
@@ -1103,9 +1104,6 @@ def create_toolchain(cc_toolchain=''):
         cc_toolchain = blade_config.get_section('cc_config').get('toolchain', '')
 
     cfg, kind = _lookup_config(tc_section, cc_toolchain)
-
-    if cfg is None and not kind:
-        kind = tc_section.get('kind', '') or _auto_detect_kind()
 
     (kind, target, prefix, tool_prefix, cc, cxx, ld, ar,
      target_arch, msvc_version) = _resolve_config(cfg, tc_section)

@@ -681,7 +681,7 @@ _CC_TOOLCHAIN_KIND_VALUES = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin'}
 
 
 @config_rule
-def cc_toolchain_config(append=None, **kwargs):
+def cc_toolchain_config(**kwargs):
     """C/C++ toolchain configuration.
 
     Supports multiple named configs, selectable via ``--cc-toolchain=<name>``::
@@ -695,14 +695,11 @@ def cc_toolchain_config(append=None, **kwargs):
     """
     _check_kwarg_enum_value(kwargs, 'kind', _CC_TOOLCHAIN_KIND_VALUES)
     name = kwargs.get('name', '')
-    if name:
-        section = _blade_config.get_section('cc_toolchain_config')
-        if name in section:
-            _blade_config.warning(
-                f'cc_toolchain_config: duplicate name "{name}", overwriting')
-        section[name] = kwargs
-    else:
-        _blade_config.update_config('cc_toolchain_config', append, kwargs)
+    section = _blade_config.get_section('cc_toolchain_config')
+    if name in section:
+        _blade_config.warning(
+            f'cc_toolchain_config: duplicate name "{name or "(unnamed)"}", overwriting')
+    section[name] = kwargs
 
 
 @config_rule
