@@ -247,15 +247,15 @@ class ToolChain:
 
     def object_file_of(self, src):
         """Return the object file path for a given source file."""
-        return src + '.o'
+        return src + self.obj_suffix
 
     def static_library_name(self, name):
         """Return the static library output name for a given target name."""
-        return 'lib%s.a' % name
+        return self.lib_prefix + name + self.static_lib_suffix
 
     def dynamic_library_name(self, name):
         """Return the dynamic library output name for a given target name."""
-        return 'lib%s.so' % name
+        return self.lib_prefix + name + self.dynamic_lib_suffix
 
     def executable_file_name(self, name):
         """Return the executable output name for a given target name."""
