@@ -31,6 +31,8 @@ The global Blade API module, accessed through `blade.`, includes:
 - `host_os` property: Name of the host OS (the machine running the build): `'darwin'`, `'linux'`, or `'windows'`
 - `host_arch` property: Canonical host CPU architecture: `'x86_64'`, `'aarch64'`, etc.
 
+Note: The build environment (host) is not necessarily the same as the target environment. `host_os` and `host_arch` should primarily be used when invoking host-side developer tools. For platform decisions related to build targets, use `blade.cc_toolchain`'s `target_os` and `target_arch` properties instead.
+
 ### `blade.config` Submodule
 
 Access configuration information, including:

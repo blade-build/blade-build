@@ -32,6 +32,8 @@
 - `host_os` 属性：构建主机（运行构建的机器）的操作系统名称：`'darwin'`、`'linux'` 或 `'windows'`
 - `host_arch` 属性：构建主机的规范化 CPU 架构：`'x86_64'`、`'aarch64'` 等
 
+注意：构建环境（host）不一定等同于编译目标环境（target）。`host_os` 和 `host_arch` 主要用于调用构建主机上的开发工具等场景。对于编译目标相关的平台判断，应使用 `blade.cc_toolchain` 的 `target_os` 和 `target_arch` 属性。
+
 ### `blade.config` 模块
 
 访问配置信息，包括：
