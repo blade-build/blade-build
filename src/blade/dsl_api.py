@@ -170,15 +170,11 @@ class _CCToolchainProxy:
 def _safe_blade_module():
     """Make the safe blade module."""
     module = _new_module('blade')
-    module.config = _safe_config_module()
     module.console = _safe_console_module()
-    module.current_source_dir = blade.current_source_dir
-    module.current_target_dir = blade.current_target_dir
     module.path = _safe_path_module()
     module.re = re
     module.util = _safe_util_module()
     module.workspace = _safe_workspace_module()
-    module.cc_toolchain = _CCToolchainProxy()
     module.host_os = _host_os()
     module.host_arch = _host_arch()
     return module
@@ -192,4 +188,16 @@ def get_blade_module():
     global __blade
     if not __blade:
         __blade = _safe_blade_module()
+        # These attributes  only exists since the load pharse.
+        __blade.config = _safe_config_module()
+        __blade.current_source_dir = blade.current_source_dir
+        __blade.current_target_dir = blade.current_target_dir
+        __blade.cc_toolchain = _CCToolchainProxy()
+
     return __blade
+
+
+def new_blade_module_for_config():
+    """Create a `blade` API module for the config phase."""
+    return _safe_blade_module()
+

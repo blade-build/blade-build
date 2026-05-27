@@ -5,9 +5,8 @@
         "src/test"
     ],
     "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter"
-    },
-    "black-formatter.args": [
-        "--skip-string-normalization"
-    ]
+        "editor.formatOnSave": false,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false
+    }
 }
