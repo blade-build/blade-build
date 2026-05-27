@@ -21,27 +21,45 @@
 
 ## `blade` 模块
 
-全局的 Blade API 模块，通过 `blade.` 来访问，包括：
+全局的 Blade API 模块，通过 `blade.` 来访问。
 
-- `current_source_dir()` 函数：当前 BUILD 文件所在的目录（相对于 workspace 的根目录）
-- `current_target_dir()` 函数：当前 BUILD 文件所对应的构建输出目录（相对于 workspace 的根目录）
-- `config` 子模块：读取 blade 的配置信息
-- `console` 子模块：输出诊断信息
-- `re` 子模块：正则表达式
-- `path` 子模块：`os.path` 的一个受限制的子集
+### 配置阶段可用属性
+
+以下属性在配置文件 `BLADE_ROOT` 和 BUILD 文件中均可使用：
+
 - `host_os` 属性：构建主机（运行构建的机器）的操作系统名称：`'darwin'`、`'linux'` 或 `'windows'`
 - `host_arch` 属性：构建主机的规范化 CPU 架构：`'x86_64'`、`'aarch64'` 等
+- `build_type` 属性：当前构建类型：`'debug'` 或 `'release'`
+- `build_type_is_debug()` 函数：返回 `True` 表示当前为 debug 构建
+- `console` 子模块：输出诊断信息
+- `path` 子模块：`os.path` 的一个受限制的子集
+- `re` 子模块：正则表达式
+- `util` 子模块：辅助函数
 
 注意：构建环境（host）不一定等同于编译目标环境（target）。`host_os` 和 `host_arch` 主要用于调用构建主机上的开发工具等场景。对于编译目标相关的平台判断，应使用 `blade.cc_toolchain` 的 `target_os` 和 `target_arch` 属性。
 
-### `blade.config` 模块
+### 仅 BUILD 阶段可用的属性
+
+以下属性仅在 BUILD 文件加载阶段可用，在 `BLADE_ROOT` 配置阶段访问会报错。如需在配置项中使用这些属性，请使用[函数式配置项](#函数式配置项)延迟到 BUILD 阶段求值：
+
+- `cc_toolchain` 对象：当前平台 C/C++ 工具链的只读代理
+- `config` 子模块：读取配置信息
+- `workspace` 子模块：工作空间信息
+- `current_source_dir` 属性：当前 BUILD 文件所在的目录（相对于 workspace 根目录）
+- `current_target_dir` 属性：当前 BUILD 文件对应的构建输出目录（相对于 workspace 根目录）
+
+---
+
+### `blade.config` 子模块
+
+> **可用阶段：** 仅 BUILD 阶段
 
 访问配置信息，包括：
 
 - `get_section()` 函数：获得一个配置节的内容，比如 `cc_config`，可以通过 `get` 方法读取其中的配置项
 - `get_item()` 函数：获得一个具体的配置项，比如 `blade.config.get_item('cc_config', 'cppflags')`
 
-### `blade.console` 模块
+### `blade.console` 子模块
 
 输出诊断信息，包括：
 
@@ -55,21 +73,25 @@
 
 `os.path` 模块的一个子集，包括 `abspath()`、`basename()`、`dirname()`、`exists()`、`join()`、`normpath()`、`relpath()`、`sep`、`splitext()`。
 
-### `blade.util` 模块
+### `blade.util` 子模块
 
 一些辅助函数，包括：
 
 - `var_to_list()` 函数：如果是 `str`，将其转为单个元素的 `list`
 - `var_to_list_or_none()` 函数：与 `var_to_list()` 类似，但 `None` 值原样透传
 
-### `blade.workspace` 模块
+### `blade.workspace` 子模块
+
+> **可用阶段：** 仅 BUILD 阶段
 
 获得当前[工作空间](workspace.md)的一些信息，包括：
 
-- `root_dir()` 函数：返回当前根工作空间的目录
-- `build_dir()` 函数：返回工作空间下的 build 子目录名，比如 `build64_release`
+- `root_dir` 属性：返回当前根工作空间的目录
+- `build_dir` 属性：返回工作空间下的 build 子目录名，比如 `build64_release`
 
 ### `blade.cc_toolchain` 对象
+
+> **可用阶段：** 仅 BUILD 阶段
 
 当前平台 C/C++ 工具链的只读代理对象，用于在 BUILD 文件中做出跨平台兼容的判断。
 
@@ -115,4 +137,71 @@ elif cc.target_os == 'darwin':
 
 # 构建主机平台（运行构建的机器）
 protoc = 'tools/protoc-%s-%s' % (blade.host_os, blade.host_arch)
+```
+
+---
+
+## 函数式配置项
+
+配置项的值可以是函数（包括 lambda），在构建阶段延迟求值，以访问仅在 BUILD 阶段可用的 `blade` 属性（如 `cc_toolchain`）。
+
+### 基本用法
+
+```python
+cc_test_config(
+    # 根据构建类型和编译目标架构动态决定配置项的值
+    dynamic_link=lambda blade: not blade.build_type_is_debug() and blade.cc_toolchain.target_arch != 'ppc64le',
+    heap_check=lambda blade: 'strict' if blade.cc_toolchain.target_arch != 'aarch64' else '',
+)
+```
+
+### 限制
+
+- 传入的函数必须接受**恰好 1 个参数**（`blade` 模块），赋值时即检查参数个数
+- 函数的返回值类型必须与配置项的默认值类型一致，在求值时检查
+- **函数不能和普通值组合在同一列表中**——整个配置项要么是函数，要么是普通值。不支持 `[func, 'value']` 这样的混合列表
+- 不支持 `append_` / `prepend_` 前缀与函数结合使用
+- 普通函数也可以使用，不限于 lambda：
+
+```python
+def my_extra_incs(blade):
+    return [
+        'thirdparty/',
+        'thirdparty/%s/' % blade.cc_toolchain.target_arch,
+    ]
+
+cc_config(
+    extra_incs=my_extra_incs,
+)
+```
+
+---
+
+## `build_target` 废弃
+
+`build_target` 已废弃，将在未来版本中移除。请使用以下 `blade.` 替代方式：
+
+| `build_target` | 替代 | 说明 |
+| --- | --- | --- |
+| `build_target.bits` | `blade.cc_toolchain` (通过 target_arch 推算) | 目标位数，如 32、64。需在 BUILD 阶段通过函数式配置项访问 |
+| `build_target.arch` | `blade.cc_toolchain.target_arch` | 目标 CPU 架构 |
+| `build_target.os` | `blade.cc_toolchain.target_os` | 目标操作系统 |
+| `build_target.is_debug()` | `blade.build_type_is_debug()` | 是否为 debug 构建 |
+
+**迁移示例：**
+
+```python
+# 旧写法 (BLADE_ROOT 中)
+def get_build_dir():
+    return 'build%d_%s' % (
+        build_target.bits,
+        'debug' if build_target.is_debug() else 'release',
+    )
+
+# 新写法
+# 配置阶段可用的属性直接用
+# 配置阶段不可用的属性（如 cc_toolchain）通过函数式配置项延迟求值
+cc_test_config(
+    dynamic_link=lambda blade: not blade.build_type_is_debug() and blade.cc_toolchain.target_arch != 'ppc64le',
+)
 ```

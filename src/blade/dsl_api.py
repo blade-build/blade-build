@@ -20,6 +20,7 @@ import types
 
 import blade
 
+from blade import build_attributes
 from blade import config
 from blade import console
 from blade import util
@@ -167,14 +168,53 @@ class _CCToolchainProxy:
         return self._tc.tool(key)
 
 
-def _safe_blade_module():
+# Attributes only available during BUILD phase (not when loading BLADE_ROOT).
+_BUILD_ONLY_ATTRS = frozenset({
+    'cc_toolchain',
+    'config',
+    'current_source_dir',
+    'current_target_dir',
+    'workspace',
+})
+
+_BUILD_ONLY_HINT = (
+    ' is only available during BUILD phase. '
+    'Use a function-valued config item: lambda blade: blade.'
+)
+
+
+class _BladeModule(types.ModuleType):
+    """Blade module with read-only properties and config-phase guards."""
+
+    def __init__(self, name: str, config_phase: bool = False):
+        super().__init__(name)
+        self._config_phase = config_phase
+
+    def __getattr__(self, name: str):
+        if self._config_phase and name in _BUILD_ONLY_ATTRS:
+            console.fatal(f'blade.{name}{_BUILD_ONLY_HINT}{name}')
+        raise AttributeError(f"module 'blade' has no attribute {name!r}")
+
+    @property
+    def build_type(self) -> str:
+        """Current build type: ``'debug'`` or ``'release'``."""
+        instance = blade.build_manager.instance
+        if instance is not None:
+            return instance.get_options().profile
+        return 'debug' if build_attributes.attributes.is_debug() else 'release'
+
+    def build_type_is_debug(self) -> bool:
+        """Return ``True`` if the build type is ``'debug'``."""
+        return self.build_type == 'debug'
+
+
+def _safe_blade_module(config_phase: bool = True):
     """Make the safe blade module."""
-    module = _new_module('blade')
+    module = _BladeModule('blade', config_phase=config_phase)
     module.console = _safe_console_module()
     module.path = _safe_path_module()
     module.re = re
     module.util = _safe_util_module()
-    module.workspace = _safe_workspace_module()
     module.host_os = _host_os()
     module.host_arch = _host_arch()
     return module
@@ -187,17 +227,18 @@ def get_blade_module():
     """Get or create the `blade` API module."""
     global __blade
     if not __blade:
-        __blade = _safe_blade_module()
-        # These attributes  only exists since the load pharse.
+        __blade = _safe_blade_module(config_phase=False)
+        # These attributes only exists since the load pharse.
         __blade.config = _safe_config_module()
         __blade.current_source_dir = blade.current_source_dir
         __blade.current_target_dir = blade.current_target_dir
         __blade.cc_toolchain = _CCToolchainProxy()
+        __blade.workspace = _safe_workspace_module()
 
     return __blade
 
 
 def new_blade_module_for_config():
     """Create a `blade` API module for the config phase."""
-    return _safe_blade_module()
+    return _safe_blade_module(config_phase=True)
 

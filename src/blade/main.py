@@ -64,13 +64,13 @@ def _check_error_log(stage):
 
 def run_subcommand(blade_path, command, options, ws, targets):
     """Run particular subcommands."""
+    builder = build_manager.initialize(blade_path, command, options, ws, targets)
+
     # The 'dump' command is special, some kind of dump items should be ran before loading.
     if command == 'dump' and options.dump_config:
-        output_file_name = os.path.join(ws.working_dir(), options.dump_to_file)
+        output_file_name = os.path.join(ws.working_dir, options.dump_to_file)
         config.dump(output_file_name)
         return _check_error_log('dump')
-
-    builder = build_manager.initialize(blade_path, command, options, ws, targets)
 
     # Prepare the targets
     stages = [
@@ -94,7 +94,7 @@ def run_subcommand(blade_path, command, options, ws, targets):
 
 def run_subcommand_profile(blade_path, command, options, ws, targets):
     """Run subcommand within profile."""
-    pstats_file = os.path.join(ws.build_dir(), 'blade.pstats')
+    pstats_file = os.path.join(ws.build_dir, 'blade.pstats')
     # NOTE: can't use an plain int variable to receive exit_code
     # because in python int is an immutable object, assign to it in the runctx
     # wll not modify the local exit_code.
@@ -126,7 +126,7 @@ def _main(blade_path, argv):
 
     ws = workspace.initialize(options)
     ws.switch_to_root_dir()
-    load_config(options, ws.root_dir())
+    load_config(options, ws.root_dir)
 
     adjust_config_by_options(config, options)
 
@@ -137,7 +137,7 @@ def _main(blade_path, argv):
 
     if not targets:
         targets = ['.']
-    targets = target_pattern.normalize_list(targets, ws.working_dir())
+    targets = target_pattern.normalize_list(targets, ws.working_dir)
 
     ws.setup_build_dir()
 

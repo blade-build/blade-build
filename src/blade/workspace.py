@@ -83,12 +83,15 @@ class Workspace:
         self.__working_dir = os.path.relpath(working_dir, self.__root_dir)  # pyright: ignore[reportCallIssue, reportArgumentType]
         self.__build_dir = ''
 
+    @property
     def root_dir(self):
         return self.__root_dir
 
+    @property
     def build_dir(self):
         return self.__build_dir
 
+    @property
     def working_dir(self):
         return self.__working_dir
 

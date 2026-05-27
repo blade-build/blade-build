@@ -22,18 +22,36 @@ to disable DSL restriction globally, set the `global_config.restricted_dsl = Fal
 
 The global Blade API module, accessed through `blade.`, includes:
 
-- `current_source_dir()` function: The directory where the current BUILD file is located (relative to the root directory of the workspace)
-- `current_target_dir()` function: The output directory where the current BUILD file is located corresponds to (relative to the root directory of the workspace)
-- `config` submodule: Read blade configuration information
-- `console` submodule: Output diagnostic information
-- `re` submodule: The python regex library
-- `path` submodule: a Restricted subset of `os.path`
+### Config-phase Attributes
+
+These attributes are available in both `BLADE_ROOT` configuration files and BUILD files:
+
 - `host_os` property: Name of the host OS (the machine running the build): `'darwin'`, `'linux'`, or `'windows'`
 - `host_arch` property: Canonical host CPU architecture: `'x86_64'`, `'aarch64'`, etc.
+- `build_type` property: Current build type: `'debug'` or `'release'`
+- `build_type_is_debug()` function: Returns `True` if the build type is `'debug'`
+- `console` submodule: Output diagnostic information
+- `path` submodule: a Restricted subset of `os.path`
+- `re` submodule: The python regex library
+- `util` submodule: Auxiliary functions
 
 Note: The build environment (host) is not necessarily the same as the target environment. `host_os` and `host_arch` should primarily be used when invoking host-side developer tools. For platform decisions related to build targets, use `blade.cc_toolchain`'s `target_os` and `target_arch` properties instead.
 
+### BUILD-phase-only Attributes
+
+These attributes are only available during BUILD file loading. Accessing them during `BLADE_ROOT` config parsing will abort with an error. Use [function-valued config items](#function-valued-config-items) to defer evaluation to the BUILD phase:
+
+- `cc_toolchain` object: Read-only proxy to the current platform's C/C++ toolchain
+- `config` submodule: Read blade configuration information
+- `workspace` submodule: Workspace information
+- `current_source_dir` property: The directory where the current BUILD file is located (relative to the root directory of the workspace)
+- `current_target_dir` property: The output directory where the current BUILD file is located corresponds to (relative to the root directory of the workspace)
+
+---
+
 ### `blade.config` Submodule
+
+> **Phase:** BUILD only
 
 Access configuration information, including:
 
@@ -52,7 +70,7 @@ Output diagnostic information, including:
 
 ### `blade.path` Submodule
 
-A subset of the `os.path` module, including `abspath()`, `basename()`, `dirname()`, `exists()`, `join()`, `normpath()`, `relpath ()`, `sep`, `splitext()`.
+A subset of the `os.path` module, including `abspath()`, `basename()`, `dirname()`, `exists()`, `join()`, `normpath()`, `relpath()`, `sep`, `splitext()`.
 
 ### `blade.util` Submodule
 
@@ -61,14 +79,18 @@ Some auxiliary functions, including:
 - `var_to_list()` function: If type of the argument is `str`, turn it into `list` contains a single element
 - `var_to_list_or_none()` function: Like `var_to_list()`, but passes `None` through unchanged
 
-### `blade.workspace` module
+### `blade.workspace` Submodule
+
+> **Phase:** BUILD only
 
 Get some information about the current [workspace](workspace.md), including:
 
-- `root_dir()` function: Returns the directory of the current root workspace
-- `build_dir()` function: Returns the name of the build subdirectory under the workspace, such as `build64_release`
+- `root_dir` property: Returns the directory of the current root workspace
+- `build_dir` property: Returns the name of the build subdirectory under the workspace, such as `build64_release`
 
 ### `blade.cc_toolchain` Object
+
+> **Phase:** BUILD only
 
 A read-only proxy to the current platform's C/C++ toolchain, for making platform-aware decisions in BUILD files.
 
@@ -114,4 +136,71 @@ elif cc.target_os == 'darwin':
 
 # Host platform (the machine running the build)
 protoc = 'tools/protoc-%s-%s' % (blade.host_os, blade.host_arch)
+```
+
+---
+
+## Function-valued Config Items
+
+Config item values can be functions (including lambdas) that are evaluated lazily during the BUILD phase, allowing access to `blade` attributes that are only available at that stage (e.g. `cc_toolchain`).
+
+### Basic Usage
+
+```python
+cc_test_config(
+    # Dynamically determine config values based on build type and target architecture
+    dynamic_link=lambda blade: not blade.build_type_is_debug() and blade.cc_toolchain.target_arch != 'ppc64le',
+    heap_check=lambda blade: 'strict' if blade.cc_toolchain.target_arch != 'aarch64' else '',
+)
+```
+
+### Limitations
+
+- The function must accept **exactly 1 parameter** (the `blade` module). The arity is checked at assignment time.
+- The return type must match the default value type of the config item. This is checked at evaluation time.
+- **Functions cannot be mixed with plain values in the same list** — the entire item value is either a function or a plain value. Mixed lists such as `[func, 'value']` are not supported.
+- The `append_` / `prepend_` prefixes cannot be used with function-valued items.
+- Regular functions work, not just lambdas:
+
+```python
+def my_extra_incs(blade):
+    return [
+        'thirdparty/',
+        'thirdparty/%s/' % blade.cc_toolchain.target_arch,
+    ]
+
+cc_config(
+    extra_incs=my_extra_incs,
+)
+```
+
+---
+
+## `build_target` Deprecation
+
+`build_target` is deprecated and will be removed in a future version. Use the following `blade.` replacements:
+
+| `build_target` | Replacement | Notes |
+| --- | --- | --- |
+| `build_target.bits` | `blade.cc_toolchain` (inferred from target_arch) | Target bit width, e.g. 32 or 64. Requires function-valued config item at BUILD phase |
+| `build_target.arch` | `blade.cc_toolchain.target_arch` | Target CPU architecture |
+| `build_target.os` | `blade.cc_toolchain.target_os` | Target operating system |
+| `build_target.is_debug()` | `blade.build_type_is_debug()` | Whether this is a debug build |
+
+**Migration example:**
+
+```python
+# Old (in BLADE_ROOT)
+def get_build_dir():
+    return 'build%d_%s' % (
+        build_target.bits,
+        'debug' if build_target.is_debug() else 'release',
+    )
+
+# New
+# Config-phase attributes can be used directly
+# BUILD-phase-only attributes (e.g. cc_toolchain) require function-valued config items
+cc_test_config(
+    dynamic_link=lambda blade: not blade.build_type_is_debug() and blade.cc_toolchain.target_arch != 'ppc64le',
+)
 ```

@@ -62,9 +62,9 @@ class Blade:
         # In query dependents mode, we must load all targets in workspace to get a whole view
         self.__load_targets = ['.:...'] if command == 'query' and options.dependents else targets
         self.__blade_path = blade_path
-        self.__root_dir = workspace.root_dir()
-        self.__build_dir = workspace.build_dir()
-        self.__working_dir = workspace.working_dir()
+        self.__root_dir = workspace.root_dir
+        self.__build_dir = workspace.build_dir
+        self.__working_dir = workspace.working_dir
 
         self.__options = options
         self.__command = command

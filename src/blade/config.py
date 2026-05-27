@@ -12,6 +12,7 @@ the BLADE_ROOT as a configuration file.
 
 
 import hashlib
+import inspect
 import os
 import pprint
 import re
@@ -34,294 +35,388 @@ def config_rule(func):
     return func
 
 
+# Template defining all config sections, their default values, and types.
+# Read-only — never modified at runtime. User-provided values are stored in
+# ``BladeConfig.config``.
+_CONFIG_TEMPLATE = {
+    'global_config': {
+        '__help__': 'Global Configuration',
+        'build_path_template': 'build${bits}_${profile}',
+        'duplicated_source_action': 'warning',
+        'duplicated_source_action__help__': "Can be 'warning', 'error', 'none'",
+        'test_timeout': 0,
+        'test_timeout__help__':
+            'Per-test timeout in seconds. 0 (default) or any '
+            'non-positive value means unlimited.',
+        'test_related_envs__help__':
+            'Environment variables which need to see whether changed before incremental '
+            'testing. regex is allowed',
+        'test_related_envs': [],
+        'backend_builder': 'ninja',
+        'debug_info_level': 'mid',
+        'build_jobs': 0,
+        'build_jobs__help__': constants.HELP.build_jobs,
+        'test_jobs': 0,
+        'test_jobs__help__': 'The number of test jobs to run simultaneously',
+        'run_unrepaired_tests': False,
+        'run_unrepaired_tests__help__': constants.HELP.run_unrepaired_tests,
+        'glob_error_severity': 'error',
+        'glob_error_severity__help__': 'The severity of glob error, can be %s' % constants.SEVERITIES,
+        'default_visibility': set(),
+        'default_visibility__help__': 'Default visibility for targets that do not declare this attribute',
+        'legacy_public_targets': set(),
+        'legacy_public_targets__help__': 'List of targets with legacy public visibility',
+
+        'restricted_dsl': True,
+        'restricted_dsl__help__': 'Whether use the restricted SDL in BUILD languages',
+        'unrestricted_dsl_dirs': set(),
+        'unrestricted_dsl_dirs__help__': 'Dirs in which allow unrestrict python DSL',
+
+    },
+
+    'cc_config': {
+        '__help__': 'C/C++ Configuration',
+        'toolchain': '',
+        'toolchain__help__': 'Default toolchain name, overridable via --cc-toolchain=',
+        'extra_incs': [],
+        'cppflags': [],
+        'cflags': [],
+        'cxxflags': [],
+        'linkflags': [],
+        'c_warnings': [],
+        'cxx_warnings': [],
+        'warnings': [],
+        'optimize': [],
+        'benchmark_libs': [],
+        'benchmark_main_libs': [],
+        'secretcc': '',
+        'debug_info_levels': {
+            'no': ['-g0'],
+            'low': ['-g1'],
+            'mid': ['-g'],
+            'high': ['-g3'],
+        },
+        'fission': False,
+        'dwp': False,
+        'fission__help__': 'Whether to generate split dwarf debug info',
+        'hdr_dep_missing_severity': 'error',
+        'hdr_dep_missing_severity__help__': 'The severity of the missing dependency on the '
+            'library to which the header file belongs, can be %s' % constants.SEVERITIES,
+        'hdr_dep_missing_suppress': {},
+        'hdr_dep_missing_suppress__help__': 'Header deps missing suppress control, see docs for details',
+        'allowed_undeclared_hdrs': set(),
+        'allowed_undeclared_hdrs__help__': 'Allowed undeclared header files',
+    },
+
+    'cc_library_config': {
+        '__help__': 'C/C++ Library Configuration',
+        'prebuilt_libpath_pattern': 'lib${bits}',
+        'generate_dynamic': False,
+        # Options passed to ar/ranlib to control how
+        # the archive is created, such as, let ar operate
+        # in deterministic mode discarding timestamps
+        'arflags': ['rcs'],
+        'ranlibflags': [],
+        'hdrs_missing_severity': 'error',
+        'hdrs_missing_suppress': set(),
+    },
+
+    'cc_binary_config': {
+        '__help__': 'C/C++ Executable Configuration',
+        'extra_libs': [],
+        'run_lib_paths': [],
+    },
+
+    'cc_test_config': {
+        '__help__': 'C/C++ Test Configuration',
+        'dynamic_link': False,
+        'heap_check': '',
+        'gperftools_libs': [],
+        'gperftools_debug_libs': [],
+        'gtest_libs': [],
+        'gtest_main_libs': [],
+        'pprof_path': '',
+    },
+
+    'link_config': {
+        '__help__': 'Linking Configuration',
+        'link_jobs': 0,
+    },
+
+    'cuda_config': {
+        '__help__': 'CUDA Configuration',
+        'cuda_path': '',
+        'cu_warnings': [],
+        'cuflags': [],
+    },
+
+    'java_config': {
+        '__help__': 'Java Configuration',
+        'version': '1.8',
+        'source_version': '',
+        'target_version': '',
+        'fat_jar_conflict_severity': 'warning',
+        'fat_jar_conflict_severity__help__':
+            'The severity of java fat jar packing conflict, can be "debug", "warning", "error"',
+        'maven': 'mvn',
+        'maven_central': '',
+        'maven_snapshot_update_policy': 'daily',
+        'maven_snapshot_update_policy__help__':
+            'Can be %s' % _MAVEN_SNAPSHOT_UPDATE_POLICY_VALUES,
+        'maven_snapshot_update_interval': 0,
+        'maven_snapshot_update_interval__help__': 'When policy is interval, in minutes',
+        'maven_download_concurrency': 0,
+        'maven_download_concurrency__help__': constants.HELP.maven_download_concurrency,
+        'maven_jar_allowed_dirs': set(),
+        'maven_jar_allowed_dirs__help__':
+            'List of directories and their subdirectories where maven_jar is allowed',
+        'maven_jar_allowed_dirs_exempts': set(),
+        'maven_jar_allowed_dirs_exempts__help__':
+            'List of targets which are exempted from maven_jar_disallowed_dirs check',
+        'warnings': ['-Werror', '-Xlint:all'],
+        'source_encoding': '',
+        'java_home': '',
+        'jar_compression_level': '',
+        'jar_compression_level__help__': constants.HELP.jar_compression_level,
+        'fat_jar_compression_level': "6",
+        'fat_jar_compression_level__help__': constants.HELP.fat_jar_compression_level,
+        'debug_info_levels': {
+            'no': ['-g:none'],
+            'low': ['-g:source'],
+            'mid': ['-g:source,lines'],
+            'high': ['-g'],
+        },
+    },
+
+    'java_binary_config': {
+        '__help__': 'Java Executable Configuration',
+        'one_jar_boot_jar': '',
+    },
+
+    'java_test_config': {
+        '__help__': 'Java Test Configuration',
+        'junit_libs': [],
+        'junit_libs__help__':
+            'Labels of the JUnit runtime libraries to auto-inject '
+            'into every java_test target (mirrors cc_test_config '
+            'gtest_libs / scala_test_config scalatest_libs). Empty '
+            'list means "no auto-injection"; each java_test must '
+            'then list its JUnit runtime in `deps` explicitly.',
+        'jacoco_home': '',
+    },
+
+    'scala_config': {
+        '__help__': 'Scala Configuration',
+        'scala_home': '',
+        'target_platform': '',
+        'warnings': '',
+        'source_encoding': '',
+    },
+
+    'scala_test_config': {
+        '__help__': 'Scala Test Configuration',
+        'scalatest_libs': [],
+    },
+
+    'go_config': {
+        '__help__': 'Golang Configuration',
+        'go': '',
+        'go_home': os.path.expandvars('$HOME/go'),  # GOPATH
+        # enable go module for explicit use
+        'go_module_enabled': os.environ.get("GO111MODULE") == "on",
+        # onetree repository go module doesn't work in repository root
+        'go_module_relpath': os.environ.get("go_module_relpath"),
+    },
+
+    'proto_library_config': {
+        '__help__': 'Protobuf Configuration',
+        'protoc': 'thirdparty/protobuf/bin/protoc',
+        'protoc_java': '',
+        'protobuf_libs': [],
+        'protobuf_path': '',
+        'protobuf_incs': [],
+        'protobuf_cc_warning': '',
+        'protobuf_java_incs': [],
+        'protobuf_php_path': '',
+        'protoc_php_plugin': '',
+        'protobuf_java_libs': [],
+        'protoc_go_plugin': '',
+        'protoc_go_subplugins': [],
+        # All the generated go source files will be placed
+        # into $GOPATH/src/protobuf_go_path
+        'protobuf_go_path': '',
+        'protobuf_python_libs': [],
+        'protoc_direct_dependencies': False,
+        'well_known_protos': [],
+        'extra_cppflags': [],
+    },
+
+    'protoc_plugin_config': {
+        '__help__': 'Protobuf Plugin Configuration',
+    },
+
+    'thrift_config': {
+        '__help__': 'Thrift Configuration',
+        'thrift': 'thrift',
+        'thrift_libs': [],
+        'thrift_incs': [],
+        'thrift_gen_params': 'cpp:include_prefix,pure_enums'
+    },
+
+    # Multi-instance config pattern:
+    #   1. Define a private template `_<section_name>` with defaults.
+    #   2. Declare `<section_name>: {}` as an empty dict.
+    #   3. In the @config_rule, copy the template, call
+    #      _replace_config() to validate+apply kwargs, store by name.
+    #   4. _dump_section() auto-detects dict-of-dicts sections;
+    #      dump() skips keys starting with '_'.
+    '_cc_toolchain_config': {
+        '__help__': 'C/C++ Toolchain Configuration',
+        'name': '',
+        'kind': '',
+        'target': '',
+        'prefix': '',
+        'tool_prefix': '',
+        'cc': '',
+        'cxx': '',
+        'ld': '',
+        'ar': '',
+        'msvc_version': 'auto',
+        'target_arch': 'auto',
+    },
+
+    'cc_toolchain_config': {},
+
+    'msvc_config': {
+        '__help__': 'MSVC-specific Configuration',
+        'target_arch': 'auto',
+        'target_arch__help__':
+            'Target architecture: auto (detect from host), x64, x86, arm64, arm64ec',
+        'msvc_version': 'auto',
+        'msvc_version__help__': 'MSVC compiler version prefix (auto, 14.44, 14.51, ...)',
+        'windows_sdk': 'auto',
+        'windows_sdk__help__': 'Windows SDK version (auto, 10.0, etc.)',
+        'visual_studio': 'auto',
+        'visual_studio__help__': 'Visual Studio edition (auto, Community, Professional, Enterprise)',
+        'cppflags': ['/MD', '/EHsc'],
+        'cflags': [],
+        'cxxflags': ['/std:c++17'],
+        'linkflags': ['/SUBSYSTEM:CONSOLE'],
+        'warnings': ['/W3'],
+        'optimize': {
+            'debug': ['/Od'],
+            'release': ['/O2'],
+        },
+        'debug_info_levels': {
+            'no': [],
+            'low': ['/Zi'],
+            'mid': ['/Zi', '/DEBUG'],
+            'high': ['/Zi', '/DEBUG', '/RTC1'],
+        },
+    },
+
+}
+
+
+class _DeferredConfigValue:
+    """Wraps a callable config value for later resolution at build time."""
+
+    __slots__ = ('_func', '_expected_type', '_item_name')
+
+    def __init__(self, func: callable, expected_type: type, item_name: str):
+        self._func = func
+        self._expected_type = expected_type
+        self._item_name = item_name
+
+
+class _ConfigSectionView:
+    """Lazy-resolving view of a config section.
+
+    Resolves ``_DeferredConfigValue`` entries on access, not on creation.
+    """
+
+    def __init__(self, section: dict):
+        object.__setattr__(self, '_section', section)
+
+    def __getitem__(self, key):
+        return _resolve_value(self._section[key])
+
+    def __contains__(self, key):
+        return key in self._section
+
+    def __iter__(self):
+        return iter(self._section)
+
+    def __len__(self):
+        return len(self._section)
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def keys(self):
+        return self._section.keys()
+
+    def values(self):
+        for k in self._section:
+            yield self[k]
+
+    def items(self):
+        for k in self._section:
+            yield k, self[k]
+
+
+def _check_callable_arity(func, name: str) -> bool:
+    """Validate that *func* accepts exactly 1 parameter."""
+    try:
+        sig = inspect.signature(func)
+        params = list(sig.parameters.values())
+    except (ValueError, TypeError) as e:
+        _blade_config.error(f'Cannot inspect signature of callable for "{name}": {e}')
+        return False
+    if len(params) != 1:
+        _blade_config.error(
+            f'Callable for "{name}" must accept exactly 1 parameter (the blade module), '
+            f'but it accepts {len(params)}'
+        )
+        return False
+    return True
+
+
+def _resolve_value(value):
+    """Resolve a deferred config value by calling it with the BUILD-time blade module.
+
+    During the config phase (e.g. ``blade dump --config``), the build manager
+    is not yet initialized and BUILD-only attributes such as ``cc_toolchain``
+    are unavailable. In that case the function is returned as-is so dump can
+    still complete.
+    """
+    if not isinstance(value, _DeferredConfigValue):
+        return value
+    from blade import build_manager
+    if build_manager.instance is None:
+        return value._func
+    from blade import dsl_api
+    blade = dsl_api.get_blade_module()
+    result = value._func(blade)
+    if not isinstance(result, value._expected_type):
+        _blade_config.error(
+            f'Function for "{value._item_name}" returned {type(result).__name__}, '
+            f'expected {value._expected_type.__name__}'
+        )
+        return value._expected_type()
+    return result
+
+
 class BladeConfig:
     """BladeConfig. A configuration parser class."""
 
     def __init__(self):
         self.current_file_name = ''  # For error reporting
         self.__md5 = hashlib.md5()
-
-        # Support generate comments when dump the config by the special '__help__' convention.
-        # __help__ field is for section
-        # __help__ suffix of items are for items.
-        self.configs = {
-            'global_config': {
-                '__help__': 'Global Configuration',
-                'build_path_template': 'build${bits}_${profile}',
-                'duplicated_source_action': 'warning',
-                'duplicated_source_action__help__': "Can be 'warning', 'error', 'none'",
-                'test_timeout': 0,
-                'test_timeout__help__':
-                    'Per-test timeout in seconds. 0 (default) or any '
-                    'non-positive value means unlimited.',
-                'test_related_envs__help__':
-                    'Environment variables which need to see whether changed before incremental '
-                    'testing. regex is allowed',
-                'test_related_envs': [],
-                'backend_builder': 'ninja',
-                'debug_info_level': 'mid',
-                'build_jobs': 0,
-                'build_jobs__help__': constants.HELP.build_jobs,
-                'test_jobs': 0,
-                'test_jobs__help__': 'The number of test jobs to run simultaneously',
-                'run_unrepaired_tests': False,
-                'run_unrepaired_tests__help__': constants.HELP.run_unrepaired_tests,
-                'glob_error_severity': 'error',
-                'glob_error_severity__help__': 'The severity of glob error, can be %s' % constants.SEVERITIES,
-                'default_visibility': set(),
-                'default_visibility__help__': 'Default visibility for targets that do not declare this attribute',
-                'legacy_public_targets': set(),
-                'legacy_public_targets__help__': 'List of targets with legacy public visibility',
-
-                'restricted_dsl': True,
-                'restricted_dsl__help__': 'Whether use the restricted SDL in BUILD languages',
-                'unrestricted_dsl_dirs': set(),
-                'unrestricted_dsl_dirs__help__': 'Dirs in which allow unrestrict python DSL',
-
-            },
-
-            'cc_config': {
-                '__help__': 'C/C++ Configuration',
-                'toolchain': '',
-                'toolchain__help__': 'Default toolchain name, overridable via --cc-toolchain=',
-                'extra_incs': [],
-                'cppflags': [],
-                'cflags': [],
-                'cxxflags': [],
-                'linkflags': [],
-                'c_warnings': [],
-                'cxx_warnings': [],
-                'warnings': [],
-                'optimize': [],
-                'benchmark_libs': [],
-                'benchmark_main_libs': [],
-                'secretcc': '',
-                'debug_info_levels': {
-                    'no': ['-g0'],
-                    'low': ['-g1'],
-                    'mid': ['-g'],
-                    'high': ['-g3'],
-                },
-                'fission': False,
-                'dwp': False,
-                'fission__help__': 'Whether to generate split dwarf debug info',
-                'hdr_dep_missing_severity': 'error',
-                'hdr_dep_missing_severity__help__': 'The severity of the missing dependency on the '
-                    'library to which the header file belongs, can be %s' % constants.SEVERITIES,
-                'hdr_dep_missing_suppress': {},
-                'hdr_dep_missing_suppress__help__': 'Header deps missing suppress control, see docs for details',
-                'allowed_undeclared_hdrs': set(),
-                'allowed_undeclared_hdrs__help__': 'Allowed undeclared header files',
-            },
-
-            'cc_library_config': {
-                '__help__': 'C/C++ Library Configuration',
-                'prebuilt_libpath_pattern': 'lib${bits}',
-                'generate_dynamic': False,
-                # Options passed to ar/ranlib to control how
-                # the archive is created, such as, let ar operate
-                # in deterministic mode discarding timestamps
-                'arflags': ['rcs'],
-                'ranlibflags': [],
-                'hdrs_missing_severity': 'error',
-                'hdrs_missing_suppress': set(),
-            },
-
-            'cc_binary_config': {
-                '__help__': 'C/C++ Executable Configuration',
-                'extra_libs': [],
-                'run_lib_paths': [],
-            },
-
-            'cc_test_config': {
-                '__help__': 'C/C++ Test Configuration',
-                'dynamic_link': False,
-                'heap_check': '',
-                'gperftools_libs': [],
-                'gperftools_debug_libs': [],
-                'gtest_libs': [],
-                'gtest_main_libs': [],
-                'pprof_path': '',
-            },
-
-            'link_config': {
-                '__help__': 'Linking Configuration',
-                'link_jobs': 0,
-            },
-
-            'cuda_config': {
-                '__help__': 'CUDA Configuration',
-                'cuda_path': '',
-                'cu_warnings': [],
-                'cuflags': [],
-            },
-
-            'java_config': {
-                '__help__': 'Java Configuration',
-                'version': '1.8',
-                'source_version': '',
-                'target_version': '',
-                'fat_jar_conflict_severity': 'warning',
-                'fat_jar_conflict_severity__help__':
-                    'The severity of java fat jar packing conflict, can be "debug", "warning", "error"',
-                'maven': 'mvn',
-                'maven_central': '',
-                'maven_snapshot_update_policy': 'daily',
-                'maven_snapshot_update_policy__help__':
-                    'Can be %s' % _MAVEN_SNAPSHOT_UPDATE_POLICY_VALUES,
-                'maven_snapshot_update_interval': 0,
-                'maven_snapshot_update_interval__help__': 'When policy is interval, in minutes',
-                'maven_download_concurrency': 0,
-                'maven_download_concurrency__help__': constants.HELP.maven_download_concurrency,
-                'maven_jar_allowed_dirs': set(),
-                'maven_jar_allowed_dirs__help__':
-                    'List of directories and their subdirectories where maven_jar is allowed',
-                'maven_jar_allowed_dirs_exempts': set(),
-                'maven_jar_allowed_dirs_exempts__help__':
-                    'List of targets which are exempted from maven_jar_disallowed_dirs check',
-                'warnings': ['-Werror', '-Xlint:all'],
-                'source_encoding': '',
-                'java_home': '',
-                'jar_compression_level': '',
-                'jar_compression_level__help__': constants.HELP.jar_compression_level,
-                'fat_jar_compression_level': "6",
-                'fat_jar_compression_level__help__': constants.HELP.fat_jar_compression_level,
-                'debug_info_levels': {
-                    'no': ['-g:none'],
-                    'low': ['-g:source'],
-                    'mid': ['-g:source,lines'],
-                    'high': ['-g'],
-                },
-            },
-
-            'java_binary_config': {
-                '__help__': 'Java Executable Configuration',
-                'one_jar_boot_jar': '',
-            },
-
-            'java_test_config': {
-                '__help__': 'Java Test Configuration',
-                'junit_libs': [],
-                'junit_libs__help__':
-                    'Labels of the JUnit runtime libraries to auto-inject '
-                    'into every java_test target (mirrors cc_test_config '
-                    'gtest_libs / scala_test_config scalatest_libs). Empty '
-                    'list means "no auto-injection"; each java_test must '
-                    'then list its JUnit runtime in `deps` explicitly.',
-                'jacoco_home': '',
-            },
-
-            'scala_config': {
-                '__help__': 'Scala Configuration',
-                'scala_home': '',
-                'target_platform': '',
-                'warnings': '',
-                'source_encoding': '',
-            },
-
-            'scala_test_config': {
-                '__help__': 'Scala Test Configuration',
-                'scalatest_libs': [],
-            },
-
-            'go_config': {
-                '__help__': 'Golang Configuration',
-                'go': '',
-                'go_home': os.path.expandvars('$HOME/go'),  # GOPATH
-                # enable go module for explicit use
-                'go_module_enabled': os.environ.get("GO111MODULE") == "on",
-                # onetree repository go module doesn't work in repository root
-                'go_module_relpath': os.environ.get("go_module_relpath"),
-            },
-
-            'proto_library_config': {
-                '__help__': 'Protobuf Configuration',
-                'protoc': 'thirdparty/protobuf/bin/protoc',
-                'protoc_java': '',
-                'protobuf_libs': [],
-                'protobuf_path': '',
-                'protobuf_incs': [],
-                'protobuf_cc_warning': '',
-                'protobuf_java_incs': [],
-                'protobuf_php_path': '',
-                'protoc_php_plugin': '',
-                'protobuf_java_libs': [],
-                'protoc_go_plugin': '',
-                'protoc_go_subplugins': [],
-                # All the generated go source files will be placed
-                # into $GOPATH/src/protobuf_go_path
-                'protobuf_go_path': '',
-                'protobuf_python_libs': [],
-                'protoc_direct_dependencies': False,
-                'well_known_protos': [],
-                'extra_cppflags': [],
-            },
-
-            'protoc_plugin_config': {
-                '__help__': 'Protobuf Plugin Configuration',
-            },
-
-            'thrift_config': {
-                '__help__': 'Thrift Configuration',
-                'thrift': 'thrift',
-                'thrift_libs': [],
-                'thrift_incs': [],
-                'thrift_gen_params': 'cpp:include_prefix,pure_enums'
-            },
-
-            # Multi-instance config pattern:
-            #   1. Define a private template `_<section_name>` with defaults.
-            #   2. Declare `<section_name>: {}` as an empty dict.
-            #   3. In the @config_rule, copy the template, call
-            #      _replace_config() to validate+apply kwargs, store by name.
-            #   4. _dump_section() auto-detects dict-of-dicts sections;
-            #      dump() skips keys starting with '_'.
-            '_cc_toolchain_config': {
-                '__help__': 'C/C++ Toolchain Configuration',
-                'name': '',
-                'kind': '',
-                'target': '',
-                'prefix': '',
-                'tool_prefix': '',
-                'cc': '',
-                'cxx': '',
-                'ld': '',
-                'ar': '',
-                'msvc_version': 'auto',
-                'target_arch': 'auto',
-            },
-
-            'cc_toolchain_config': {},
-
-            'msvc_config': {
-                '__help__': 'MSVC-specific Configuration',
-                'target_arch': 'auto',
-                'target_arch__help__':
-                    'Target architecture: auto (detect from host), x64, x86, arm64, arm64ec',
-                'msvc_version': 'auto',
-                'msvc_version__help__': 'MSVC compiler version prefix (auto, 14.44, 14.51, ...)',
-                'windows_sdk': 'auto',
-                'windows_sdk__help__': 'Windows SDK version (auto, 10.0, etc.)',
-                'visual_studio': 'auto',
-                'visual_studio__help__': 'Visual Studio edition (auto, Community, Professional, Enterprise)',
-                'cppflags': ['/MD', '/EHsc'],
-                'cflags': [],
-                'cxxflags': ['/std:c++17'],
-                'linkflags': ['/SUBSYSTEM:CONSOLE'],
-                'warnings': ['/W3'],
-                'optimize': {
-                    'debug': ['/Od'],
-                    'release': ['/O2'],
-                },
-                'debug_info_levels': {
-                    'no': [],
-                    'low': ['/Zi'],
-                    'mid': ['/Zi', '/DEBUG'],
-                    'high': ['/Zi', '/DEBUG', '/RTC1'],
-                },
-            },
-
-        }
+        self.config = {}  # User-provided config values, keyed by section name
 
     def info(self, msg):
         console.info(f'{source_location(self.current_file_name)}: info: {msg}', prefix=False)
@@ -357,8 +452,8 @@ class BladeConfig:
 
     def update_config(self, section_name, append, user_config):
         """update config section by name."""
-        section = self.configs.get(section_name)
-        if section:
+        section = self.get_section(section_name)
+        if section is not None:
             if append:
                 self._append_config(section_name, section, append)
             self._replace_config(section_name, section, user_config)
@@ -402,9 +497,17 @@ class BladeConfig:
                 msg += ', maybe it is in "%s"?' % other_section
             self.warning(msg)
 
-
     def _assign_item_value(self, section, name, value):
-        """Assign value to config item."""
+        """Assign value to config item. Supports callables for deferred evaluation."""
+        if callable(value):
+            if _check_callable_arity(value, name):
+                current = section[name]
+                if isinstance(current, _DeferredConfigValue):
+                    expected_type = current._expected_type
+                else:
+                    expected_type = type(current)
+                section[name] = _DeferredConfigValue(value, expected_type, name)
+            return
         if isinstance(section[name], list):
             section[name] = var_to_list(value)
         elif isinstance(section[name], set):  # Allow using `list` to config `set`
@@ -438,7 +541,7 @@ class BladeConfig:
 
     def suggest_other_section(self, name):
         """Suggest possible section for item name"""
-        for section_name, section in self.configs.items():
+        for section_name, section in _CONFIG_TEMPLATE.items():
             if name in section:
                 if name in section:
                     return section_name
@@ -453,16 +556,24 @@ class BladeConfig:
         return ''
 
     def get_section(self, section_name):
-        """get config section, returns default values if not set."""
-        return self.configs[section_name]
+        """Get config section, initializing from template on first access."""
+        if section_name not in self.config:
+            template = _CONFIG_TEMPLATE.get(section_name)
+            if template is not None:
+                self.config[section_name] = {k: v for k, v in template.items()}
+            else:
+                return None
+        return self.config[section_name]
 
     def dump(self, output_file_name):
         with open(output_file_name, 'w') as f:
             print('# This config file was generated by `blade dump --config --to-file=<FILENAME>`\n', file=f)
-            for name, value in sorted(self.configs.items()):
+            for name in sorted(_CONFIG_TEMPLATE):
                 if name.startswith('_'):
                     continue
-                self._dump_section(name, value, f)
+                section = self.get_section(name)
+                if section is not None:
+                    self._dump_section(name, section, f)
 
     def _dump_section(self, name, values, f):
         # Detect multi-instance: all non-__ values are dicts (named entries)
@@ -488,6 +599,7 @@ class BladeConfig:
             help = k + '__help__'
             if help in values:
                 print('    # %s' % values[help], file=f)
+            v = _resolve_value(v)
             print(f'    {k} = {pprint.pformat(v, indent=8)},', file=f)
         print(')\n', file=f)
 
@@ -529,7 +641,7 @@ class _DeprecatedBuildTarget:
 
 def load_files(blade_root_dir, load_local_config):
     from blade import dsl_api
-    _config_globals['build_target'] = dsl_api.new_blade_module_for_config()
+    _config_globals['blade'] = dsl_api.new_blade_module_for_config()
     _config_globals['build_target'] = _DeprecatedBuildTarget(
         build_attributes.attributes
     )
@@ -551,21 +663,29 @@ def dump(output_file_name):
 
 
 def get_section(section_name):
-    return _blade_config.get_section(section_name)
+    """Get a lazy-resolving config section view."""
+    section = _blade_config.get_section(section_name)
+    if section is None:
+        return _ConfigSectionView({})
+    return _ConfigSectionView(section)
 
 
 def get_item(section_name, item_name):
-    return _blade_config.get_section(section_name)[item_name]
+    """Get a resolved config item value."""
+    return _resolve_value(_blade_config.get_section(section_name)[item_name])
 
 
 def _check_kwarg_enum_value(kwargs, name, valid_values):
     value = kwargs.get(name)
-    if value is not None and value not in valid_values:
+    if value is not None and not callable(value) and value not in valid_values:
         _blade_config.error(f'Invalid config item "{name}" value "{value}", can only be in {valid_values}')
 
 
 def _check_test_related_envs(kwargs):
-    for name in kwargs.get('test_related_envs', []):
+    value = kwargs.get('test_related_envs')
+    if value is None or callable(value):
+        return
+    for name in value:
         try:
             re.compile(name)
         except re.error as e:
@@ -576,7 +696,10 @@ def _check_test_related_envs(kwargs):
 def _check_default_visibility(kwargs):
     if 'default_visibility' not in kwargs:
         return
-    value = var_to_list(kwargs['default_visibility'])
+    value = kwargs['default_visibility']
+    if callable(value):
+        return
+    value = var_to_list(value)
     if not value:
         return
     if len(value) != 1 or 'PUBLIC' not in value:
@@ -758,7 +881,7 @@ def cc_toolchain_config(**kwargs):
     if name in section:
         _blade_config.warning(
             f'cc_toolchain_config: duplicate name "{name or "(unnamed)"}", overwriting')
-    template = _blade_config.configs['_cc_toolchain_config']
+    template = _CONFIG_TEMPLATE['_cc_toolchain_config']
     entry = {k: v for k, v in template.items() if not k.startswith('__')}
     _blade_config._replace_config('cc_toolchain_config', entry, kwargs)
     section[name] = entry
@@ -770,5 +893,3 @@ def msvc_config(append=None, **kwargs):
     if os.name != 'nt':
         return
     _blade_config.update_config('msvc_config', append, kwargs)
-
-
