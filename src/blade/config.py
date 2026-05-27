@@ -323,7 +323,7 @@ class _DeferredConfigValue:
 
     __slots__ = ('_func', '_expected_type', '_item_name')
 
-    def __init__(self, func: callable, expected_type: type, item_name: str):
+    def __init__(self, func, expected_type: type, item_name: str):
         self._func = func
         self._expected_type = expected_type
         self._item_name = item_name
@@ -335,8 +335,10 @@ class _ConfigSectionView:
     Resolves ``_DeferredConfigValue`` entries on access, not on creation.
     """
 
+    _section: dict
+
     def __init__(self, section: dict):
-        object.__setattr__(self, '_section', section)
+        self._section = section
 
     def __getitem__(self, key):
         return _resolve_value(self._section[key])
@@ -663,11 +665,11 @@ def dump(output_file_name):
 
 
 def get_section(section_name):
-    """Get a lazy-resolving config section view."""
+    """Get a config section with all values resolved."""
     section = _blade_config.get_section(section_name)
     if section is None:
-        return _ConfigSectionView({})
-    return _ConfigSectionView(section)
+        return {}
+    return {k: _resolve_value(v) for k, v in section.items()}
 
 
 def get_item(section_name, item_name):

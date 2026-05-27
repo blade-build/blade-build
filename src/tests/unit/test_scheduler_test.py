@@ -121,7 +121,7 @@ class ConfigDefaultTest(unittest.TestCase):
         # contract.
         from blade import config
         c = config.BladeConfig()
-        self.assertEqual(c.configs['global_config']['test_timeout'], 0)
+        self.assertEqual(c.get_section('global_config')['test_timeout'], 0)
 
 
 if __name__ == '__main__':
