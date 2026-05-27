@@ -104,10 +104,13 @@ def _host_os():
 
 def _host_arch():
     """Canonical host CPU architecture: ``'x86_64'``, ``'aarch64'``, etc."""
-    machine = os.uname().machine
-    if machine == 'arm64':
+    import platform
+    machine = platform.machine()
+    if machine.lower() in ('arm64', 'aarch64'):
         return 'aarch64'
-    return machine
+    if machine.lower() in ('amd64', 'x86_64'):
+        return 'x86_64'
+    return machine.lower()
 
 
 class _CCToolchainProxy:

@@ -496,8 +496,22 @@ class BladeConfig:
 _blade_config = BladeConfig()
 
 
+def _compute_host_arch():
+    """Canonical host CPU architecture: ``'x86_64'``, ``'aarch64'``, etc."""
+    import platform
+    machine = platform.machine()
+    if machine.lower() in ('arm64', 'aarch64'):
+        return 'aarch64'
+    if machine.lower() in ('amd64', 'x86_64'):
+        return 'x86_64'
+    return machine.lower()
+
+
 def load_files(blade_root_dir, load_local_config):
     _config_globals['build_target'] = build_attributes.attributes
+    _config_globals['host_os'] = build_attributes.attributes.os
+    host_arch = _compute_host_arch()
+    _config_globals['host_arch'] = host_arch
     _blade_config.try_parse_file(os.path.join(os.path.dirname(sys.argv[0]), 'blade.conf'))
     _blade_config.try_parse_file(os.path.expanduser('~/.bladerc'))
     _blade_config.try_parse_file(os.path.join(blade_root_dir, 'BLADE_ROOT'))
