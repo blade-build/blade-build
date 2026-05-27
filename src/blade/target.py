@@ -538,10 +538,10 @@ class Target:
         """
         if visibility is None:
             global_config = config.get_section('global_config')
-            if self.key in global_config.get('legacy_public_targets'):
+            if self.key in global_config.get('legacy_public_targets', set()):
                 visibility = {'PUBLIC'}
             else:
-                visibility = global_config.get('default_visibility')
+                visibility = global_config.get('default_visibility', set())
             self._visibility.update(visibility)
             return
 
