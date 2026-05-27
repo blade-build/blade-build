@@ -312,9 +312,16 @@ class _NinjaFileHeaderGenerator:
 
     def _generate_windows_ar_rules(self):
         """Generate Windows static library rules."""
+        cc_lib = config.get_section('cc_library_config')
+        deterministic = cc_lib.get('deterministic', False)
+        thin = cc_lib.get('thin', False)
+        if thin:
+            console.warning('cc_library_config.thin=True has no effect on MSVC (lib.exe '
+                            'does not support thin archives)')
         ar = self.build_accelerator.get_ar_command()
+        brepro = ' /Brepro' if deterministic else ''
         self.generate_rule(name='ar',
-                           command=f'{ar} /nologo /out:${{out}} ${{in}}',
+                           command=f'{ar} /nologo{brepro} /out:${{out}} ${{in}}',
                            description='LIB ${out}')
 
     def _generate_windows_link_rules(self):
@@ -432,11 +439,34 @@ class _NinjaFileHeaderGenerator:
                            description='CC INCLUSION CHECK ${in}')
 
     def _generate_cc_ar_rules(self):
-        arflags = ''.join(config.get_item('cc_library_config', 'arflags'))
-        ar = self.build_accelerator.get_ar_command()
-        self.generate_rule(name='ar',
-                           command=f'rm -f $out; {ar} {arflags} $out $in',
-                           description='AR ${out}')
+        cc_lib = config.get_section('cc_library_config')
+        deterministic = cc_lib.get('deterministic', False)
+        thin = cc_lib.get('thin', False)
+        target_os = self.build_toolchain.target_os
+
+        if target_os == 'darwin':
+            if thin:
+                console.error('cc_library_config.thin=True is not supported on macOS '
+                              '(Apple ar does not support thin archives)')
+            if deterministic:
+                command = 'rm -f $out; libtool -static -o $out $in'
+            else:
+                ar = self.build_accelerator.get_ar_command()
+                command = f'rm -f $out; {ar} rcs $out $in'
+        elif target_os == 'linux':
+            ar = self.build_accelerator.get_ar_command()
+            extra = ''
+            if deterministic:
+                extra += 'D'
+            if thin:
+                extra += 'T'
+            command = f'rm -f $out; {ar} rcs{extra} $out $in'
+        else:
+            arflags = ''.join(cc_lib.get('arflags', ['rcs']))
+            ar = self.build_accelerator.get_ar_command()
+            command = f'rm -f $out; {ar} {arflags} $out $in'
+
+        self.generate_rule(name='ar', command=command, description='AR ${out}')
 
     def _generate_cc_link_rules(self, ld, linkflags):
         self._add_line('linkflags = %s' % ' '.join(config.get_item('cc_config', 'linkflags')))

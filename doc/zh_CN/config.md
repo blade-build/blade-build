@@ -308,6 +308,36 @@ Blade 支持构建多目标平台的产物，例如在 x64 Linux 下，可以通
 
 如果只关心一个目标平台，完全可以只有一个子目录，甚至根本不用子目录。
 
+#### `generate_dynamic`：bool = False
+
+**是否同时生成动态库**
+
+除了生成静态库之外，是否同时生成动态库。
+
+#### `deterministic`：bool = False
+
+**生成可重复构建（deterministic）的静态库。**
+
+默认情况下，`ar` 在打包 `.o` 文件时会嵌入文件的时间戳、UID、GID 等元数据，
+导致同一份源码每次构建产物的 checksum 不同，破坏构建的可重复性（reproducible builds），
+也让分布式缓存（如 ccache）命中率下降。
+
+启用此选项后，各平台通过以下方式消除不确定性，确保相同源码产生相同的二进制产物：
+
+- **Linux：** 为 `ar` 加上 `D` 标志，清零时间戳、UID、GID，只保留文件内容和符号表
+- **macOS：** 使用 `libtool -static` 取代 `ar`（Apple 的 `ar` 不支持 `D` 标志，`libtool -static` 天生是 deterministic 的）
+- **MSVC：** 为 `lib.exe` 加上 `/Brepro` 标志，同样清零时间戳
+
+#### `thin`：bool = False
+
+**生成 thin 静态库**，只记录 `.o` 文件路径，不打包实际内容。
+**仅 Linux 支持**（GNU `ar` 的 `T` 标志）。macOS 会报错，MSVC 会警告。
+
+#### `arflags`：list = ['rcs'] ~~**（已废弃）**~~
+
+已废弃 — 请改用 `deterministic` 和/或 `thin`。
+平台特定的归档标志（`rcs`/`D`/`T`）现在由系统自动处理。
+
 #### `hdrs_missing_severity`：string = 'error'
 
 **缺失 `cc_library.hdrs` 时的严重性**

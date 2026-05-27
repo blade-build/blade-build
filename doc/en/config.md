@@ -297,6 +297,34 @@ C/C++ library configuration
   If you only concern to one target platform, it is sure OK to have only one directory or have no
   directory at all.
 
+- `generate_dynamic` : bool = False
+
+  Whether to generate a dynamic library in addition to the static library.
+
+- `arflags` : list = ['rcs'] **(DEPRECATED)**
+
+  Deprecated — use `deterministic` and/or `thin` instead.
+  Platform-specific archive flags (`rcs`/`D`/`T`) are now handled automatically.
+
+- `deterministic` : bool = False
+
+  Generate deterministic (reproducible) static libraries.
+
+  By default, ``ar`` embeds timestamps, UID, GID, and other metadata into the archive,
+  so the same source code produces a different checksum on every build — breaking
+  build reproducibility and reducing distributed cache (e.g. ccache) hit rates.
+
+  When enabled, each platform eliminates these sources of non-determinism:
+
+  - **Linux:** passes ``D`` to ``ar`` — zeros out timestamps, UID, and GID, keeping only file contents and symbol table
+  - **macOS:** uses ``libtool -static`` instead of ``ar`` (Apple's ``ar`` does not support ``D``; ``libtool -static`` is inherently deterministic)
+  - **MSVC:** passes ``/Brepro`` to ``lib.exe`` — likewise zeros out timestamps
+
+- `thin` : bool = False
+
+  Generate thin static libraries that store object file paths instead of actual code.
+  **Only supported on Linux** (GNU `ar` `T` flag). Emits an error on macOS and a warning on MSVC where thin archives are not supported.
+
 - `hdrs_missing_severity` : string = 'error' | ['debug', 'info', 'warning', 'error']
 
   The severity of missing `cc_library.hdrs`

@@ -449,7 +449,7 @@ cc_test_config(
 
 ```python
 cc_library_config(
-    arflags = 'rcsT'  # Add 'T' flag for thin library generation
+    thin = True  # Generate thin static libraries
 )
 ```
 

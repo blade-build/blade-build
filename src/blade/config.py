@@ -112,11 +112,11 @@ _CONFIG_TEMPLATE = {
         '__help__': 'C/C++ Library Configuration',
         'prebuilt_libpath_pattern': 'lib${bits}',
         'generate_dynamic': False,
-        # Options passed to ar/ranlib to control how
-        # the archive is created, such as, let ar operate
-        # in deterministic mode discarding timestamps
+        # DEPRECATED: use 'deterministic' and/or 'thin' instead.
+        # Platform-specific flags (rcs/D/T) are now handled automatically.
         'arflags': ['rcs'],
-        'ranlibflags': [],
+        'deterministic': False,
+        'thin': False,
         'hdrs_missing_severity': 'error',
         'hdrs_missing_suppress': set(),
     },
@@ -753,6 +753,14 @@ def cc_binary_config(append=None, **kwargs):
 @config_rule
 def cc_library_config(append=None, **kwargs):
     """cc_library_config section."""
+    has_arflags = 'arflags' in kwargs
+    has_new = 'deterministic' in kwargs or 'thin' in kwargs
+    if has_arflags and has_new:
+        _blade_config.error(
+            'cc_library_config: "arflags" and "deterministic"/"thin" cannot be used together')
+    elif has_arflags:
+        _blade_config.warning(
+            'cc_library_config: "arflags" is deprecated, use "deterministic" and/or "thin" instead')
     _blade_config.update_config('cc_library_config', append, kwargs)
 
 

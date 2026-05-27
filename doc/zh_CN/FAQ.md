@@ -452,7 +452,7 @@ cc_test_config(
 
 ```python
 cc_library_config(
-    arflags = 'rcsT'  # 加上 'T' 标志以生成 thin 静态库
+    thin = True  # 生成 thin 静态库
 )
 ```
 
