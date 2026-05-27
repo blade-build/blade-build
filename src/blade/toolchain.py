@@ -421,15 +421,19 @@ class MsvcToolChain(ToolChain):
         'ARM64': 'arm64',
     }
 
+    @property
+    def target_arch(self) -> str:
+        return self._target_arch
+
     def __init__(self, target_arch='auto', msvc_version='auto'):
         super().__init__()
         self._kind = 'msvc'
         self._target = 'windows'
         self.host_arch = self._detect_host_arch()
-        self.target_arch = self._resolve_target_arch(target_arch)
+        self._target_arch = self._resolve_target_arch(target_arch)
         self.msvc_version = msvc_version
         self._msvc_host = 'Host' + self.host_arch
-        self._msvc_target = self._ARCH_MAP[self.target_arch]['msvc_dir']
+        self._msvc_target = self._ARCH_MAP[self._target_arch]['msvc_dir']
 
         # Locate installations
         self._vs_path = self._find_vs_path(msvc_version=self.msvc_version)
@@ -449,7 +453,7 @@ class MsvcToolChain(ToolChain):
                 # Update target_arch to stay consistent
                 for k, v in self._ARCH_MAP.items():
                     if v['msvc_dir'] == fallback:
-                        self.target_arch = k
+                        self._target_arch = k
                         break
 
         self._kind = 'msvc'
@@ -469,7 +473,7 @@ class MsvcToolChain(ToolChain):
             for host in (self._msvc_host, 'Hostx64', 'Hostx86'):
                 asm_exe = os.path.join(self._msvc_path, 'bin', host,
                                        self._msvc_target,
-                                       'ml64.exe' if self.target_arch == 'x64' else 'ml.exe')
+                                       'ml64.exe' if self._target_arch == 'x64' else 'ml.exe')
                 if os.path.exists(asm_exe):
                     asm_tool = asm_exe
                     break
@@ -706,7 +710,7 @@ class MsvcToolChain(ToolChain):
         2. Fallback to ``where rc.exe`` on PATH
         """
         if self._sdk_path and self._sdk_ver:
-            arch_dir = self._ARCH_MAP[self.target_arch]['msvc_dir']
+            arch_dir = self._ARCH_MAP[self._target_arch]['msvc_dir']
             tool_path = os.path.join(self._sdk_path, 'Bin', self._sdk_ver,
                                      arch_dir, 'rc.exe')
             if os.path.exists(tool_path):
@@ -742,7 +746,7 @@ class MsvcToolChain(ToolChain):
 
     def get_cc_target_arch(self):
         """Return the canonical triplet for the configured target arch."""
-        return self._ARCH_MAP[self.target_arch]['triplet']
+        return self._ARCH_MAP[self._target_arch]['triplet']
 
     def cc_is(self, vendor):
         """Check if compiler matches vendor."""
