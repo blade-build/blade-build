@@ -32,12 +32,12 @@ class TestDump(blade_test.TargetTest):
     def testDumpCompdb(self):
         self.assertTrue(self.runBlade('dump', '--compdb'))
         self.assertTrue(self.runBlade('dump', '--compdb --to-file=blade-bin/compdb.json'))
-        json.load(open('blade-bin/compdb.json'))
+        json.load(open('blade-bin/compdb.json', encoding='utf-8'))
 
     def testDumpTargets(self):
         self.assertTrue(self.runBlade('dump', '--targets'))
         self.assertTrue(self.runBlade('dump', '--targets  --to-file=blade-bin/targets.json'))
-        json.load(open('blade-bin/targets.json'))
+        json.load(open('blade-bin/targets.json', encoding='utf-8'))
 
 if __name__ == '__main__':
     blade_test.run(TestDump)
