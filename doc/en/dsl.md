@@ -28,6 +28,8 @@ The global Blade API module, accessed through `blade.`, includes:
 - `console` submodule: Output diagnostic information
 - `re` submodule: The python regex library
 - `path` submodule: a Restricted subset of `os.path`
+- `host_os` property: Name of the host OS (the machine running the build): `'darwin'`, `'linux'`, or `'windows'`
+- `host_arch` property: Canonical host CPU architecture: `'x86_64'`, `'aarch64'`, etc.
 
 ### `blade.config` Submodule
 
@@ -76,6 +78,12 @@ A read-only proxy to the current platform's C/C++ toolchain, for making platform
 - `lib_prefix`: Library name prefix (e.g. `lib` on Linux/macOS, `""` on Windows)
 - `exe_suffix`: Executable file suffix (e.g. `""` on Linux/macOS, `.exe` on Windows)
 
+**Platform properties** (all return `str`):
+
+- `cc_vendor`: Compiler vendor: `'gcc'`, `'clang'`, or `'unknown'`
+- `target_os`: Target OS being compiled for: `'darwin'`, `'linux'`, or `'windows'`. In cross-compilation this may differ from `blade.host_os`
+- `target_arch`: Target CPU architecture: `'x86_64'`, `'aarch64'`, etc. In cross-compilation this may differ from `blade.host_arch`
+
 **Tool lookup:**
 
 - `tool(key)` → `str | None`: Return the path to a tool identified by *key*.
@@ -95,4 +103,13 @@ binary = 'myapp' + cc.exe_suffix
 # Query tool availability
 if cc.tool('rc'):
     print('Resource compiler:', cc.tool('rc'))
+
+# Cross-compilation-aware dependency selection
+if cc.target_os == 'linux':
+    libs.append('//thirdparty/linux_only:lib')
+elif cc.target_os == 'darwin':
+    libs.append('//thirdparty/mac_only:lib')
+
+# Host platform (the machine running the build)
+protoc = 'tools/protoc-%s-%s' % (blade.host_os, blade.host_arch)
 ```

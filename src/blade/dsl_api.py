@@ -15,6 +15,7 @@ API for BUILD files and extensions.
 
 import os
 import re
+import sys
 import types
 
 import blade
@@ -94,12 +95,26 @@ def _safe_workspace_module():
     return module
 
 
+def _host_os():
+    """Host OS name: ``'darwin'``, ``'linux'``, or ``'windows'``."""
+    if sys.platform == 'win32':
+        return 'windows'
+    return sys.platform
+
+
+def _host_arch():
+    """Canonical host CPU architecture: ``'x86_64'``, ``'aarch64'``, etc."""
+    machine = os.uname().machine
+    if machine == 'arm64':
+        return 'aarch64'
+    return machine
+
+
 class _CCToolchainProxy:
     """Read-only toolchain proxy exposed as ``blade.cc_toolchain`` in BUILD files.
 
-    Five file-naming properties plus a unified ``.tool(key)`` lookup that
-    returns a path string or ``None`` for toolchain-specific tools (``'rc'``,
-    ``'as'``, etc.).
+    File-naming properties, tool lookup, and target platform / architecture
+    info (useful for cross-compilation-aware deps in BUILD files).
     """
 
     @property
@@ -126,6 +141,21 @@ class _CCToolchainProxy:
     def exe_suffix(self) -> str:
         return self._tc.exe_suffix
 
+    @property
+    def cc_vendor(self) -> str:
+        """Compiler vendor: ``'gcc'``, ``'clang'``, or ``'unknown'``."""
+        return self._tc._cc_vendor
+
+    @property
+    def target_os(self) -> str:
+        """Target OS: ``'darwin'``, ``'linux'``, ``'windows'``."""
+        return self._tc.target_os
+
+    @property
+    def target_arch(self) -> str:
+        """Target CPU architecture: ``'x86_64'``, ``'aarch64'``, etc."""
+        return self._tc.target_arch
+
     def tool(self, key: str) -> str | None:
         """Return tool path for *key*, or ``None`` if not available.
 
@@ -146,6 +176,8 @@ def _safe_blade_module():
     module.util = _safe_util_module()
     module.workspace = _safe_workspace_module()
     module.cc_toolchain = _CCToolchainProxy()
+    module.host_os = _host_os()
+    module.host_arch = _host_arch()
     return module
 
 

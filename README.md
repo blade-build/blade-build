@@ -3,7 +3,7 @@
 [![license NewBSD](https://img.shields.io/badge/License-NewBSD-yellow.svg)](COPYING)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
-[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)](doc/en/prerequisites.md)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey.svg)](doc/en/prerequisites.md)
 
 ![Blade Build](image/blade-200x400.png "Blade Build")
 
@@ -35,7 +35,7 @@ V3 is a comprehensive modernization upgrade with these highlights:
 - **Full type annotations** with pyright static checking
 - **Comprehensive unit tests** covering core build rules and utilities
 - **Cross-repo E2E smoke tests** against the standalone [blade-test](https://github.com/blade-build/blade-test) repository
-- **Experimental macOS support**, with multiple macOS compilation fixes
+- **Experimental macOS and Windows support**, with multiple cross-platform compilation fixes
 - **Code cleanup**: dead code and invalid tests removed, known bugs fixed
 - **New documentation**: Go builds and `$(location)` syntax
 
@@ -53,7 +53,7 @@ Blade is engineered as a modern, high-performance build system that combines pow
 
 Designed to enhance development productivity, Blade simplifies build configuration while maintaining robust functionality for complex projects.
 
-Blade is primarily positioned for large C++ projects on Linux, closely integrated with development workflows such as unit testing, continuous integration, and coverage statistics. Like Unix text filtering programs, it maintains relative independence and can run standalone. Currently, it focuses on supporting i386/x86_64 Linux, with potential future support for other Unix-like systems.
+Blade is primarily positioned for large C++ projects, closely integrated with development workflows such as unit testing, continuous integration, and coverage statistics. Like Unix text filtering programs, it maintains relative independence and can run standalone. It currently supports Linux (i386/x86_64/aarch64) as the primary platform, with experimental support for macOS and Windows.
 
 During the development of [Tencent's "Typhoon" cloud computing platform](doc/Hadoop-in-China-2011-Typhoon.mhtml), we identified significant challenges with GNU Make and Autotools in large-scale environments. Inspired by insights from [Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we engineered Blade as a declarative build system.
 

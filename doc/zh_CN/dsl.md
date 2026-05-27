@@ -29,6 +29,8 @@
 - `console` 子模块：输出诊断信息
 - `re` 子模块：正则表达式
 - `path` 子模块：`os.path` 的一个受限制的子集
+- `host_os` 属性：构建主机（运行构建的机器）的操作系统名称：`'darwin'`、`'linux'` 或 `'windows'`
+- `host_arch` 属性：构建主机的规范化 CPU 架构：`'x86_64'`、`'aarch64'` 等
 
 ### `blade.config` 模块
 
@@ -77,6 +79,12 @@
 - `lib_prefix`：库名前缀（Linux/macOS 为 `lib`，Windows 为 `""`）
 - `exe_suffix`：可执行文件后缀（Linux/macOS 为 `""`，Windows 为 `.exe`）
 
+**平台属性**（均返回 `str`）：
+
+- `cc_vendor`：编译器供应商：`'gcc'`、`'clang'` 或 `'unknown'`
+- `target_os`：编译目标操作系统：`'darwin'`、`'linux'` 或 `'windows'`。交叉编译时可能与 `blade.host_os` 不同
+- `target_arch`：编译目标 CPU 架构：`'x86_64'`、`'aarch64'` 等。交叉编译时可能与 `blade.host_arch` 不同
+
 **工具查询：**
 
 - `tool(key)` → `str | None`：返回由 *key* 指定的工具路径。
@@ -96,4 +104,13 @@ binary = 'myapp' + cc.exe_suffix
 # 查询工具可用性
 if cc.tool('rc'):
     print('Resource compiler:', cc.tool('rc'))
+
+# 根据编译目标平台选择依赖
+if cc.target_os == 'linux':
+    libs.append('//thirdparty/linux_only:lib')
+elif cc.target_os == 'darwin':
+    libs.append('//thirdparty/mac_only:lib')
+
+# 构建主机平台（运行构建的机器）
+protoc = 'tools/protoc-%s-%s' % (blade.host_os, blade.host_arch)
 ```
