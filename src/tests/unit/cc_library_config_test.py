@@ -122,8 +122,7 @@ class CcArchiveRulesTest(unittest.TestCase):
                     'thin': thin,
                 }
                 gen._generate_cc_ar_rules()
-                if mock_rule.call_count == 0:
-                    return None
+                self.assertTrue(mock_rule.called, 'generate_rule was not called')
                 return mock_rule.call_args[1]['command']
 
     def _capture_windows_ar_command(self, gen, deterministic=False, thin=False):
@@ -135,8 +134,7 @@ class CcArchiveRulesTest(unittest.TestCase):
                     'thin': thin,
                 }
                 gen._generate_windows_ar_rules()
-                if mock_rule.call_count == 0:
-                    return None
+                self.assertTrue(mock_rule.called, 'generate_rule was not called')
                 return mock_rule.call_args[1]['command']
 
     # --- Linux ---
