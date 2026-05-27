@@ -91,8 +91,10 @@ def _safe_util_module():
 def _safe_workspace_module():
     """Make the safe blade.workspace module."""
     module = _new_module('workspace')
-    module.root_dir = workspace.current().root_dir
-    module.build_dir = workspace.current().build_dir
+    ws = workspace.current()
+    assert ws is not None, 'workspace must be initialized before accessing blade.workspace'
+    module.root_dir = ws.root_dir
+    module.build_dir = ws.build_dir
     return module
 
 
