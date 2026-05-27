@@ -507,8 +507,30 @@ def _compute_host_arch():
     return machine.lower()
 
 
+class _DeprecatedBuildTarget:
+    """Deprecated wrapper for ``build_target`` — will be replaced by function-valued config items."""
+
+    def __init__(self, target_attrs):
+        object.__setattr__(self, '_target', target_attrs)
+        object.__setattr__(self, '_warned', False)
+
+    def _warn(self):
+        if not self._warned:
+            console.warning(
+                'build_target is deprecated and will be removed in a future version. '
+                'Its replacement will be provided via function-valued config items.'
+            )
+            object.__setattr__(self, '_warned', True)
+
+    def __getattr__(self, name):
+        self._warn()
+        return getattr(self._target, name)
+
+
 def load_files(blade_root_dir, load_local_config):
-    _config_globals['build_target'] = build_attributes.attributes
+    _config_globals['build_target'] = _DeprecatedBuildTarget(
+        build_attributes.attributes
+    )
     _config_globals['host_os'] = build_attributes.attributes.os
     host_arch = _compute_host_arch()
     _config_globals['host_arch'] = host_arch

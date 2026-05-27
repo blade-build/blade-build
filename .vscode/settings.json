@@ -3,5 +3,11 @@
     "python.analysis.extraPaths": [
         "src",
         "src/test"
+    ],
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "black-formatter.args": [
+        "--skip-string-normalization"
     ]
 }
