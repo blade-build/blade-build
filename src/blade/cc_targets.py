@@ -460,7 +460,8 @@ class CcTarget(Target):
         if 'allow_undefined' in self.attr:
             allow_undefined = self.attr['allow_undefined']
             if not allow_undefined:
-                linkflags.append('-Xlinker --no-undefined')
+                if self.blade.get_build_toolchain().target_os != 'darwin':
+                    linkflags.append('-Wl,--no-undefined')
         return linkflags
 
     def _generate_link_all_symbols_link_flags(self, libs):
@@ -498,7 +499,8 @@ class CcTarget(Target):
         for key in self.expanded_deps:
             dep = targets[key]
             if dep.path == '#':
-                sys_libs.append(getattr(dep, 'libpath', dep.name))
+                lib_name = getattr(dep, 'libpath', dep.name)
+                sys_libs.append(lib_name)
                 continue
 
             lib = dep._get_target_file(tc.DYNAMIC_LIB_LABEL)
@@ -534,7 +536,8 @@ class CcTarget(Target):
         for key in self.expanded_deps:
             dep = targets[key]
             if dep.path == '#':
-                sys_libs.append(getattr(dep, 'libpath', dep.name))
+                lib_name = getattr(dep, 'libpath', dep.name)
+                sys_libs.append(lib_name)
                 continue
 
             lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
@@ -1319,7 +1322,6 @@ class ForeignCcLibrary(CcTarget):
         tc = self.blade.get_build_toolchain()
         a_path = self._library_full_path(tc.static_lib_suffix)
         so_path = self._library_full_path(tc.dynamic_lib_suffix)
-
         self._add_default_target_file(tc.STATIC_LIB_LABEL, a_path)
         self._add_target_file(tc.DYNAMIC_LIB_LABEL,
                               so_path if self.attr['has_dynamic'] else a_path)

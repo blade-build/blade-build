@@ -178,6 +178,22 @@ class ToolChain:
     def __init__(self):
         pass
 
+    @property
+    def target_os(self) -> str:
+        """Target OS: ``'darwin'``, ``'linux'``, ``'windows'``."""
+        return self._target
+
+    @property
+    def target_arch(self) -> str:
+        """Target CPU architecture, e.g. ``'x86_64'`` or ``'aarch64'``."""
+        import re
+        triple = self.get_cc_target_arch()
+        if triple:
+            m = re.match(r'^([^-]+)', triple)
+            if m:
+                return BuildArchitecture.get_canonical_architecture(m.group(1)) or m.group(1)
+        return ''
+
     def tool(self, key):
         """Return tool path for *key*, or ``None`` if not available.
 
@@ -407,6 +423,8 @@ class MsvcToolChain(ToolChain):
 
     def __init__(self, target_arch='auto', msvc_version='auto'):
         super().__init__()
+        self._kind = 'msvc'
+        self._target = 'windows'
         self.host_arch = self._detect_host_arch()
         self.target_arch = self._resolve_target_arch(target_arch)
         self.msvc_version = msvc_version

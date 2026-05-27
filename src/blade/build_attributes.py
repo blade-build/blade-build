@@ -27,6 +27,17 @@ class TargetAttributes:
     def arch(self):
         return self.options.arch
 
+    @property
+    def os(self):
+        """Target OS: ``'darwin'``, ``'linux'``, or ``'windows'``.
+
+        Defaults to the host OS. Override via ``--target-os`` in the future.
+        """
+        import sys
+        if sys.platform == 'win32':
+            return 'windows'
+        return sys.platform
+
     def is_debug(self):
         return self.options.profile == 'debug'
 

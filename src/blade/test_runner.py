@@ -210,7 +210,9 @@ class TestRunner(binary_runner.BinaryRunner):
             for dep in self._build_targets[target.key].expanded_deps:
                 dep_target = self._build_targets[dep]
                 if 'cc_library' in dep_target.type:
-                    lib_name = 'lib%s.so' % dep_target.name
+                    from blade import build_manager
+                    lib_name = build_manager.instance.get_build_toolchain().dynamic_library_name(
+                        dep_target.name)
                     lib_path = os.path.join(self.build_dir,
                                             dep_target.path,
                                             lib_name)
