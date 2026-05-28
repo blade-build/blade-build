@@ -27,15 +27,6 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 
-# Only one of these exists per platform; guard on os.name so we don't attempt
-# (and swallow) an import that is guaranteed to fail on the other platform.
-if os.name == 'nt':
-    import msvcrt
-    fcntl = None
-else:
-    import fcntl
-    msvcrt = None
-
 if TYPE_CHECKING:
     from blade.blade_types import StrOrListOpt  # noqa: F401 (used in annotations)
 
@@ -74,15 +65,17 @@ def lock_file(filename):
     """lock file."""
     try:
         fd = os.open(filename, os.O_CREAT | os.O_RDWR)
-        if fcntl:
+        if os.name != 'nt':
+            import fcntl  # pylint: disable=import-outside-toplevel
             old_fd_flags = fcntl.fcntl(fd, fcntl.F_GETFD)
             fcntl.fcntl(fd, fcntl.F_SETFD, old_fd_flags | fcntl.FD_CLOEXEC)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        elif msvcrt:
+        elif os.name == 'nt':
+            import msvcrt  # pylint: disable=import-outside-toplevel
             msvcrt.locking(fd, msvcrt.LK_NBLCK, os.stat(fd).st_size)
         return fd, 0
     except OSError as ex_value:
-        if msvcrt:  # msvcrt doesn't set errno correctly
+        if os.name == 'nt':  # msvcrt doesn't set errno correctly
             return -1, errno.EAGAIN
         return -1, ex_value.errno
 
@@ -90,9 +83,11 @@ def lock_file(filename):
 def unlock_file(fd):
     """unlock file."""
     try:
-        if fcntl:
+        if os.name != 'nt':
+            import fcntl  # pylint: disable=import-outside-toplevel
             fcntl.flock(fd, fcntl.LOCK_UN)
-        elif msvcrt:
+        elif os.name == 'nt':
+            import msvcrt  # pylint: disable=import-outside-toplevel
             msvcrt.locking(fd, msvcrt.LK_UNLCK, os.stat(fd).st_size)
         os.close(fd)
     except OSError:
