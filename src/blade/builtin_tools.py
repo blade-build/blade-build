@@ -399,7 +399,8 @@ def _generate_java_test_sh(script, main_class, jacocoagent, packages_under_test,
 
             exec java $coverage_options -classpath %s %s %s $@''') % (
             coverage_flags, ':'.join(abs_jars), main_class, test_classes)
-    util.write_if_changed(script, content, executable=True)
+    util.write_if_changed(script, content)
+    os.chmod(script, 0o755)
 
 
 def _generate_java_test_bat(script, main_class, jacocoagent, packages_under_test, jars, test_classes):
@@ -493,7 +494,8 @@ def generate_java_binary(args):
 
             exec java -jar "$jar" $@
             ''') % (basename, fullpath)
-    util.write_if_changed(script, content, executable=True)
+    util.write_if_changed(script, content)
+    os.chmod(script, 0o755)
 
 
 def generate_scala_test(script, java, scala, jacocoagent, packages_under_test, args):
@@ -663,7 +665,8 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     content += ('PYTHONPATH="$ZIP:$PYTHONPATH" '
                 'exec "${BLADE_PYTHON_INTERPRETER:-python3}" '
                 f'-m {mainentry} "$@"\n')
-    util.write_if_changed(pybin, content, executable=True)
+    util.write_if_changed(pybin, content)
+    os.chmod(pybin, 0o755)
 
 
 def generate_dwp(args):
