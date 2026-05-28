@@ -10,7 +10,6 @@ targets from sources and custom parameters.
 """
 
 
-
 import fnmatch
 import getpass
 import os
@@ -37,25 +36,6 @@ _outputs = []
 def _declare_outputs(*outputs):
     """Declare output files, which can be verified after ran and cleanup on error."""
     _outputs[:] = outputs
-
-
-def _write_if_changed(path, content):
-    """Write *content* to *path* only if it differs from what is already on disk.
-
-    When the file already contains *content* it is left untouched so that its
-    modification time stays stable across identical builds.  Ninjaʼs ``restat``
-    machinery (and its basic up-to-date check) can then skip the rule entirely
-    on subsequent runs.
-    """
-    try:
-        with open(path, 'r') as f:
-            old = f.read()
-    except FileNotFoundError:
-        old = None
-    if old == content:
-        return
-    with open(path, 'w') as f:
-        f.write(content)
 
 
 def _verify_outputs():
@@ -419,8 +399,7 @@ def _generate_java_test_sh(script, main_class, jacocoagent, packages_under_test,
 
             exec java $coverage_options -classpath %s %s %s $@''') % (
             coverage_flags, ':'.join(abs_jars), main_class, test_classes)
-    _write_if_changed(script, content)
-    os.chmod(script, 0o755)
+    util.write_if_changed(script, content, executable=True)
 
 
 def _generate_java_test_bat(script, main_class, jacocoagent, packages_under_test, jars, test_classes):
@@ -438,7 +417,7 @@ def _generate_java_test_bat(script, main_class, jacocoagent, packages_under_test
         'endlocal\r\n',
     ]
     content = ''.join(lines)
-    _write_if_changed(script, content)
+    util.write_if_changed(script, content)
 
 
 def generate_fat_jar(output, **kwargs):
@@ -514,8 +493,7 @@ def generate_java_binary(args):
 
             exec java -jar "$jar" $@
             ''') % (basename, fullpath)
-    _write_if_changed(script, content)
-    os.chmod(script, 0o755)
+    util.write_if_changed(script, content, executable=True)
 
 
 def generate_scala_test(script, java, scala, jacocoagent, packages_under_test, args):
@@ -677,7 +655,7 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
         content = '@echo off\r\n'
         content += 'set "PYTHONPATH=%~dp0%~n0.zip;%PYTHONPATH%"\r\n'
         content += f'python -m {mainentry} %*\r\n'
-        _write_if_changed(pybin, content)
+        util.write_if_changed(pybin, content)
         return
 
     content = '#!/bin/sh\n'
@@ -685,8 +663,7 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     content += ('PYTHONPATH="$ZIP:$PYTHONPATH" '
                 'exec "${BLADE_PYTHON_INTERPRETER:-python3}" '
                 f'-m {mainentry} "$@"\n')
-    _write_if_changed(pybin, content)
-    os.chmod(pybin, 0o755)
+    util.write_if_changed(pybin, content, executable=True)
 
 
 def generate_dwp(args):

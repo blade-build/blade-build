@@ -211,6 +211,30 @@ def mkdir_p(path):
             raise
 
 
+def write_if_changed(path, content, encoding='utf-8', executable=False):
+    """Write *content* to *path* only if it differs from what is on disk.
+
+    When the file already contains *content* it is left untouched so its mtime
+    stays stable across identical builds, letting ninja's ``restat`` (and its
+    basic up-to-date check) skip the rule on subsequent runs.
+
+    When *executable* is true the file is made executable (mode 0o755). chmod
+    only changes ctime, not mtime, so it is applied unconditionally without
+    affecting the up-to-date check above.
+    """
+    changed = True
+    try:
+        with open(path, 'r', encoding=encoding) as f:
+            changed = f.read() != content
+    except FileNotFoundError:
+        pass
+    if changed:
+        with open(path, 'w', encoding=encoding) as f:
+            f.write(content)
+    if executable:
+        os.chmod(path, 0o755)
+
+
 def _echo(stdout, stderr):
     """Echo messages to stdout and stderr."""
     if stdout:
