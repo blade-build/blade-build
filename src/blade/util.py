@@ -65,14 +65,14 @@ def lock_file(filename):
     """lock file."""
     try:
         fd = os.open(filename, os.O_CREAT | os.O_RDWR)
-        if os.name != 'nt':
+        if os.name == 'nt':
+            import msvcrt  # pylint: disable=import-outside-toplevel
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, os.stat(fd).st_size)
+        else:
             import fcntl  # pylint: disable=import-outside-toplevel
             old_fd_flags = fcntl.fcntl(fd, fcntl.F_GETFD)
             fcntl.fcntl(fd, fcntl.F_SETFD, old_fd_flags | fcntl.FD_CLOEXEC)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        elif os.name == 'nt':
-            import msvcrt  # pylint: disable=import-outside-toplevel
-            msvcrt.locking(fd, msvcrt.LK_NBLCK, os.stat(fd).st_size)
         return fd, 0
     except OSError as ex_value:
         if os.name == 'nt':  # msvcrt doesn't set errno correctly
@@ -83,12 +83,12 @@ def lock_file(filename):
 def unlock_file(fd):
     """unlock file."""
     try:
-        if os.name != 'nt':
-            import fcntl  # pylint: disable=import-outside-toplevel
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        elif os.name == 'nt':
+        if os.name == 'nt':
             import msvcrt  # pylint: disable=import-outside-toplevel
             msvcrt.locking(fd, msvcrt.LK_UNLCK, os.stat(fd).st_size)
+        else:
+            import fcntl  # pylint: disable=import-outside-toplevel
+            fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
     except OSError:
         pass
