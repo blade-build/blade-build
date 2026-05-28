@@ -70,7 +70,15 @@ else
     "$@" 2> "$err"
 fi
 ec=$?
-awk '%s' "$err" > "$out"
+awk '%s' "$err" > "$out.new"
+# write-if-changed: keep $out's mtime when the inclusion stack is unchanged, so
+# ninja's `restat` can prune the inclusion check on recompiles that don't alter
+# the set of included headers. See issue #1161.
+if [ -f "$out" ] && cmp -s "$out.new" "$out"; then
+    rm -f "$out.new"
+else
+    mv "$out.new" "$out"
+fi
 rm -f "$err"
 exit $ec
 ''' % _INCLUSION_SPLITTER_AWK
@@ -426,7 +434,11 @@ class _NinjaFileHeaderGenerator:
                            command=template % cc_command,
                            description='CC ${in}',
                            depfile='${out}.d',
-                           deps='gcc')
+                           deps='gcc',
+                           # restat lets ninja prune the inclusion check when the
+                           # compile's `${out}.H` inclusion stack is unchanged (it
+                           # is written write-if-changed). See issue #1161.
+                           restat=True)
 
         cxx_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
                        '${cxx_warnings} ${cppflags} %s ${includes} ${in}') % (
@@ -435,12 +447,14 @@ class _NinjaFileHeaderGenerator:
                            command=template % cxx_command,
                            description='CXX ${in}',
                            depfile='${out}.d',
-                           deps='gcc')
+                           deps='gcc',
+                           restat=True)  # see the cc rule / issue #1161
 
         self.generate_rule(name='secretcc',
                            command=template % (cc_config['secretcc'] + ' ' + cxx_command),
                            description='SECRET CC ${in}',
-                           depfile='${out}.d')
+                           depfile='${out}.d',
+                           restat=True)  # see the cc rule / issue #1161
 
         self._generate_cc_hdrs_rule(cc, cxx, cppflags, cflags, cxxflags, includes)
 
@@ -452,6 +466,10 @@ class _NinjaFileHeaderGenerator:
         self.generate_rule(name='cxxhdrs',
                            command=self._hdrs_command(cxx, cxxflags, cppflags, includes),
                            depfile='${out}.d', deps='gcc',
+                           # restat lets ninja prune the inclusion check when the
+                           # header's inclusion stack is unchanged (the wrapper
+                           # writes ${out} write-if-changed). See issue #1161.
+                           restat=True,
                            description='CXX HDRS ${in}')
 
     def _hdrs_command(self, cc, flags, cppflags, includes):
