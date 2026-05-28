@@ -10,30 +10,30 @@
 
 """
 This is the util module which provides some helper functions.
+
+Performance note: this module is imported by the ``python -m blade.builtin_tools``
+subprocess that is spawned once per build action, so several comparatively heavy
+and only-occasionally-used stdlib modules (``inspect``, ``json``, ``signal``,
+``subprocess``, ``zipfile``) are imported lazily inside the functions that use
+them instead of at module load, to keep that startup cheap. Each such import is
+marked ``pylint: disable=import-outside-toplevel``. See issue #1159.
 """
 
 import ast
 import errno
 import hashlib
-import inspect
-import json
 import os
-import pickle  # re-exported; consumed via `blade.util.pickle` by external code
 import shutil
-import signal
-import subprocess
 import sys
-import zipfile
 from typing import TYPE_CHECKING
 
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
-
-try:
+# Only one of these exists per platform; guard on os.name so we don't attempt
+# (and swallow) an import that is guaranteed to fail on the other platform.
+if os.name == 'nt':
     import msvcrt
-except ImportError:
+    fcntl = None
+else:
+    import fcntl
     msvcrt = None
 
 if TYPE_CHECKING:
@@ -164,6 +164,7 @@ def get_cwd():
     """
     if os.name == 'nt':
         return os.getcwd()
+    import subprocess  # pylint: disable=import-outside-toplevel
     p = subprocess.Popen(['pwd'], stdout=subprocess.PIPE)
     return to_string(p.communicate()[0].strip())
 
@@ -237,6 +238,8 @@ def _echo(stdout, stderr):
 
 
 def shell(cmd, env=None):
+    import signal  # pylint: disable=import-outside-toplevel
+    import subprocess  # pylint: disable=import-outside-toplevel
     if isinstance(cmd, list):
         cmdline = ' '.join(cmd)
     else:
@@ -260,7 +263,7 @@ def shell(cmd, env=None):
 
 def run_command(args, **kwargs):
     """Run a command without echo, return returncode, stdout and stderr (always as string)."""
-
+    import subprocess  # pylint: disable=import-outside-toplevel
     kwargs.setdefault('stdout', subprocess.PIPE)
     kwargs.setdefault('stderr', subprocess.PIPE)
 
@@ -269,6 +272,7 @@ def run_command(args, **kwargs):
 
 
 def load_scm(build_dir):
+    import json  # pylint: disable=import-outside-toplevel
     revision = url = 'unknown'
     path = os.path.join(build_dir, 'scm.json')
     if os.path.exists(path):
@@ -331,6 +335,7 @@ def source_location(filename):
     lineno = 1
 
     # See https://stackoverflow.com/questions/17407119/python-inspect-stack-is-slow
+    import inspect  # pylint: disable=import-outside-toplevel
     frame = inspect.currentframe()
     while frame:
         if frame.f_code.co_filename.endswith(filename):
@@ -345,6 +350,7 @@ def calling_source_location(skip=0):
     """Return source location of current call stack, skip specified levels (not include itself)."""
     skip += 1  # This function itself is excluded.
     skipped = 0
+    import inspect  # pylint: disable=import-outside-toplevel
     frame = inspect.currentframe()
     while frame:
         if skipped == skip:
@@ -381,6 +387,7 @@ def parse_command_line(argv):
 
 def open_zip_file_for_write(filename, compression_level):
     """Open a zip file for writing with specified compression level."""
+    import zipfile  # pylint: disable=import-outside-toplevel
     compression = zipfile.ZIP_DEFLATED
     return zipfile.ZipFile(filename, 'w', compression, compresslevel=int(compression_level), allowZip64=True)
 

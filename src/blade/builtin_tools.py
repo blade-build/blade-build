@@ -7,21 +7,24 @@
 """
 This module defines various build functions for building
 targets from sources and custom parameters.
+
+Performance note: this module is the entry point of the
+``python -m blade.builtin_tools`` subprocess, spawned once per build action
+(the hot one being ``cc_inclusion_check``, run per cc target). To keep that
+startup cheap, heavier stdlib modules used only by cold tools (``fnmatch``,
+``getpass``, ``socket``, ``subprocess``, ``tarfile``, ``zipfile``) are imported
+lazily inside the functions that use them, each marked
+``pylint: disable=import-outside-toplevel``. See issue #1159.
 """
 
 
-import fnmatch
-import getpass
 import os
+import pickle
 import shutil
-import socket
-import subprocess
 import sys
-import tarfile
 import textwrap
 import traceback
 import time
-import zipfile
 
 from blade import console
 from blade import util
@@ -76,6 +79,8 @@ def _cleanup_outputs():
 
 def generate_scm(scm, revision, url, profile, compiler, args):
     """Generate `scm.c` file"""
+    import getpass  # pylint: disable=import-outside-toplevel
+    import socket  # pylint: disable=import-outside-toplevel
 
     _declare_outputs(scm)
 
@@ -116,7 +121,7 @@ def generate_cc_inclusion_check(args):
     console.enable_color(True)
     ok, details = inclusion_check.check(info_file)
     with open(info_file + '.details', 'wb') as f:
-        util.pickle.dump(details, f)
+        pickle.dump(details, f)
     if not ok:
         return 1
     with open(result_file, 'w') as f:
@@ -137,6 +142,7 @@ def archive_package_sources(package, sources, destinations):
 
 
 def generate_zip_package(path, sources, destinations):
+    import zipfile  # pylint: disable=import-outside-toplevel
     zip = zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True)
     manifest = archive_package_sources(zip.write, sources, destinations)
     zip.writestr(_PACKAGE_MANIFEST, '\n'.join(manifest) + '\n')
@@ -144,6 +150,7 @@ def generate_zip_package(path, sources, destinations):
 
 
 def generate_tar_package(path, sources, destinations, mode):
+    import tarfile  # pylint: disable=import-outside-toplevel
     tar = tarfile.open(path, mode, dereference=True)
     manifest = archive_package_sources(tar.add, sources, destinations)
     manifest_path = '%s.MANIFEST' % path
@@ -292,6 +299,7 @@ def generate_javac_compile(args):
     multi-word Ninja variables (``${javacflags}``, ``${in}``) can be
     unpacked unambiguously.
     """
+    import subprocess  # pylint: disable=import-outside-toplevel
     sep = args.index('--')
     classes_dir = args[0]
     output = args[1]
@@ -349,6 +357,7 @@ def generate_java_resource(args):
 
 def _get_all_test_class_names_in_jar(jar):
     """Returns a list of test class names in the jar file."""
+    import zipfile  # pylint: disable=import-outside-toplevel
     test_class_names = []
     zip_file = zipfile.ZipFile(jar, 'r')
     name_list = zip_file.namelist()
@@ -431,6 +440,7 @@ def generate_fat_jar(output, **kwargs):
 
 
 def generate_one_jar(onejar, main_class, bootjar, args):
+    import zipfile  # pylint: disable=import-outside-toplevel
     _declare_outputs(onejar)
     # Assume the first jar is the main jar, others jars are dependencies.
     main_jar = args[0]
@@ -569,6 +579,7 @@ def generate_python_library(pylib, basedir, args):
 
 
 def _is_python_excluded_path(filename, exclusions):
+    import fnmatch  # pylint: disable=import-outside-toplevel
     for exclusion in exclusions:
         if fnmatch.fnmatch(filename, exclusion):
             return True
@@ -596,6 +607,7 @@ def _pybin_add_pylib(pybin, libname, exclusions, dirs, dirs_with_init_py):
 
 
 def _pybin_add_zip(pybin, libname, filter, exclusions, dirs, dirs_with_init_py):
+    import zipfile  # pylint: disable=import-outside-toplevel
     with zipfile.ZipFile(libname, 'r') as lib:
         name_list = lib.namelist()
         for name in name_list:
@@ -628,6 +640,7 @@ def _pybin_add_whl(pybin, libname, exclusions, dirs, dirs_with_init_py):
 def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     # pybin is the wrapper script.  The zip always goes to
     # <pybin_without_extension>.zip, identical on all platforms.
+    import zipfile  # pylint: disable=import-outside-toplevel
     base, _ = os.path.splitext(pybin)
     zip_path = base + '.zip'
     _declare_outputs(pybin, zip_path)

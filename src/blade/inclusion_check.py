@@ -10,8 +10,21 @@ import os
 import pickle
 
 from blade import console
-from blade import util
-from blade.util import to_unix_path
+
+
+# Inlined from `util` (both are one-liners) so this module -- imported on the
+# hot `cc_inclusion_check` path -- does not pull in the whole `util` module.
+def to_unix_path(path):
+    """Convert path separators to Unix-style forward slashes."""
+    return path.replace('\\', '/')
+
+
+def path_under_dir(path, dir):
+    """Check whether *path* is under *dir*.
+
+    Both must be normalized, and both relative or both absolute.
+    """
+    return dir == '.' or path == dir or path.startswith(dir) and path[len(dir)] == os.path.sep
 
 
 def find_libs_by_header(hdr, hdr_targets_map, hdr_dir_targets_map):
@@ -327,7 +340,7 @@ class Checker:
 
     def _header_undeclared_message(self, hdr):
         msg = '"%s" is not declared in any cc target. ' % hdr
-        if util.path_under_dir(hdr, self.path):
+        if path_under_dir(hdr, self.path):
             msg += 'If it belongs to this target, it should be declared in "src"'
             if self.type.endswith('_library'):
                 msg += ' if it is private or in "hdrs" if it is public'
@@ -394,7 +407,7 @@ class Checker:
         generated_check_msg = []
 
         def check_file(src, full_src, is_header):
-            if util.path_under_dir(full_src, self.build_dir):  # Don't check generated files.
+            if path_under_dir(full_src, self.build_dir):  # Don't check generated files.
                 return
             path = self._find_inclusion_file(src, is_header)
             if not path:
