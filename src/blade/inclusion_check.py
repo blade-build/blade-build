@@ -59,6 +59,7 @@ class GlobalDeclaration:
         self._hdr_targets_map = declaration['public_hdrs']
         self._hdr_dir_targets_map = declaration['public_incs']
         self._private_hdrs_target_map = declaration['private_hdrs']
+        self._header_less = declaration.get('header_less', set())
         self._allowed_undeclared_hdrs = declaration['allowed_undeclared_hdrs']
         self._initialized = True
 
@@ -74,6 +75,11 @@ class GlobalDeclaration:
     def is_allowed_undeclared_hdr(self, hdr):
         self.lazy_init('is_allowed_undeclared_hdr ' + hdr)
         return hdr in self._allowed_undeclared_hdrs
+
+    def is_header_less(self, key):
+        """Whether a library was declared with an explicit empty `hdrs = []`."""
+        self.lazy_init('is_header_less ' + key)
+        return key in self._header_less
 
 
 _MSVC_INCUSION_PREFIX = 'Note: including file:'
@@ -254,6 +260,10 @@ class Checker:
         self.allowed_undeclared_hdrs = target['allowed_undeclared_hdrs']
         self.suppress = target['suppress']
         self.severity = target['severity']
+        # Unused-deps check (forward-compatible defaults for older incchk files).
+        self.unused_deps_severity = target.get('unused_deps_severity', 'debug')
+        self.unused_deps_suppress = set(target.get('unused_deps_suppress', []))
+        self.keep_deps = set(target.get('keep_deps', []))
 
         inclusion_declaration_file = os.path.join(self.build_dir, 'inclusion_declaration.data')
         self.global_declaration = GlobalDeclaration(inclusion_declaration_file)
@@ -391,6 +401,26 @@ class Checker:
                 msg.append(prefix % ('"%s"' % full_src))
         check_msg += msg
 
+    def _beautify_lib(self, lib):
+        """Render a lib key as ":name" (same dir) or "//path:name"."""
+        if lib.startswith(self.path + ':'):
+            return '"%s"' % lib[len(self.path):]
+        return '"//%s"' % lib
+
+    def _check_unused_deps(self, all_direct_hdrs):
+        """Return declared deps none of whose public headers is directly included.
+
+        Exemptions: `keep_deps`, configured `unused_deps_suppress`, the target
+        itself, and header-less libraries (declared `hdrs = []` -- they have no
+        public header that could be used, so flagging them would be pure noise).
+        """
+        used = set()
+        for hdr in all_direct_hdrs:
+            used |= self.find_libs_by_header(hdr)
+        candidates = set(self.deps) - used - self.keep_deps - self.unused_deps_suppress
+        candidates.discard(self.key)
+        return {dep for dep in candidates if not self.global_declaration.is_header_less(dep)}
+
     def check(self):
         """
         Check whether included header files is declared in "deps" correctly.
@@ -445,13 +475,26 @@ class Checker:
             console.diagnose(self.source_location, severity,
                 '{}: Missing indirect dependency declaration:\n{}'.format(self.name, '\n'.join(generated_check_msg)))
 
+        unused_deps = set()
+        if self.unused_deps_severity != 'debug':  # 'debug' == effectively off
+            unused_deps = self._check_unused_deps(all_direct_hdrs)
+            if unused_deps:
+                console.diagnose(self.source_location, self.unused_deps_severity,
+                    '{}: Unused dependency (declared in "deps" but none of its public headers is '
+                    'directly included):\n{}'.format(
+                        self.name, '\n'.join('  ' + self._beautify_lib(d) for d in sorted(unused_deps))))
+
         ok = (severity != 'error' or not direct_check_msg and not generated_check_msg)
+        if self.unused_deps_severity == 'error' and unused_deps:
+            ok = False
 
         details = {}
         if missing_details:
             details['missing_dep'] = missing_details
         if undeclared_hdrs:
             details['undeclared'] = sorted(undeclared_hdrs)
+        if unused_deps:
+            details['unused_deps'] = sorted(unused_deps)
         details['direct_hdrs'] = all_direct_hdrs
         details['generated_hdrs'] = all_generated_hdrs
         return ok, details

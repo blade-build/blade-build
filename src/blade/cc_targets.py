@@ -107,6 +107,12 @@ def find_libs_by_header(hdr):
 # dict(hdr, set(targets))
 _private_hdrs_target_map = {}
 
+# set(target_key): libraries declared with an explicit empty `hdrs = []`, i.e.
+# "no public interface". Such a lib can never be header-used, so the unused-deps
+# check exempts it (flagging it would be pure noise). NOTE: a lib with `hdrs`
+# unset (None) is NOT recorded here -- that is a separate `hdrs_missing` warning.
+_header_less_target_keys = set()
+
 
 def declare_private_hdrs(target, hdrs):
     """Declare private header files of a cc target."""
@@ -117,11 +123,17 @@ def declare_private_hdrs(target, hdrs):
         _private_hdrs_target_map[hdr].add(target.key)
 
 
+def declare_header_less(target):
+    """Declare a library as having no public headers (explicit `hdrs = []`)."""
+    _header_less_target_keys.add(target.key)
+
+
 def inclusion_declaration():
     return {
         'public_hdrs': _hdr_targets_map,
         'public_incs': _hdr_dir_targets_map,
         'private_hdrs': _private_hdrs_target_map,
+        'header_less': _header_less_target_keys,
         'allowed_undeclared_hdrs': config.get_item('cc_config', 'allowed_undeclared_hdrs')
     }
 
@@ -290,6 +302,10 @@ class CcTarget(Target):
                 getattr(self, severity)(
                         'Missing "hdrs" declaration. The public header files should be declared '
                         'explicitly, if no public header file, set "hdrs" to empty (hdrs = [])')
+        elif not hdrs:
+            # Explicit `hdrs = []`: the library declares it has no public interface,
+            # so the unused-deps check exempts it. See `_header_less_target_keys`.
+            declare_header_less(self)
         if not hdrs:
             return
         hdrs = var_to_list(hdrs)
@@ -803,6 +819,10 @@ class CcTarget(Target):
             'declared_genincs': declared_genincs,
             'severity': config.get_item('cc_config', 'hdr_dep_missing_severity'),
             'suppress': verify_suppress.get(self.key, {}),
+            'unused_deps_severity': config.get_item('cc_config', 'unused_deps_severity'),
+            'unused_deps_suppress':
+                config.get_item('cc_config', 'unused_deps_suppress').get(self.key, []),
+            'keep_deps': self.attr.get('keep_deps', []),  # populated once keep_deps attr lands
         }
         content = pickle.dumps(target_check_info)
 
