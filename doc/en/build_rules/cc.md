@@ -229,7 +229,7 @@ For undeclared header files that already existed in the code base before the upg
 
 The complement of the missing-dependency check above: Blade can also detect **redundant dependencies** — a library declared in `deps` whose public headers are never directly `#include`d by the target's sources or headers. Redundant deps slow down builds, leak unnecessary transitive dependencies, and rot over time.
 
-This check is **off by default**; enable it via [`cc_config.unused_deps_severity`](../config.md#cc_config): set it to `'warning'` for an advisory message, or `'error'` to fail the build. Advisory by default, like Bazel's `unused_deps` tool and Buck2.
+This check is **on by default at `'warning'`** (advisory — reported but does not fail the build); via [`cc_config.unused_deps_severity`](../config.md#cc_config) set it to `'error'` to fail the build, or `'debug'` to silence. Advisory by default, like Bazel's `unused_deps` tool and Buck2.
 
 The following deps are never reported:
 

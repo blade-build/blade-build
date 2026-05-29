@@ -201,7 +201,7 @@ Blade 能检查到两种缺失情况：
 
 与上面「缺失依赖」相对，Blade 还能检查**多余的依赖**：在 `deps` 中声明了某个库，但本目标的源文件和头文件并没有直接 `#include` 它的任何公开头文件。多余依赖会拖慢构建、传递不必要的依赖，长期容易腐化。
 
-该检查默认**关闭**，通过 [`cc_config.unused_deps_severity`](../config.md#cc_config) 启用：设为 `'warning'` 仅提示，`'error'` 则让构建失败。与 Bazel 的 `unused_deps`、Buck2 一致，默认是建议性的。
+该检查默认即以 `'warning'`（建议性）开启：会提示但不导致构建失败。通过 [`cc_config.unused_deps_severity`](../config.md#cc_config) 可设为 `'error'` 让构建失败，或设为 `'debug'` 关闭。与 Bazel 的 `unused_deps`、Buck2 一致，默认是建议性的。
 
 以下依赖不会被报告：
 

@@ -76,7 +76,7 @@ class GlobalDeclaration:
         self.lazy_init('is_allowed_undeclared_hdr ' + hdr)
         return hdr in self._allowed_undeclared_hdrs
 
-    def is_header_less(self, key):
+    def is_header_less(self, key: str) -> bool:
         """Whether a library was declared with an explicit empty `hdrs = []`."""
         self.lazy_init('is_header_less ' + key)
         return key in self._header_less
@@ -401,13 +401,13 @@ class Checker:
                 msg.append(prefix % ('"%s"' % full_src))
         check_msg += msg
 
-    def _beautify_lib(self, lib):
+    def _beautify_lib(self, lib: str) -> str:
         """Render a lib key as ":name" (same dir) or "//path:name"."""
         if lib.startswith(self.path + ':'):
             return '"%s"' % lib[len(self.path):]
         return '"//%s"' % lib
 
-    def _check_unused_deps(self, all_direct_hdrs):
+    def _check_unused_deps(self, all_direct_hdrs: 'set[str]') -> 'set[str]':
         """Return declared deps none of whose public headers is directly included.
 
         Exemptions: `keep_deps`, configured `unused_deps_suppress`, the target

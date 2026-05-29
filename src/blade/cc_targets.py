@@ -123,7 +123,7 @@ def declare_private_hdrs(target, hdrs):
         _private_hdrs_target_map[hdr].add(target.key)
 
 
-def declare_header_less(target):
+def declare_header_less(target: 'CcTarget') -> None:
     """Declare a library as having no public headers (explicit `hdrs = []`)."""
     _header_less_target_keys.add(target.key)
 

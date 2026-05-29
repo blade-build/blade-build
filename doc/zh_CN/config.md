@@ -280,7 +280,7 @@ cc_config(
 
 **未使用依赖检查的严重性**
 
-**用途：** 检查「在 `deps` 中声明、但其任何公开头文件都没有被本目标直接 `#include`」的多余依赖。可取值为 `debug` / `info` / `notice` / `warning` / `error`。默认 `'debug'`（相当于关闭：不产生输出，也不会因此加载全局声明文件）；设为 `'warning'`（仅提示）或 `'error'`（构建失败）以启用。与 Bazel 的 `unused_deps`、Buck2 一致，默认是建议性的、不强制。
+**用途：** 检查「在 `deps` 中声明、但其任何公开头文件都没有被本目标直接 `#include`」的多余依赖。可取值为 `debug` / `info` / `notice` / `warning` / `error`。默认 `'warning'`（建议性：会提示但不导致构建失败）；设为 `'error'` 可让多余依赖导致构建失败，或设为 `'debug'` 关闭（不产生输出，也不加载全局声明文件）。与 Bazel 的 `unused_deps`、Buck2 一致，默认是建议性的、不强制。
 
 **豁免：** 以下依赖不会被报告——
 

@@ -265,9 +265,10 @@ the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
 - `unused_deps_severity`: string = 'debug' | ['debug', 'info', 'notice', 'warning', 'error']
 
   Severity of the unused dependency check: a dep declared in `deps` none of whose public headers
-  is directly `#include`d by the target. Defaults to `'debug'` (effectively off — the check is
-  skipped and the global declaration is not loaded); set to `'warning'` (advisory) or `'error'`
-  (enforce) to enable. Advisory by default, like Bazel's `unused_deps` tool and Buck2.
+  is directly `#include`d by the target. Defaults to `'warning'` (advisory — reported but does not
+  fail the build); set to `'error'` to fail the build on a redundant dep, or `'debug'` to silence
+  (the check is skipped and the global declaration is not loaded). Advisory by default, like
+  Bazel's `unused_deps` tool and Buck2.
 
   Exempt from the check:
   - libraries declared with an explicit empty `hdrs = []` (no public interface, so there is no

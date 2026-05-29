@@ -106,10 +106,11 @@ _CONFIG_TEMPLATE = {
         'hdr_dep_missing_suppress__help__': 'Header deps missing suppress control, see docs for details',
         'allowed_undeclared_hdrs': set(),
         'allowed_undeclared_hdrs__help__': 'Allowed undeclared header files',
-        'unused_deps_severity': 'debug',
+        'unused_deps_severity': 'warning',
         'unused_deps_severity__help__': 'Severity of the unused dependency check (a dep declared '
             'in "deps" none of whose public headers is directly included), can be %s. Defaults to '
-            '"debug" (effectively off); set to "warning" or "error" to enable.' % constants.SEVERITIES,
+            '"warning" (advisory); set to "error" to enforce, or "debug" to silence.'
+            % constants.SEVERITIES,
         'unused_deps_suppress': {},
         'unused_deps_suppress__help__': 'Unused deps suppress control, a {target: [deps]} map of '
             'intentionally-kept deps to exempt from the unused dependency check',

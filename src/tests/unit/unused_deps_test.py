@@ -16,6 +16,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from typing import Sequence
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
@@ -32,7 +33,8 @@ class UnusedDepsTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _checker(self, deps, header_less=(), keep_deps=(), suppress=()):
+    def _checker(self, deps: Sequence[str], header_less: Sequence[str] = (),
+                 keep_deps: Sequence[str] = (), suppress: Sequence[str] = ()) -> inclusion_check.Checker:
         """Build a Checker over a fabricated global declaration.
 
         Each non-header-less dep ``pkg:x`` owns the public header ``pkg/x.h``.
@@ -67,7 +69,7 @@ class UnusedDepsTest(unittest.TestCase):
         }
         return inclusion_check.Checker(target)
 
-    def _hdr(self, dep):
+    def _hdr(self, dep: str) -> str:
         return '%s/%s.h' % (self.path, dep.split(':')[-1])
 
     def test_used_dep_not_flagged(self):
