@@ -914,11 +914,15 @@ class _NinjaFileHeaderGenerator:
                   compiler = %s
                 ''') % (scm, revision, url, self.options.profile, f'{cc} {cc_version}'))
         scm_obj = self.build_toolchain.object_file_of(scm)
+        # The `cxx` rule routes through the inclusion wrapper, which needs an
+        # `inclusion_stack` path (custom ninja vars cannot default at rule level).
+        # scm.cc is not inclusion-checked, so point it at a throwaway file.
         self._add_line(textwrap.dedent('''\
                 build %s: cxx %s
                   cppflags = -w -O2
                   cxx_warnings =
-                ''') % (scm_obj, scm))
+                  inclusion_stack = %s
+                ''') % (scm_obj, scm, scm_obj + '.incstk'))
 
     def generate_cuda_rules(self):
         if self.build_toolchain.cc_is('msvc'):
