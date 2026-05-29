@@ -476,9 +476,12 @@ class _NinjaFileHeaderGenerator:
         """Build the bare preprocess command for a header's inclusion file.
 
         Run by the `hdrs`-mode wrapper script (see `_INCLUSION_WRAPPER_SCRIPT`);
-        `${out}` is the inclusion (`.incstk`) file.
+        `${out}` is the inclusion (`.incstk`) file. `-H` is what the wrapper's
+        awk extracts -- without it the inclusion stack is never emitted and the
+        `.incstk` ends up empty, silently breaking checks for header-only
+        libraries. See issue #1169.
         """
-        cmd = ('%s -o /dev/null -E -MMD -MF ${out}.d %s %s -w ${cppflags} %s ${includes} ${in}' % (
+        cmd = ('%s -o /dev/null -E -MMD -MF ${out}.d %s %s -w ${cppflags} %s ${includes} ${in} -H' % (
             cc, ' '.join(flags), ' '.join(cppflags), includes))
         return 'sh %s hdrs ${out} %s' % (self._inclusion_wrapper_script(), cmd)
 
