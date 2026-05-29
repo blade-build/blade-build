@@ -59,14 +59,6 @@ class BinaryRunner:
         except OSError:
             shutil.copy2(src, dst)
 
-    @staticmethod
-    def _symlink_or_copy_dir(src, dst):
-        """Create a symlink from dst to src, or copy the directory tree on failure."""
-        try:
-            os.symlink(src, dst)
-        except OSError:
-            shutil.copytree(src, dst, symlinks=False)
-
     def __check_test_data_dest(self, target, dest, dest_list):
         """Check whether the destination of test data is valid or not."""
         dest_norm = os.path.normpath(dest)
@@ -110,13 +102,31 @@ class BinaryRunner:
         return run_env
 
     def _prepare_shared_libraries(self, target, runfiles_dir):
-        """Prepare correct shared libraries for running target"""
+        """Symlink shared libraries into the runfiles dir so the target finds them.
 
-        # Shared library symlink preparation is Linux/ELF-specific (RPATH/RUNPATH).
-        # On Windows, DLL lookup uses a different mechanism (exe directory, PATH),
-        # so we skip the build_dir and soname symlinks.
+        Tests/binaries run with ``cwd=runfiles_dir``. blade links its own dynamic
+        libraries by their relative build path (e.g. ``build64_release/pkg/libfoo.so``)
+        with no soname/install_name, so that path is baked into the binary and both
+        ld.so (Linux) and dyld (macOS) resolve it relative to ``cwd``. A
+        ``runfiles/<build_dir>`` symlink to the real build dir makes those paths
+        resolve -- this covers every blade-built library on Linux and macOS alike.
+        Prebuilt libraries that carry a soname are referenced by bare soname, so
+        they additionally get a ``runfiles/<soname>`` symlink found via
+        ``LD_LIBRARY_PATH=runfiles``.
+
+        Windows uses a different DLL lookup (exe dir, PATH) and the PE import table
+        carries no path, so this scheme does not apply; skip it there (the
+        same-name-in-different-dirs case needs a unique-naming fix instead).
+        """
         if os.name == 'nt':
             return
+
+        # Symlink the build dir into runfiles so cwd-relative `<build_dir>/.../libX`
+        # references resolve at run time (blade-built libraries have no soname, so
+        # the build path is what is recorded in the binary). See issue #1167.
+        build_dir_link = os.path.join(runfiles_dir, os.path.basename(self.build_dir))
+        if not os.path.lexists(build_dir_link):
+            os.symlink(os.path.abspath(self.build_dir), build_dir_link)
 
         # For shared libraries with a `soname`, their paths are not written into the executable;
         # they are always searched for in a set of configured directories.
