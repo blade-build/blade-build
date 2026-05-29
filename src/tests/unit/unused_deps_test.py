@@ -39,10 +39,10 @@ class UnusedDepsTest(unittest.TestCase):
 
         Each non-header-less dep ``pkg:x`` owns the public header ``pkg/x.h``.
         """
-        header_less = set(header_less)
+        header_less_keys = set(header_less)
         public_hdrs = {}
         for dep in deps:
-            if dep in header_less:
+            if dep in header_less_keys:
                 continue
             name = dep.split(':')[-1]
             public_hdrs.setdefault('%s/%s.h' % (self.path, name), set()).add(dep)
@@ -50,7 +50,7 @@ class UnusedDepsTest(unittest.TestCase):
             'public_hdrs': public_hdrs,
             'public_incs': {},
             'private_hdrs': {},
-            'header_less': header_less,
+            'header_less': header_less_keys,
             'allowed_undeclared_hdrs': set(),
         }
         with open(os.path.join(self.tmp, 'inclusion_declaration.data'), 'wb') as f:
