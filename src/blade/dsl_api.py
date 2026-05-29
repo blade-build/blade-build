@@ -13,6 +13,10 @@
 API for BUILD files and extensions.
 """
 
+# Keep `X | None` and similar annotations lazy so they don't fail on Python 3.9
+# (PEP 604 union syntax is only evaluable at runtime on 3.10+).
+from __future__ import annotations
+
 import os
 import re
 import sys
