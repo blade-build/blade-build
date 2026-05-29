@@ -4,9 +4,9 @@
 
 """Unit tests for inclusion_check.Checker._find_inclusion_file.
 
-Regression for the MSVC suffix mismatch: a source's inclusion file is named
-`<src><obj_suffix>.H` (`.o.H` on GCC/clang, `.obj.H` on MSVC), so the finder
-must use the toolchain's obj suffix instead of hardcoding `.o`.
+The per-source/header inclusion stack is named `<file>.incstk`, independent of
+the object-file suffix (`.o` on GCC/clang, `.obj` on MSVC), so the finder uses
+the same name for sources and headers regardless of toolchain.
 """
 
 import os
@@ -28,11 +28,12 @@ class FindInclusionFileTest(unittest.TestCase):
         self.name = 'lib'
         self.objs_dir = os.path.join(self.tmp, self.path, self.name + '.objs')
         os.makedirs(self.objs_dir)
+        self.checker = self._checker()
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _checker(self, obj_suffix: str) -> inclusion_check.Checker:
+    def _checker(self) -> inclusion_check.Checker:
         target = {
             'type': 'cc_library', 'name': self.name, 'path': self.path,
             'key': '%s:%s' % (self.path, self.name), 'deps': [],
@@ -41,7 +42,7 @@ class FindInclusionFileTest(unittest.TestCase):
             'declared_hdrs': set(), 'declared_incs': set(),
             'declared_genhdrs': set(), 'declared_genincs': set(),
             'hdrs_deps': {}, 'private_hdrs_deps': {}, 'allowed_undeclared_hdrs': {},
-            'suppress': {}, 'severity': 'error', 'obj_suffix': obj_suffix,
+            'suppress': {}, 'severity': 'error',
         }
         return inclusion_check.Checker(target)
 
@@ -50,41 +51,28 @@ class FindInclusionFileTest(unittest.TestCase):
         open(path, 'w').close()
         return path
 
-    def test_source_gcc_suffix(self):
-        c = self._checker('.o')
-        expected = self._touch('foo.cc.o.H')
-        self.assertEqual(c._find_inclusion_file('foo.cc', is_header=False), expected)
+    def test_source_inclusion_file(self):
+        expected = self._touch('foo.cc.incstk')
+        self.assertEqual(self.checker._find_inclusion_file('foo.cc'), expected)
 
-    def test_source_msvc_suffix(self):
-        c = self._checker('.obj')
-        expected = self._touch('foo.cc.obj.H')  # MSVC writes <src>.obj.H
-        self.assertEqual(c._find_inclusion_file('foo.cc', is_header=False), expected)
+    def test_header_inclusion_file(self):
+        expected = self._touch('foo.h.incstk')
+        self.assertEqual(self.checker._find_inclusion_file('foo.h'), expected)
 
-    def test_source_msvc_does_not_match_dot_o(self):
-        # The old hardcoded `.o.H` would not exist for an MSVC build; ensure the
-        # finder returns '' (not a stale match) when only `.obj.H` would be wrong.
-        c = self._checker('.obj')
-        self._touch('foo.cc.o.H')  # wrong-suffix file present
-        self.assertEqual(c._find_inclusion_file('foo.cc', is_header=False), '')
+    def test_source_in_subdir(self):
+        os.makedirs(os.path.join(self.objs_dir, 'sub'))
+        expected = self._touch(os.path.join('sub', 'foo.cc.incstk'))
+        self.assertEqual(self.checker._find_inclusion_file('sub/foo.cc'), expected)
 
-    def test_header_suffix_independent(self):
-        for suffix in ('.o', '.obj'):
-            c = self._checker(suffix)
-            expected = self._touch('foo.h.H')
-            self.assertEqual(c._find_inclusion_file('foo.h', is_header=True), expected)
+    def test_missing_returns_empty(self):
+        # No `.incstk` written for this source -> not found.
+        self.assertEqual(self.checker._find_inclusion_file('foo.cc'), '')
 
-    def test_default_suffix_is_dot_o(self):
-        target = {
-            'type': 'cc_library', 'name': self.name, 'path': self.path,
-            'key': 'pkg:lib', 'deps': [], 'build_dir': self.tmp,
-            'source_location': 'pkg/BUILD:1', 'expanded_srcs': [], 'expanded_hdrs': [],
-            'declared_hdrs': set(), 'declared_incs': set(), 'declared_genhdrs': set(),
-            'declared_genincs': set(), 'hdrs_deps': {}, 'private_hdrs_deps': {},
-            'allowed_undeclared_hdrs': {}, 'suppress': {}, 'severity': 'error',
-            # no 'obj_suffix' -> forward-compat default
-        }
-        c = inclusion_check.Checker(target)
-        self.assertEqual(c.obj_suffix, '.o')
+    def test_legacy_obj_suffix_name_not_matched(self):
+        # The old `<src>.o.H` / `<src>.obj.H` names must not be picked up.
+        self._touch('foo.cc.o.H')
+        self._touch('foo.cc.obj.H')
+        self.assertEqual(self.checker._find_inclusion_file('foo.cc'), '')
 
 
 if __name__ == '__main__':

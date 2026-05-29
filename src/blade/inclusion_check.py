@@ -95,7 +95,7 @@ def _is_inclusion_line(line):
 def _parse_inclusion_stacks(path, build_dir):
     """Parae headers inclusion stacks from file.
 
-    Given the following inclusions found in the app/example/foo.cc.o.H:
+    Given the following inclusions found in the app/example/foo.cc.incstk:
 
         . ./app/example/foo.h
         .. build64_release/app/example/proto/foo.pb.h
@@ -260,9 +260,6 @@ class Checker:
         self.allowed_undeclared_hdrs = target['allowed_undeclared_hdrs']
         self.suppress = target['suppress']
         self.severity = target['severity']
-        # `<src><obj_suffix>.H` (.o on GCC/clang, .obj on MSVC); default '.o' for
-        # forward compatibility with older incchk files.
-        self.obj_suffix = target.get('obj_suffix', '.o')
         # Unused-deps check (forward-compatible defaults for older incchk files).
         self.unused_deps_severity = target.get('unused_deps_severity', 'debug')
         self.unused_deps_suppress = set(target.get('unused_deps_suppress', []))
@@ -272,18 +269,16 @@ class Checker:
         self.global_declaration = GlobalDeclaration(inclusion_declaration_file)
 
 
-    def _find_inclusion_file(self, src, is_header):
-        """Find the '.H' file for the given src.
+    def _find_inclusion_file(self, src):
+        """Find the `.incstk` inclusion-stack file for the given source or header.
 
-        The `.H` file is generated from gcc's `-H` option, see
+        The name is `<src>.incstk` for both sources and headers (independent of
+        the object-file suffix). It is generated from gcc's `-H` option, see
         https://gcc.gnu.org/onlinedocs/gcc/Preprocessor-Options.html
         for details.
         """
-        # NOTE: a header's inclusion file is `<hdr>.H`; a source's is
-        # `<src><obj_suffix>.H` (`.o.H` on GCC/clang, `.obj.H` on MSVC).
         objs_dir = os.path.join(self.build_dir, self.path, self.name + '.objs')
-        base = os.path.join(objs_dir, src)
-        path = '%s.H' % base if is_header else '%s%s.H' % (base, self.obj_suffix)
+        path = os.path.join(objs_dir, src) + '.incstk'
         if not os.path.exists(path):
             return ''
         return path
@@ -441,10 +436,10 @@ class Checker:
         direct_check_msg = []
         generated_check_msg = []
 
-        def check_file(src, full_src, is_header):
+        def check_file(src, full_src):
             if path_under_dir(full_src, self.build_dir):  # Don't check generated files.
                 return
-            path = self._find_inclusion_file(src, is_header)
+            path = self._find_inclusion_file(src)
             if not path:
                 console.warning('No inclusion file found for %s' % full_src)
                 return
@@ -467,10 +462,10 @@ class Checker:
                 missing_details[src] = list(missing_dep_hdrs)
 
         for src, full_src in self.expanded_srcs:
-            check_file(src, full_src, is_header=False)
+            check_file(src, full_src)
 
         for hdr, full_hdr in self.expanded_hdrs:
-            check_file(hdr, full_hdr, is_header=True)
+            check_file(hdr, full_hdr)
 
         severity = self.severity
         if direct_check_msg:

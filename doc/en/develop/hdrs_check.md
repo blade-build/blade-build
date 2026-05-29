@@ -42,15 +42,15 @@ It also writes a `<target>.incchk.extra` containing `hdrs_deps` / `private_hdrs_
 
 `.incchk` **is rewritten only when its content changes**, keeping its mtime stable to avoid triggering a needless re-check.
 
-### 1.3 Emitting the "inclusion stack" at compile time (`.H` files)
+### 1.3 Emitting the "inclusion stack" at compile time (`.incstk` files)
 
 The check needs to know which headers each source/header **actually** includes. The compiler produces this as a side effect of compilation:
 
-- **Source files**: every compile goes through the generated wrapper `cc_wrapper.sh` (see `backend.py`), which appends GCC's `-H` option to the compile command and uses an awk program to separate the "inclusion stack" from ordinary diagnostics, writing it to `<obj>.o.H`.
-- **Public headers**: a header is not compiled normally, so a separate `cxxhdrs` rule preprocesses it (`-E`) to produce `<hdr>.H`.
-- **MSVC**: it does not emit `.H` during compilation (it uses ninja's native `deps = msvc` to parse `/showIncludes`), so an extra `cxxhdrs` preprocess step is added for source files too.
+- **Source files**: every compile goes through the generated wrapper `cc_wrapper.sh` (see `backend.py`), which appends GCC's `-H` option to the compile command and uses an awk program to separate the "inclusion stack" from ordinary diagnostics, writing it to `<src>.incstk`. The path is passed via the per-object `inclusion_stack` ninja variable, so it is independent of the object-file suffix (`.o` vs `.obj`).
+- **Public headers**: a header is not compiled normally, so a separate `cxxhdrs` rule preprocesses it (`-E`) to produce `<hdr>.incstk`.
+- **MSVC**: it does not emit an inclusion stack during compilation (it uses ninja's native `deps = msvc` to parse `/showIncludes`), so an extra `cxxhdrs` preprocess step is added for source files too.
 
-A `.H` file encodes the **inclusion level with the number of leading dots**, for example (GCC format):
+A `.incstk` file encodes the **inclusion level with the number of leading dots**, for example (GCC format):
 
 ```text
 . ./app/example/foo.h
@@ -69,14 +69,14 @@ The MSVC format is `Note: including file:  <path>`, using the number of leading 
 python -m blade.builtin_tools cc_inclusion_check <target>.incchk.result <target>.incchk
 ```
 
-Its implicit deps are all of the target's `.H` files and object files; its output is `<target>.incchk.result` (which contains `OK` when the check passes). That result file is wired as an **order-only dependency** of the link step — so a passing check does not trigger a relink, and a change in check info only re-runs the check rather than relinking.
+Its implicit deps are all of the target's `.incstk` files and object files; its output is `<target>.incchk.result` (which contains `OK` when the check passes). That result file is wired as an **order-only dependency** of the link step — so a passing check does not trigger a relink, and a change in check info only re-runs the check rather than relinking.
 
 ### 1.5 Running the check (`inclusion_check.py`)
 
 `ccincchk` ultimately calls `inclusion_check.check()`:
 
 1. Load the target's `.incchk` (and `.extra`), and lazily load the global `inclusion_declaration.data` on demand.
-2. For each source and header of the target, locate the corresponding `.H` and parse it with `_parse_inclusion_stacks()` into:
+2. For each source and header of the target, locate the corresponding `.incstk` and parse it with `_parse_inclusion_stacks()` into:
    - **directly included headers** (level 1, non-absolute path);
    - **generated headers** (paths under `build_dir`): record the **full inclusion stack** from the source to that generated header, and **stop descending** there — deeper inclusions are guaranteed by the generator (e.g. `proto_library`);
    - **absolute paths** (system headers): ignored.
@@ -179,4 +179,4 @@ This mechanism covers **both** with a single "observe + ownership map": `"... is
 | `<target>.incchk.extra` | Local subset cache of the global declaration (avoids loading the large file, avoids triggering rebuilds) |
 | `<target>.incchk.result` | Check result; contains `OK` when it passes |
 | `<target>.incchk.details` | The direct/generated headers reported by the compiler, used to build the `.extra` cache next build |
-| `<obj>.o.H` / `<hdr>.H` | The inclusion stack of a source/header (produced by `-H` / preprocessing) |
+| `<src>.incstk` / `<hdr>.incstk` | The inclusion stack of a source/header (produced by `-H` / preprocessing) |

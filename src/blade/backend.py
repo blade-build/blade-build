@@ -29,8 +29,8 @@ from blade import util
 # belongs to, we use gcc's `-H` option to print the inclusion stack
 # (https://gcc.gnu.org/onlinedocs/gcc/Preprocessor-Options.html). That goes to
 # stderr, mixed with diagnostics, so this awk program separates them: lines of
-# the inclusion stack (leading dots) go to stdout (-> the `.H` file), everything
-# else is forwarded to stderr.
+# the inclusion stack (leading dots) go to stdout (-> the `.incstk` file),
+# everything else is forwarded to stderr.
 #
 # It lives in a generated wrapper script (see `_inclusion_wrapper_script`)
 # instead of inline in the ninja command, so a failed compile no longer echoes
@@ -425,7 +425,7 @@ class _NinjaFileHeaderGenerator:
         includes = includes + ['.', self.build_dir]
         includes = ' '.join(['-I%s' % inc for inc in includes])
 
-        template = self._cc_compile_command_wrapper_template('${out}.H')
+        template = self._cc_compile_command_wrapper_template('${inclusion_stack}')
 
         cc_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
                       '${c_warnings} ${cppflags} %s ${includes} ${in}') % (
@@ -436,8 +436,8 @@ class _NinjaFileHeaderGenerator:
                            depfile='${out}.d',
                            deps='gcc',
                            # restat lets ninja prune the inclusion check when the
-                           # compile's `${out}.H` inclusion stack is unchanged (it
-                           # is written write-if-changed). See issue #1161.
+                           # per-source `${inclusion_stack}` (`<src>.incstk`) is
+                           # unchanged (written write-if-changed). See issue #1161.
                            restat=True)
 
         cxx_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
@@ -473,10 +473,10 @@ class _NinjaFileHeaderGenerator:
                            description='CXX HDRS ${in}')
 
     def _hdrs_command(self, cc, flags, cppflags, includes):
-        """Build the bare preprocess command for a header's inclusion (`.H`) file.
+        """Build the bare preprocess command for a header's inclusion file.
 
         Run by the `hdrs`-mode wrapper script (see `_INCLUSION_WRAPPER_SCRIPT`);
-        `${out}` is the inclusion file.
+        `${out}` is the inclusion (`.incstk`) file.
         """
         cmd = ('%s -o /dev/null -E -MMD -MF ${out}.d %s %s -w ${cppflags} %s ${includes} ${in}' % (
             cc, ' '.join(flags), ' '.join(cppflags), includes))
@@ -941,7 +941,7 @@ class _NinjaFileHeaderGenerator:
         includes = includes + ['.', self.build_dir]
         includes = ' '.join(['-I%s' % inc for inc in includes])
 
-        template = self._cc_compile_command_wrapper_template('${out}.H', cuda=True)
+        template = self._cc_compile_command_wrapper_template('${inclusion_stack}', cuda=True)
 
         _, cxx, _ = self.build_accelerator.get_cc_commands()
         cu_command = '%s -ccbin "%s" -o ${out} -MMD -MF ${out}.d ' \

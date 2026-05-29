@@ -146,21 +146,35 @@ class CuTarget(CcTarget):
         implicit_deps = []
 
         objs_dir = self._target_file_path(self.name + '.objs')
+        # Like _cc_objects: the GCC nvcc wrapper writes a `<src>.incstk` inclusion
+        # stack, passed via the per-object `inclusion_stack` variable. Not emitted
+        # for MSVC (deps=msvc) or compdb dump. See issue #1161.
+        emit_inclusion_stack = self._emits_inclusion_stack()
         objs = []
+        inclusion_stacks = []
         for src, full_src in expanded_srcs:
             obj = os.path.join(objs_dir, self.blade.get_build_toolchain().object_file_of(src))
+            objvars, stack = vars, None
+            if emit_inclusion_stack:
+                stack = os.path.join(objs_dir, src) + '.incstk'
+                objvars = dict(vars, inclusion_stack=stack)
             self.generate_build("cudacc", obj, inputs=full_src,
                                 implicit_deps=implicit_deps,
                                 order_only_deps=order_only_deps,
-                                variables=vars, clean=[],
+                                implicit_outputs=[stack] if stack else None,
+                                variables=objvars, clean=[],
                                 )
             objs.append(obj)
+            if stack:
+                inclusion_stacks.append(stack)
         self._remove_on_clean(objs_dir)
 
         # If cuda_path is in this repository, the {cuda_path}/include will throw
         # inclusion check error if header not in any target.
         if 'inclusion_check_info_file' in self.data:
-            return objs, self._generate_inclusion_check(objs_dir, objs, vars, order_only_deps)
+            return objs, self._generate_inclusion_check(
+                objs_dir, objs, vars, order_only_deps,
+                source_inclusion_stacks=inclusion_stacks if emit_inclusion_stack else None)
         return objs, None
 
     def _cuda_library(self, objs, inclusion_check_result=None):

@@ -637,10 +637,12 @@ class CcTarget(Target):
             implicit_deps.append(self._source_file_path(self.attr['secret_revision_file']))
 
         objs_dir = self._target_file_path(self.name + '.objs')
-        # The cc/cxx compile wrapper writes a `<obj>.H` inclusion stack for real
-        # GCC/clang compiles; declaring it an implicit output (with `restat` on the
-        # rule) lets ninja prune the inclusion check when the stack is unchanged.
-        # See issue #1161. (Not produced for MSVC or compdb dump.)
+        # The cc/cxx compile wrapper writes a `<src>.incstk` inclusion stack for
+        # real GCC/clang compiles; its name is independent of the object file, so
+        # the rule takes the path via the per-object `inclusion_stack` variable.
+        # Declaring it an implicit output (with `restat` on the rule) lets ninja
+        # prune the inclusion check when the stack is unchanged. See issue #1161.
+        # (Not produced for MSVC or compdb dump.)
         emit_inclusion_stack = self._emits_inclusion_stack()
         objs = []
         inclusion_stacks = []
@@ -651,14 +653,17 @@ class CcTarget(Target):
                 self.generate_build('phony', full_src, inputs=[], clean=[])
             obj = os.path.join(objs_dir, self.blade.get_build_toolchain().object_file_of(src))
             rule = self._get_rule_from_suffix(src, secret)
-            stack = obj + '.H'
+            objvars, stack = vars, None
+            if emit_inclusion_stack:
+                stack = os.path.join(objs_dir, src) + '.incstk'
+                objvars = dict(vars, inclusion_stack=stack)
             self.generate_build(rule, obj, inputs=full_src,
                                 implicit_deps=implicit_deps,
                                 order_only_deps=order_only_deps,
-                                implicit_outputs=[stack] if emit_inclusion_stack else None,
-                                variables=vars, clean=[])
+                                implicit_outputs=[stack] if stack else None,
+                                variables=objvars, clean=[])
             objs.append(obj)
-            if emit_inclusion_stack:
+            if stack:
                 inclusion_stacks.append(stack)
         self._remove_on_clean(objs_dir)
 
@@ -670,11 +675,11 @@ class CcTarget(Target):
         return objs, None
 
     def _emits_inclusion_stack(self):
-        """Whether the cc/cxx compile writes a `<obj>.H` inclusion stack.
+        """Whether the cc/cxx compile writes a `<src>.incstk` inclusion stack.
 
         True only for real GCC/clang compiles (the wrapper emits it). False for
-        MSVC (no `.H` from compilation) and for compdb dump (the wrapper, and thus
-        `-H`, is bypassed). See issue #1161.
+        MSVC (no inclusion stack from compilation) and for compdb dump (the
+        wrapper, and thus `-H`, is bypassed). See issue #1161.
         """
         if self.blade.get_build_toolchain().obj_suffix != '.o':
             return False
@@ -693,18 +698,19 @@ class CcTarget(Target):
         for hdr, full_hdr in self.attr['expanded_hdrs']:
             if path_under_dir(full_hdr, self.build_dir):  # Don't check generated header files
                 continue
-            output = os.path.join(objs_dir, hdr + '.H')
+            output = os.path.join(objs_dir, hdr) + '.incstk'
             implicit_deps.append(output)
             self.generate_build('cxxhdrs', output, inputs=full_hdr,
                                 order_only_deps=order_only_deps, variables=vars, clean=[])
         tc = self.blade.get_build_toolchain()
         if tc.obj_suffix != '.o':
-            # MSVC does not generate .H files during compilation (unlike GCC's -H wrapper),
-            # so we need an explicit cxxhdrs preprocess step for source files too.
+            # MSVC does not generate inclusion stacks during compilation (unlike
+            # GCC's -H wrapper), so we need an explicit cxxhdrs preprocess step for
+            # source files too.
             for src, full_src in self.attr['expanded_srcs']:
                 if path_under_dir(full_src, self.build_dir):
                     continue
-                output = os.path.join(objs_dir, src + tc.obj_suffix + '.H')
+                output = os.path.join(objs_dir, src) + '.incstk'
                 implicit_deps.append(output)
                 self.generate_build('cxxhdrs', output, inputs=full_src,
                                     order_only_deps=order_only_deps, variables=vars, clean=[])
@@ -817,9 +823,6 @@ class CcTarget(Target):
             'declared_incs': declared_incs,
             'declared_genhdrs': declared_genhdrs,
             'declared_genincs': declared_genincs,
-            # The per-source inclusion file is named `<src><obj_suffix>.H`; carry
-            # the suffix so the checker finds it on MSVC (.obj) too, not just GCC (.o).
-            'obj_suffix': self.blade.get_build_toolchain().obj_suffix,
             'severity': config.get_item('cc_config', 'hdr_dep_missing_severity'),
             'suppress': verify_suppress.get(self.key, {}),
             'unused_deps_severity': config.get_item('cc_config', 'unused_deps_severity'),
