@@ -286,7 +286,7 @@ cc_config(
 
 - 以**显式空 `hdrs = []`** 声明的「无公开接口」库：它没有可被使用的公开头文件，报告它纯属噪音。注意 `proto_library` 因为有 `.pb.h`，**不**在此列，仍会被检查；`hdrs` **未声明（None）** 的库也不在豁免之列——那是 [`cc_library_config.hdrs_missing_severity`](#cc_library_config) 所管的另一类问题。
 - 列在 `unused_deps_suppress` 中的依赖；
-- 列在目标 `keep_deps` 属性中的依赖（该属性后续提供）。
+- 列在目标 `keep_deps` 属性中的依赖（见 [build_rules/cc.md](build_rules/cc.md#cc_library)）。
 
 #### `unused_deps_suppress`：dict = {}
 

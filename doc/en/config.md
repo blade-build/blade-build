@@ -276,7 +276,7 @@ the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
     library with `hdrs` unset (`None`) is also NOT exempt — that is the separate
     `cc_library_config.hdrs_missing_severity` warning);
   - deps listed in `unused_deps_suppress`;
-  - deps listed in a target's `keep_deps` attribute (provided later).
+  - deps listed in a target's `keep_deps` attribute (see [build_rules/cc.md](build_rules/cc.md#cc_library)).
 
 - `unused_deps_suppress`: dict = {}
 

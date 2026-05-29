@@ -234,7 +234,19 @@ This check is **on by default at `'warning'`** (advisory — reported but does n
 The following deps are never reported:
 
 - Libraries declared with an explicit empty `hdrs = []` (no public interface — e.g. a library depended on only for linking / static-initializer self-registration), since there is no header that could be used. Note `proto_library` has `.pb.h` and is still checked; a library with `hdrs` unset (`None`) is also still checked.
-- Deps listed in [`cc_config.unused_deps_suppress`](../config.md#cc_config) as a `{target: [deps]}` map of intentionally-kept deps (mainly for incrementally cleaning up an existing code base).
+- Deps listed in a target's `keep_deps` attribute — deps you intentionally keep (e.g. linked but headers not directly used). `keep_deps` are real dependencies (built, linked, header-visible, just like `deps`); they are merged into the dependency graph but exempt from this check, and reading better than burying them in config:
+
+  ```python
+  cc_library(
+      name = 'foo',
+      srcs = ['foo.cc'],
+      hdrs = ['foo.h'],
+      deps = [':bar'],            # used via headers
+      keep_deps = [':baz'],       # intentionally linked, headers not included
+  )
+  ```
+
+- Deps listed in [`cc_config.unused_deps_suppress`](../config.md#cc_config) as a `{target: [deps]}` map (mainly for incrementally cleaning up an existing code base, where editing every BUILD file is impractical).
 
 > Tip: a library depended on for its link-time side effects (e.g. self-registration via global objects) without including its headers should itself declare `link_all_symbols = True` so the linker does not drop it. The check does **not** auto-exempt such libraries (many `link_all_symbols` libraries are in fact redundant deps), so if the dependency is genuinely intentional, list it in `unused_deps_suppress`.
 

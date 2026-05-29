@@ -206,7 +206,19 @@ Blade 能检查到两种缺失情况：
 以下依赖不会被报告：
 
 - 以**显式空 `hdrs = []`** 声明的「无公开接口」库——它没有可被使用的公开头文件（典型如仅用于链接、靠静态初始化自注册的库）。注意 `proto_library` 有 `.pb.h`，仍会被检查；`hdrs` 未声明（`None`）的库也仍会被检查。
-- 在 [`cc_config.unused_deps_suppress`](../config.md#cc_config) 中按 `{target: [deps]}` 列出的、有意保留的依赖（主要用于存量代码的逐步治理）。
+- 列在目标 `keep_deps` 属性中的依赖——你**有意保留**的依赖（例如需要链接、但不直接包含其头文件）。`keep_deps` 是真实依赖（和 `deps` 一样会被构建、链接、头文件可见），只是会被合并进依赖图、同时豁免本检查；相比埋在 config 里，写在目标处更自文档化：
+
+  ```python
+  cc_library(
+      name = 'foo',
+      srcs = ['foo.cc'],
+      hdrs = ['foo.h'],
+      deps = [':bar'],            # 通过头文件使用
+      keep_deps = [':baz'],       # 有意链接，但不包含其头文件
+  )
+  ```
+
+- 在 [`cc_config.unused_deps_suppress`](../config.md#cc_config) 中按 `{target: [deps]}` 列出的依赖（主要用于存量代码的逐步治理——逐个改 BUILD 不现实时）。
 
 > 提示：有的库是为了链接其副作用（例如靠全局对象自注册）而被依赖、并不包含其头文件。这类库为了不被链接器丢弃，本身应声明 `link_all_symbols = True`；但该检查**不会**因此自动豁免它（很多 `link_all_symbols` 的库其实是多余依赖），所以如果确属有意保留，请将其列入 `unused_deps_suppress`。
 
