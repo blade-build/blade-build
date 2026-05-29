@@ -817,6 +817,9 @@ class CcTarget(Target):
             'declared_incs': declared_incs,
             'declared_genhdrs': declared_genhdrs,
             'declared_genincs': declared_genincs,
+            # The per-source inclusion file is named `<src><obj_suffix>.H`; carry
+            # the suffix so the checker finds it on MSVC (.obj) too, not just GCC (.o).
+            'obj_suffix': self.blade.get_build_toolchain().obj_suffix,
             'severity': config.get_item('cc_config', 'hdr_dep_missing_severity'),
             'suppress': verify_suppress.get(self.key, {}),
             'unused_deps_severity': config.get_item('cc_config', 'unused_deps_severity'),

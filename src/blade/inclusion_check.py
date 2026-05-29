@@ -260,6 +260,9 @@ class Checker:
         self.allowed_undeclared_hdrs = target['allowed_undeclared_hdrs']
         self.suppress = target['suppress']
         self.severity = target['severity']
+        # `<src><obj_suffix>.H` (.o on GCC/clang, .obj on MSVC); default '.o' for
+        # forward compatibility with older incchk files.
+        self.obj_suffix = target.get('obj_suffix', '.o')
         # Unused-deps check (forward-compatible defaults for older incchk files).
         self.unused_deps_severity = target.get('unused_deps_severity', 'debug')
         self.unused_deps_suppress = set(target.get('unused_deps_suppress', []))
@@ -276,9 +279,11 @@ class Checker:
         https://gcc.gnu.org/onlinedocs/gcc/Preprocessor-Options.html
         for details.
         """
-        # NOTE: The inclusion file for header file and impl file has different extension name.
+        # NOTE: a header's inclusion file is `<hdr>.H`; a source's is
+        # `<src><obj_suffix>.H` (`.o.H` on GCC/clang, `.obj.H` on MSVC).
         objs_dir = os.path.join(self.build_dir, self.path, self.name + '.objs')
-        path = ('%s.H' if is_header else '%s.o.H') % os.path.join(objs_dir, src)
+        base = os.path.join(objs_dir, src)
+        path = '%s.H' % base if is_header else '%s%s.H' % (base, self.obj_suffix)
         if not os.path.exists(path):
             return ''
         return path
