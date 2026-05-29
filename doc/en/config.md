@@ -262,6 +262,35 @@ the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
 
   Considering the long-term health of the code base, these problems should eventually be corrected.
 
+- `unused_deps_severity`: string = 'debug' | ['debug', 'info', 'notice', 'warning', 'error']
+
+  Severity of the unused dependency check: a dep declared in `deps` none of whose public headers
+  is directly `#include`d by the target. Defaults to `'debug'` (effectively off — the check is
+  skipped and the global declaration is not loaded); set to `'warning'` (advisory) or `'error'`
+  (enforce) to enable. Advisory by default, like Bazel's `unused_deps` tool and Buck2.
+
+  Exempt from the check:
+  - libraries declared with an explicit empty `hdrs = []` (no public interface, so there is no
+    header that could be used — note this does NOT exempt `proto_library`, which has `.pb.h`; a
+    library with `hdrs` unset (`None`) is also NOT exempt — that is the separate
+    `cc_library_config.hdrs_missing_severity` warning);
+  - deps listed in `unused_deps_suppress`;
+  - deps listed in a target's `keep_deps` attribute (provided later).
+
+- `unused_deps_suppress`: dict = {}
+
+  A `{target: [deps]}` map of intentionally-kept deps to exempt from the unused dependency check,
+  mainly for incrementally cleaning up an existing code base.
+
+  ```python
+  cc_config(
+      unused_deps_severity = 'warning',
+      unused_deps_suppress = {
+          '//app/foo:bar': ['//common/baz:qux'],
+      },
+  )
+  ```
+
 Example:
 
 ```python

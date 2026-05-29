@@ -276,6 +276,33 @@ cc_config(
 
 从代码库长期健康的角度，最终还是应当把这些问题彻底修正。
 
+#### `unused_deps_severity`：string = 'debug'
+
+**未使用依赖检查的严重性**
+
+**用途：** 检查「在 `deps` 中声明、但其任何公开头文件都没有被本目标直接 `#include`」的多余依赖。可取值为 `debug` / `info` / `notice` / `warning` / `error`。默认 `'debug'`（相当于关闭：不产生输出，也不会因此加载全局声明文件）；设为 `'warning'`（仅提示）或 `'error'`（构建失败）以启用。与 Bazel 的 `unused_deps`、Buck2 一致，默认是建议性的、不强制。
+
+**豁免：** 以下依赖不会被报告——
+
+- 以**显式空 `hdrs = []`** 声明的「无公开接口」库：它没有可被使用的公开头文件，报告它纯属噪音。注意 `proto_library` 因为有 `.pb.h`，**不**在此列，仍会被检查；`hdrs` **未声明（None）** 的库也不在豁免之列——那是 [`cc_library_config.hdrs_missing_severity`](#cc_library_config) 所管的另一类问题。
+- 列在 `unused_deps_suppress` 中的依赖；
+- 列在目标 `keep_deps` 属性中的依赖（该属性后续提供）。
+
+#### `unused_deps_suppress`：dict = {}
+
+**未使用依赖检查的抑制列表**
+
+**用途：** 形如 `{target: [deps]}` 的映射，把「有意保留」的依赖从未使用依赖检查中豁免，主要用于存量代码库的逐步治理。
+
+```python
+cc_config(
+    unused_deps_severity = 'warning',
+    unused_deps_suppress = {
+        '//app/foo:bar': ['//common/baz:qux'],
+    },
+)
+```
+
 示例：
 
 ```python
