@@ -8,8 +8,85 @@
 
 import os
 import pickle
+import posixpath
+import re
 
 from blade import console
+
+
+# `#include "..."` and `#include <...>` directives in a source/header. Both
+# forms are matched because the angle form is syntactically also valid for
+# project headers (some code uses `<project/owner.h>`); the caller filters
+# the result down to paths the compiler actually traversed, so a system
+# header spelled either way is harmless. The `^\s*#` anchor with re.MULTILINE
+# excludes commented-out forms like `// #include "x.h"` (the line no longer
+# starts with `#`), block-comment lines decorated with `*` (e.g.
+# ` * #include ...`), and trailing same-line uses like `foo(); #include ...`.
+_INCLUDE_RE = re.compile(
+    r'^\s*#\s*include\s*(?:"([^"]+)"|<([^>]+)>)', re.MULTILINE)
+
+
+def _scan_source_includes(full_src):
+    """Return the set of headers `#include`'d by *full_src* (both forms).
+
+    Intentionally naive: this is a pure regex scan and makes no attempt to
+    evaluate the preprocessor -- includes inside multi-line block comments,
+    `#if 0` blocks, untaken `#ifdef` branches, etc. are *all* returned as if
+    they were live. That is by design.
+
+    The hdrs check is anchored on **what the compiler actually used**: the
+    `.incstk` recorded by `-H` is the source of truth, and this scan is a
+    *supplement* for the one case where `-H` lies -- headers elided from
+    depth-1 by the multiple-include-guard optimization (see issue #1171).
+    The caller intersects this scan with the set of paths the compiler
+    actually traversed (`_read_all_incstk_paths`), so anything the compiler
+    did not compile (dead branch, commented code, mis-quoted system header
+    etc.) drops out at the intersection. Trying to be smarter here (strip
+    `#if 0`, strip block comments) is therefore redundant and risks getting
+    `#if 0 / #else / #endif` wrong -- the intersection is the gate.
+
+    Known limitation: macro-form `#include MY_HEADER` is invisible to regex;
+    `-H` picks those up except when both macro-form AND guard-suppression
+    occur together (a rare-squared intersection accepted by this fix).
+    """
+    try:
+        with open(full_src, encoding='utf-8', errors='replace') as f:
+            text = f.read()
+    except OSError:
+        return set()
+    # `posixpath.normpath`, not `os.path.normpath`: `#include` paths are
+    # always `/`-separated regardless of host OS (and blade's internal
+    # representation is unix-style; see `to_unix_path`). Both collapse
+    # internal `//` and `./` segments.
+    return {posixpath.normpath(quoted or angle)
+            for quoted, angle in _INCLUDE_RE.findall(text)}
+
+
+def _read_all_incstk_paths(incstk_path, build_dir):
+    """Return the set of all relative paths the compiler traversed.
+
+    Used to filter source-scanned `#include`s down to paths the compiler
+    actually saw -- so `#include "stdio.h"` (system header, absolute path in
+    `-H`) is not treated as a project header just because it was quoted, and
+    `#include`s inside `#if 0` or other dead branches are not treated as real
+    because they never reached the compiler. See `_scan_source_includes` and
+    issue #1171.
+    """
+    paths = set()
+    try:
+        with open(incstk_path) as f:
+            for line in f:
+                line = line.rstrip()
+                if not _is_inclusion_line(line):
+                    break
+                level, hdr = _parse_hdr_level_line(line)
+                if level == -1 or os.path.isabs(hdr):
+                    continue
+                # See `_scan_source_includes` for why posixpath.normpath.
+                paths.add(_remove_build_dir_prefix(posixpath.normpath(hdr), build_dir))
+    except OSError:
+        pass
+    return paths
 
 
 # Inlined from `util` (both are one-liners) so this module -- imported on the
@@ -410,16 +487,26 @@ class Checker:
     def _check_unused_deps(self, all_direct_hdrs: 'set[str]') -> 'set[str]':
         """Return declared deps none of whose public headers is directly included.
 
-        Exemptions: `keep_deps`, configured `unused_deps_suppress`, the target
-        itself, and header-less libraries (declared `hdrs = []` -- they have no
-        public header that could be used, so flagging them would be pure noise).
+        Exemptions:
+          * `keep_deps` and configured `unused_deps_suppress`;
+          * the target itself;
+          * header-less cc_libraries (declared `hdrs = []` -- no public header
+            that could be used, so flagging them would be pure noise);
+          * system libraries (deps keyed `#:NAME`, e.g. `#:dl`, `#:pthread`):
+            their headers (e.g. `<dlfcn.h>`, `<pthread.h>`) do exist, but
+            blade has no system-header -> system-lib mapping (such a map
+            would be platform- and distro-specific), so a header-based check
+            has nothing to consult -- flagging would always be a false
+            positive.
         """
         used = set()
         for hdr in all_direct_hdrs:
             used |= self.find_libs_by_header(hdr)
         candidates = set(self.deps) - used - self.keep_deps - self.unused_deps_suppress
         candidates.discard(self.key)
-        return {dep for dep in candidates if not self.global_declaration.is_header_less(dep)}
+        return {dep for dep in candidates
+                if not dep.startswith('#:')
+                and not self.global_declaration.is_header_less(dep)}
 
     def check(self):
         """
@@ -444,6 +531,17 @@ class Checker:
                 console.warning('No inclusion file found for %s' % full_src)
                 return
             direct_hdrs, stacks = _parse_inclusion_stacks(path, self.build_dir)
+            # `-H` silently elides direct `#include`s already pulled in by an
+            # earlier transitive chain (multiple-include-guard optimization),
+            # so supplement the depth-1 set with the source's literal
+            # `#include` directives, intersected with paths the compiler
+            # actually traversed. The intersection is the gate: dead branches,
+            # commented `#include`s, and mis-quoted system headers all drop
+            # out because they never reached the compiler. See issue #1171
+            # and the design note in `doc/*/develop/hdrs_check.md`.
+            scanned = _scan_source_includes(full_src)
+            compiled_paths = _read_all_incstk_paths(path, self.build_dir)
+            direct_hdrs = list(set(direct_hdrs) | (scanned & compiled_paths))
             all_direct_hdrs.update(direct_hdrs)
             missing_dep_hdrs = set()
             self._check_direct_headers(

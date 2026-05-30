@@ -159,6 +159,36 @@ This is not unique to this mechanism: Bazel's sandbox has the **exact same** bli
 
 The compiler's `-MMD` depfile already lists every header a translation unit uses, but it is **flat** — a set with no inclusion levels, so it cannot distinguish "directly included" from "included indirectly through some header". The two checks here (the "missing direct dependency" and "missing indirect / generated-header dependency" of section 3) depend precisely on that level information, so we must use `-H` / `/showIncludes`, which give an **inclusion tree**; the depfile cannot be reused for this.
 
+### Direct-include detection: `-H` plus a naive source-scan supplement
+
+The set of "directly included headers" drives the missing-dep, private-header, undeclared-header, and unused-dep checks. blade derives it from two sources combined:
+
+- **Authoritative: depth-1 entries from `-H`** in the `.incstk` (`_parse_inclusion_stacks` in `inclusion_check.py`). These are what the compiler actually traversed at depth 1 from this source.
+- **Supplement: a regex source-scan** that lists every literal `#include "..."` / `#include <...>` in the source file (`_scan_source_includes`).
+
+The two are combined as:
+
+```text
+direct_hdrs = depth-1 ∪ (source_scan ∩ all_paths_in_incstk)
+```
+
+The intersection with `_read_all_incstk_paths(...)` — paths the compiler actually traversed at *any* depth — is **the gate**. Anything the compiler did not compile (block-commented `#include`s, `#if 0` blocks, untaken `#ifdef` branches, a mis-quoted system header like `#include "stdio.h"`) naturally drops out at this intersection because it never reaches the `.incstk`. So the scanner is intentionally **naive**: it does not strip comments, does not evaluate `#if 0`, does not track `#ifdef`. Trying to be smarter would be redundant (the intersection already handles it) or even incorrect (e.g. stripping `#if 0 / ... / #endif` blindly would also drop a live `#else` branch).
+
+#### Why the supplement at all
+
+`-H` reports each header at the depth it was *first encountered*; the multiple-include-guard optimization then suppresses any subsequent `#include` of the same header. So a direct `#include "foo.h"` in `bar.cc` is silently elided from depth-1 if some earlier `#include` (e.g. `bar.h`) already pulled `foo.h` in transitively. Without the supplement that case looks like "foo.h is not directly included", producing loud false positives on the unused-deps check and silent false negatives on the other three. See issue #1171.
+
+#### Known limitations
+
+The scan-plus-intersect approach is **not** a real preprocessor. Two corner cases survive:
+
+- **Macro/computed includes** (`#define MY_HDR "x.h"` then `#include MY_HDR`): the regex sees the bare token `MY_HDR` and resolves nothing. `-H` covers these *except* when both macro-form AND guard-suppression occur together — a rare-squared intersection that this design accepts.
+- **`#if 0`-d include that is also reached transitively via another live `#include`**: the path appears in `.incstk` via the live transitive chain, so the intersection keeps the scanner's hit. Effect: a "redundant" dep declaration escapes the unused-deps check. Mild, rare.
+
+Additionally, the unused-deps check **exempts system libraries** (deps keyed `#:NAME`, e.g. `#:dl`, `#:pthread`). Their headers do exist (`<dlfcn.h>`, `<pthread.h>`, …) but blade has no system-header → system-lib mapping to consult — and maintaining such a map would be platform- and distro-specific — so a header-based check has nothing to evaluate them against; flagging them would always be a false positive. The same applies to **header-less cc_libraries** (declared `hdrs = []`).
+
+In line with *The completeness boundary* above, the hdrs check is **anchored on what the compiler actually used in this build configuration** — the supplement does not change that principle, it only patches the one place `-H` itself lies (depth-1 elision under guard optimization).
+
 ### Relationship to Bazel's sandbox / `layering_check`
 
 Bazel needs **two** mechanisms to cover what this single mechanism does:

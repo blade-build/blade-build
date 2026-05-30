@@ -103,6 +103,22 @@ class UnusedDepsTest(unittest.TestCase):
         c = self._checker(['pkg:a', 'pkg:b', 'pkg:c'])
         self.assertEqual(c._check_unused_deps({self._hdr('pkg:a')}), {'pkg:b', 'pkg:c'})
 
+    def test_system_lib_dep_exempt(self):
+        # `#:dl` / `#:pthread` etc. have headers (`<dlfcn.h>`, `<pthread.h>`)
+        # but blade has no system-header -> system-lib mapping to consult, so
+        # the header-based unused-deps check has nothing to evaluate them
+        # against -- exempt them. See issue #1171 follow-up.
+        c = self._checker(['pkg:a', '#:dl', '#:pthread'])
+        self.assertEqual(
+            c._check_unused_deps({self._hdr('pkg:a')}), set())
+
+    def test_system_lib_does_not_mask_regular_unused(self):
+        # Having a system lib in deps should not change how regular unused
+        # cc_library deps are flagged.
+        c = self._checker(['pkg:a', 'pkg:b', '#:dl'])
+        self.assertEqual(
+            c._check_unused_deps({self._hdr('pkg:a')}), {'pkg:b'})
+
 
 if __name__ == '__main__':
     unittest.main()
