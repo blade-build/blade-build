@@ -31,6 +31,28 @@ jobs:
     - name: Run integration tests
       run: |
         src/test/runall.sh
+    - name: Add unit-test coverage and upload to Coveralls
+      # Only from a single matrix entry, so the branch gets one Coveralls build
+      # rather than five competing ones. (The upload step was dropped in the v3
+      # CI rewrite, which is why the badge went grey.)
+      #
+      # `src/test/run.sh` already left a combined $PWD/.coverage from the
+      # integration tests. Run the unit tests under coverage too and merge them
+      # in with `combine --append`, so Coveralls reflects both suites.
+      #
+      # Non-fatal: coverage upload is informational and integration-tests gates
+      # e2e-smoke, so a Coveralls hiccup must not turn the whole build red.
+      if: matrix.python-version == '3.12'
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        pip install pytest
+        PYTHONPATH=src python -m coverage run --rcfile=.coveragerc \
+            --source="$PWD/src/blade" -m pytest src/tests/unit
+        python -m coverage combine --append --rcfile=.coveragerc
+        python -m coverage report --rcfile=.coveragerc
+        coveralls --service=github
 
   unit-tests:
     name: Unit tests (Python ${{ matrix.python-version }})
