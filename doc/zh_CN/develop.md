@@ -82,9 +82,21 @@ Blade 调用后端构建工具（Ninja）执行实际构建，完成后删除生
 
 ## 实现专题
 
-针对各子系统实现原理的深入文档：
+各子系统实现原理的深入文档，大致按 `blade build` 的执行顺序排列：
 
+- [配置项的加载、分层与读取](develop/configuration.md)
+- [BUILD 文件的发现、加载与注册](develop/build_file_loading.md)
+- [内置函数与 `blade.*` DSL](develop/dsl_api.md)
+- [Visibility 的实现与执行](develop/visibility.md)
+- [依赖分析与 ninja 文件生成](develop/dependency_analysis.md)
+- [`gen_rule`：自定义构建步骤与其它 target 如何感知它](develop/gen_rule.md)
+- [C/C++ 程序的构建](develop/cc_build.md)
 - [C/C++ 头文件依赖检查（hdrs check）实现原理](develop/hdrs_check.md)
+- [`proto_library` 的多语言代码生成](develop/protobuf_build.md)
+- [Java 与 Scala 程序的构建](develop/java_scala_build.md)
+- [Python 目标的构建与打包](develop/python_build.md)
+- [`blade test` 如何运行用户测试](develop/test_execution.md)
+- [blade-build 自身是如何被测试的](develop/self_testing.md)
 
 ## 测试
 

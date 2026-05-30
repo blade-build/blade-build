@@ -83,9 +83,22 @@ Test targets are built, then executed in parallel within sandbox environments. R
 
 ## Implementation Topics
 
-In-depth documents on how individual subsystems are implemented:
+In-depth documents on how individual subsystems are implemented, in
+roughly the order they appear in a `blade build` invocation:
 
+- [How configuration is loaded, layered, and consumed](develop/configuration.md)
+- [How BUILD files are discovered, loaded, and registered](develop/build_file_loading.md)
+- [Built-in functions and the `blade.*` DSL](develop/dsl_api.md)
+- [How target visibility is implemented and enforced](develop/visibility.md)
+- [Dependency analysis and ninja file generation](develop/dependency_analysis.md)
+- [`gen_rule`: custom build steps and how other targets see them](develop/gen_rule.md)
+- [How C/C++ programs are built](develop/cc_build.md)
 - [How the C/C++ header dependency check (hdrs check) works](develop/hdrs_check.md)
+- [How `proto_library` handles multi-language codegen](develop/protobuf_build.md)
+- [How Java and Scala programs are built](develop/java_scala_build.md)
+- [How Python targets are built and packaged](develop/python_build.md)
+- [How `blade test` runs user tests](develop/test_execution.md)
+- [How blade-build itself is tested](develop/self_testing.md)
 
 ## Testing
 
