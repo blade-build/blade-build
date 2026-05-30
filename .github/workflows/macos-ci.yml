@@ -93,6 +93,11 @@ jobs:
     - name: Install toolchain dependencies
       run: |
         brew install ninja flex bison protobuf
+        # Homebrew's bison is keg-only (macOS ships its own bison 2.3, frozen
+        # at GPLv2), so it is not on PATH by default. Prepend it so the build
+        # uses bison 3.x — whose -d header declares yyparse, which the lex_yacc
+        # suite's driver relies on.
+        echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
     - name: Verify tools
       run: |
         javac -version
@@ -102,4 +107,4 @@ jobs:
     - name: Run blade-test suites
       working-directory: blade-test
       run: |
-        PYTHONPATH="$GITHUB_WORKSPACE/blade-build/src" ./blade.sh test //suites/cc_basic:hello_test //suites/cc_basic:hello-bin //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test
+        PYTHONPATH="$GITHUB_WORKSPACE/blade-build/src" ./blade.sh test //suites/cc_basic:hello_test //suites/cc_basic:hello-world //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test
