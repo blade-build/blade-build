@@ -46,7 +46,8 @@ Blade 可与以下工具集成，从而提升构建性能：
 
 - **SWIG：** 2.0+（`swig_library` 目标必需）
 - **Flex：** 2.5+（`lex_yacc` 目标必需）
-- **Bison：** 2.1+（`lex_yacc` 目标必需）
+- **Bison：** 3.0+（`lex_yacc` 目标必需）。不再支持 bison 2.x：它的 `-d` 头文件
+  不声明 `yyparse` 原型，而下游代码需要它。详见下方 macOS 说明。
 
 ## 平台相关说明
 
@@ -61,6 +62,10 @@ Blade 可与以下工具集成，从而提升构建性能：
 - **Xcode：** 安装 Xcode Command Line Tools（`xcode-select --install`）
 - **Homebrew：** 推荐用于包管理
 - **Python：** 使用 Homebrew 提供的 Python，或系统自带 Python 配合 `pip`
+- **Bison** *（仅 `lex_yacc_library` 目标需要）*：macOS 自带的是 bison 2.3
+  （停留在 GPLv2、版本过老，见上文），需用 `brew install bison` 装新版。Homebrew
+  将其设为 keg-only（避免覆盖系统 bison），所以要把它加到 `PATH` 中、排在 `/usr/bin`
+  之前：`export PATH="$(brew --prefix bison)/bin:$PATH"`。Homebrew 的 `flex` 直接可用。
 
 ### Windows 安装
 
@@ -80,6 +85,8 @@ Blade 可与以下工具集成，从而提升构建性能：
 | Ninja | 1.10 | 1.11+ | 构建后端；含 depslog 的多输出规则需要 1.10+ |
 | GCC | 4.0 | 7.0+ | 也支持 Clang 6.0+ |
 | JDK | 1.6 | 11+ | 推荐使用 LTS 版本 |
+| Bison | 3.0 | 3.8+ | `lex_yacc` 目标需要；macOS 自带 2.3 过老（见 macOS 说明） |
+| Flex | 2.5 | 2.6+ | `lex_yacc` 目标需要 |
 
 ## 环境校验命令
 

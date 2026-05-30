@@ -40,7 +40,9 @@ Blade integrates with the following tools for enhanced build performance:
 ### Code Generation Tools
 - **SWIG:** Version 2.0+ (required for `swig_library` targets)
 - **Flex:** Version 2.5+ (required for `lex_yacc` targets)
-- **Bison:** Version 2.1+ (required for `lex_yacc` targets)
+- **Bison:** Version 3.0+ (required for `lex_yacc` targets). Bison 2.x is no
+  longer supported: its `-d` header omits the `yyparse` prototype, which
+  downstream code needs. See the macOS note below.
 
 ## Platform-Specific Notes
 
@@ -53,6 +55,12 @@ Blade integrates with the following tools for enhanced build performance:
 - **Xcode:** Install Xcode Command Line Tools (`xcode-select --install`)
 - **Homebrew:** Recommended for package management
 - **Python:** Use Homebrew Python or system Python with pip
+- **Bison** *(only for `lex_yacc_library` targets)*: macOS ships bison 2.3
+  (frozen at GPLv2 and too old — see above). Install a current one with
+  `brew install bison`. Homebrew keeps it keg-only (so it does not shadow the
+  system bison), so add it to `PATH` ahead of `/usr/bin`:
+  `export PATH="$(brew --prefix bison)/bin:$PATH"`. `flex` from Homebrew is fine
+  as-is.
 
 ### Windows Installation
 
@@ -72,6 +80,8 @@ Blade integrates with the following tools for enhanced build performance:
 | Ninja | 1.10 | 1.11+ | Build backend; 1.10+ required for multi-output rules with depslog |
 | GCC | 4.0 | 7.0+ | Clang 6.0+ also supported |
 | JDK | 1.6 | 11+ | LTS versions recommended |
+| Bison | 3.0 | 3.8+ | For `lex_yacc` targets; macOS stock 2.3 is too old (see macOS notes) |
+| Flex | 2.5 | 2.6+ | For `lex_yacc` targets |
 
 ## Verification Commands
 
