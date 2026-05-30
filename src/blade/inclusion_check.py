@@ -101,7 +101,7 @@ def path_under_dir(path, dir):
 
     Both must be normalized, and both relative or both absolute.
     """
-    return dir == '.' or path == dir or path.startswith(dir) and path[len(dir)] == os.path.sep
+    return dir == '.' or path == dir or path.startswith(dir) and path[len(dir)] == '/'
 
 
 def find_libs_by_header(hdr, hdr_targets_map, hdr_dir_targets_map):
@@ -213,10 +213,10 @@ def _parse_inclusion_stacks(path, build_dir):
             skip_level = level
         elif hdr.startswith(build_dir):
             skip_level = level
-            stacks.append(hdrs_stack + [_remove_build_dir_prefix(os.path.normpath(hdr), build_dir)])
+            stacks.append(hdrs_stack + [_remove_build_dir_prefix(posixpath.normpath(hdr), build_dir)])
         else:
             current_level = level
-            hdrs_stack.append(_remove_build_dir_prefix(os.path.normpath(hdr), build_dir))
+            hdrs_stack.append(_remove_build_dir_prefix(posixpath.normpath(hdr), build_dir))
             skip_level = -1
         return current_level, skip_level
 
@@ -234,7 +234,7 @@ def _parse_inclusion_stacks(path, build_dir):
                 console.log(f'{path}: Unrecognized line {line}')
                 break
             if level == 1 and not os.path.isabs(hdr):
-                direct_hdrs.append(_remove_build_dir_prefix(os.path.normpath(hdr), build_dir))
+                direct_hdrs.append(_remove_build_dir_prefix(posixpath.normpath(hdr), build_dir))
             if level > current_level:
                 if skip_level != -1 and level > skip_level:
                     continue
@@ -298,7 +298,7 @@ def _parse_msvc_hdr_level_line(line):
     # Normalize to Unix-style paths for consistency with GCC output
     hdr = to_unix_path(hdr)
     # Remove current working directory prefix if present
-    cwd = os.getcwd().lower()
+    cwd = to_unix_path(os.getcwd()).lower()
     if hdr.lower().startswith(cwd):
         hdr = hdr[len(cwd) + 1:]
     return level, hdr
@@ -309,7 +309,7 @@ def _remove_build_dir_prefix(path, build_dir):
     Args:
         path:str, the full path starts from the workspace root
     """
-    prefix = build_dir + os.sep
+    prefix = build_dir + '/'
     if path.startswith(prefix):
         return path[len(prefix):]
     return path
@@ -324,7 +324,7 @@ class Checker:
         self.path = target['path']
         self.key = target['key']
         self.deps = target['deps']
-        self.build_dir = target['build_dir']
+        self.build_dir = to_unix_path(target['build_dir'])
         self.expanded_srcs = target['expanded_srcs']
         self.expanded_hdrs = target['expanded_hdrs']
         self.source_location = target['source_location']
@@ -354,8 +354,8 @@ class Checker:
         https://gcc.gnu.org/onlinedocs/gcc/Preprocessor-Options.html
         for details.
         """
-        objs_dir = os.path.join(self.build_dir, self.path, self.name + '.objs')
-        path = os.path.join(objs_dir, src) + '.incstk'
+        objs_dir = '/'.join([self.build_dir, self.path, self.name + '.objs'])
+        path = objs_dir + '/' + src + '.incstk'
         if not os.path.exists(path):
             return ''
         return path

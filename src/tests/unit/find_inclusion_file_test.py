@@ -23,10 +23,10 @@ from blade import inclusion_check  # noqa: E402
 
 class FindInclusionFileTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.mkdtemp()
+        self.tmp = tempfile.mkdtemp().replace('\\', '/')
         self.path = 'pkg'
         self.name = 'lib'
-        self.objs_dir = os.path.join(self.tmp, self.path, self.name + '.objs')
+        self.objs_dir = '/'.join([self.tmp, self.path, self.name + '.objs'])
         os.makedirs(self.objs_dir)
         self.checker = self._checker()
 
@@ -47,7 +47,7 @@ class FindInclusionFileTest(unittest.TestCase):
         return inclusion_check.Checker(target)
 
     def _touch(self, name: str) -> str:
-        path = os.path.join(self.objs_dir, name)
+        path = self.objs_dir + '/' + name
         open(path, 'w').close()
         return path
 
@@ -60,8 +60,8 @@ class FindInclusionFileTest(unittest.TestCase):
         self.assertEqual(self.checker._find_inclusion_file('foo.h'), expected)
 
     def test_source_in_subdir(self):
-        os.makedirs(os.path.join(self.objs_dir, 'sub'))
-        expected = self._touch(os.path.join('sub', 'foo.cc.incstk'))
+        os.makedirs(self.objs_dir + '/sub')
+        expected = self._touch('sub/foo.cc.incstk')
         self.assertEqual(self.checker._find_inclusion_file('sub/foo.cc'), expected)
 
     def test_missing_returns_empty(self):

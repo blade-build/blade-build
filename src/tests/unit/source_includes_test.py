@@ -21,8 +21,11 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..',
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 
 from blade.inclusion_check import (  # noqa: E402
+    _parse_msvc_hdr_level_line,
     _read_all_incstk_paths,
+    _remove_build_dir_prefix,
     _scan_source_includes,
+    path_under_dir,
 )
 
 
@@ -181,6 +184,87 @@ class ReadAllIncstkPathsTest(unittest.TestCase):
         self.assertEqual(
             _read_all_incstk_paths('/nonexistent/path/xyz.incstk', 'build64_release'),
             set())
+
+    # --- MSVC format paths ---
+
+    def test_msvc_format_collects_paths(self):
+        path = self._write(
+            'Note: including file:  pkg/a.h\n'
+            'Note: including file:    pkg/b.h\n'
+        )
+        try:
+            self.assertEqual(
+                _read_all_incstk_paths(path, 'build64_release'),
+                {'pkg/a.h', 'pkg/b.h'})
+        finally:
+            os.unlink(path)
+
+    def test_msvc_format_strips_build_dir_prefix(self):
+        path = self._write(
+            'Note: including file:  pkg/a.h\n'
+            'Note: including file:    build64_release/proto/x.pb.h\n'
+        )
+        try:
+            self.assertEqual(
+                _read_all_incstk_paths(path, 'build64_release'),
+                {'pkg/a.h', 'proto/x.pb.h'})
+        finally:
+            os.unlink(path)
+
+
+class RemoveBuildDirPrefixTest(unittest.TestCase):
+    def test_strips_prefix_with_forward_slash(self):
+        self.assertEqual(
+            _remove_build_dir_prefix('build64_release/pkg/a.h', 'build64_release'),
+            'pkg/a.h')
+
+    def test_no_prefix_match_returns_unchanged(self):
+        self.assertEqual(
+            _remove_build_dir_prefix('pkg/a.h', 'build64_release'),
+            'pkg/a.h')
+
+    def test_partial_prefix_not_stripped(self):
+        # 'build64' is a substring but not the full dir component
+        self.assertEqual(
+            _remove_build_dir_prefix('build64/pkg/a.h', 'build64_release'),
+            'build64/pkg/a.h')
+
+
+class PathUnderDirTest(unittest.TestCase):
+    def test_sub_path_matches_with_forward_slash(self):
+        self.assertTrue(path_under_dir('pkg/sub/x.h', 'pkg'))
+
+    def test_exact_dir_matches(self):
+        self.assertTrue(path_under_dir('pkg', 'pkg'))
+
+    def test_dot_matches_any(self):
+        self.assertTrue(path_under_dir('anything.h', '.'))
+
+    def test_non_sub_path_returns_false(self):
+        self.assertFalse(path_under_dir('other/x.h', 'pkg'))
+
+    def test_sibling_dir_prefix_returns_false(self):
+        # 'pkg_extra' starts with 'pkg' but is not under 'pkg/'
+        self.assertFalse(path_under_dir('pkg_extra/x.h', 'pkg'))
+
+
+class ParseMsvcHdrLevelLineTest(unittest.TestCase):
+    def test_basic_level(self):
+        level, hdr = _parse_msvc_hdr_level_line(
+            'Note: including file:  pkg/a.h')
+        self.assertEqual(level, 2)
+        self.assertEqual(hdr, 'pkg/a.h')
+
+    def test_normalizes_backslash_to_forward(self):
+        _, hdr = _parse_msvc_hdr_level_line(
+            'Note: including file:  pkg\\sub\\a.h')
+        self.assertEqual(hdr, 'pkg/sub/a.h')
+
+    def test_deep_nesting(self):
+        level, hdr = _parse_msvc_hdr_level_line(
+            'Note: including file:          deep/nested.h')
+        self.assertEqual(level, 10)
+        self.assertEqual(hdr, 'deep/nested.h')
 
 
 if __name__ == '__main__':

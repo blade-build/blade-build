@@ -354,7 +354,8 @@ class _NinjaFileHeaderGenerator:
         self.generate_rule(name='cxxhdrs',
                            command=hdrs_command,
                            description='CXX HDRS ${in}',
-                           depfile=None)
+                           depfile=None,
+                           restat=True)
 
     def _generate_windows_ar_rules(self):
         """Generate Windows static library rules."""
