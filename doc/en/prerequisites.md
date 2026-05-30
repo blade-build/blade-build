@@ -5,9 +5,13 @@
 Blade requires the following core dependencies for basic operation:
 
 ### Operating System Support
+
+Linux is the primary, fully supported platform; macOS and Windows support is
+experimental.
+
 - **Linux:** All major distributions (Ubuntu, CentOS, Debian, etc.)
-- **macOS:** macOS 10.12+ with Xcode Command Line Tools
-- **Windows:** Windows 10/11 with Visual Studio Build Tools (MSVC toolchain)
+- **macOS** *(experimental)*: macOS 10.12+ with Xcode Command Line Tools
+- **Windows** *(experimental)*: Windows 10/11 with Visual Studio Build Tools (MSVC toolchain)
   - Developer Mode is recommended (Settings → Privacy & security → For developers)
     to enable NTFS symlink support; if not enabled, `blade-bin` symlink is skipped
 
