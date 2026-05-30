@@ -100,22 +100,32 @@ def to_unix_path(path):
 # with `os.sep` -- backslashes on Windows -- but inclusion stacks are parsed to
 # forward slashes.  These helpers reconcile both sides here, in the consumer,
 # so the path comparisons work regardless of the platform that produced them.
+#
+# On POSIX every path is already '/'-separated (os.path generates '/', so does
+# `-H`), making normalization a pure no-op -- but one that would still rebuild
+# each container, including the potentially large global `public_hdrs` map on
+# every check. So skip it entirely off Windows and return the input unchanged.
+_PATHS_NEED_UNIX_NORM = os.sep != '/'
+
+
 def _unix_path_set(paths):
     """Normalize a set/list of paths to forward slashes (None passes through)."""
-    if paths is None:
+    if paths is None or not _PATHS_NEED_UNIX_NORM:
         return paths
     return {to_unix_path(p) for p in paths}
 
 
 def _unix_path_dict(mapping):
     """Normalize the path keys of a dict to forward slashes (None passes through)."""
-    if mapping is None:
+    if mapping is None or not _PATHS_NEED_UNIX_NORM:
         return mapping
     return {to_unix_path(k): v for k, v in mapping.items()}
 
 
 def _unix_path_pairs(pairs):
     """Normalize a list of (name, full_path) pairs to forward slashes."""
+    if not _PATHS_NEED_UNIX_NORM:
+        return pairs
     return [(to_unix_path(name), to_unix_path(full)) for name, full in pairs]
 
 
