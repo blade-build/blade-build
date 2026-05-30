@@ -83,6 +83,85 @@ rm -f "$err"
 exit $ec
 ''' % _INCLUSION_SPLITTER_AWK
 
+# MSVC tee-wrapper: runs a compile command (cl.exe or nvcc with /showIncludes),
+# tees stderr to both the real stderr (for Ninja's deps=msvc) and an incstk
+# file (for inclusion checking). Invoked as:
+#   python cc_wrapper.py ${inclusion_stack} -- <compile_command...>
+#
+# Unlike the POSIX shell wrapper, stderr is passed through unfiltered — Ninja
+# needs the raw /showIncludes lines.  Bare source/header filenames that cl.exe
+# echoes (e.g. "hello.h" without a path) are stripped from the incstk file
+# only, matching what Ninja's CLParser::FilterInputFilename does for .c/.cpp
+# etc., extended to header extensions.
+_MSVC_TEE_WRAPPER_PY = r'''
+import os, re, subprocess, sys
+
+outfile = sys.argv[1]
+# sys.argv[2] is "--"
+cmd = sys.argv[3:]
+
+_NOTE_PREFIX = 'Note: including file:'
+_cwd = os.getcwd()
+
+# Compilers echo the basename of the file they process.  Ninja's
+# CLParser::FilterInputFilename strips it for source files (.c/.cc/.cxx/.cpp/
+# .c++) but NOT for headers, so the cxxhdrs rule (/P on a .h) leaks a bare
+# "foo.h" onto the build console; nvcc additionally echoes its source (.cu)
+# and a zoo of intermediate temp names (tmpxft_*.cpp1.ii, *.cudafe1.cpp, ...).
+# Enumerating extensions is hopeless, so match any lone filename token: no
+# whitespace, no path separator, at least one dot, only filename-safe chars.
+# Real diagnostics always carry spaces/colons/parens and never match.
+_BARE_FILENAME_RE = re.compile(r'^[\w.+\-]+\.[\w.+\-]+$')
+
+def _in_workspace(hdr):
+    try:
+        return os.path.commonpath([_cwd, hdr]) == _cwd
+    except ValueError:  # different drive -> outside the workspace
+        return False
+
+# Merge stdout+stderr into one pipe (like Ninja).  Reading only stderr risks
+# a pipe deadlock: if cl.exe writes enough to stdout (even with /nologo a
+# leftover copyright banner fills the 4 KiB buffer), the process blocks and
+# never drains its stderr output through the unread stdout pipe.
+p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                     universal_newlines=True, encoding='utf-8', errors='replace')
+with open(outfile + '.new', 'w', newline='', encoding='utf-8') as f:
+    for line in p.stdout:
+        if line.startswith(_NOTE_PREFIX):
+            # Record only workspace headers in the incstk (smaller file; the
+            # inclusion checker discards absolute/system paths anyway), but
+            # forward every include line to ninja's deps=msvc parser below.
+            hdr = line[len(_NOTE_PREFIX):].lstrip().rstrip('\r\n')
+            if not os.path.isabs(hdr) or _in_workspace(hdr):
+                f.write(line)
+        elif _BARE_FILENAME_RE.match(line.strip()):
+            continue  # echoed source/temp filename -- console noise, drop it
+        sys.stderr.write(line)
+        sys.stderr.flush()
+
+ec = p.wait()
+
+# Write-if-changed: keep mtime when the stack is unchanged, so ninja's
+# restat can prune the inclusion check. See issue #1161.
+try:
+    with open(outfile + '.new', 'rb') as nf:
+        new = nf.read()
+    try:
+        with open(outfile, 'rb') as of:
+            old = of.read()
+    except FileNotFoundError:
+        old = None
+    if new != old:
+        os.replace(outfile + '.new', outfile)
+    else:
+        os.unlink(outfile + '.new')
+except OSError:
+    pass
+
+sys.exit(ec)
+'''
+
+
 def _incs_list_to_string(incs):
     """Convert incs list to string.
 
@@ -116,6 +195,7 @@ class _NinjaFileHeaderGenerator:
         self.rules_buf = []
         self.__all_rule_names = set()
         self.__inclusion_wrapper_path = None
+        self.__msvc_wrapper_py_path = None
 
     def _inclusion_wrapper_script(self):
         """Path to the cc inclusion-stack splitter wrapper, written on first use.
@@ -130,6 +210,14 @@ class _NinjaFileHeaderGenerator:
             util.write_if_changed(path, _INCLUSION_WRAPPER_SCRIPT)
             self.__inclusion_wrapper_path = path
         return self.__inclusion_wrapper_path
+
+    def _msvc_tee_wrapper_py(self):
+        """Path to the MSVC Python stderr-tee wrapper, written on first use."""
+        if self.__msvc_wrapper_py_path is None:
+            path = os.path.join(self.build_dir, 'cc_wrapper.py')
+            util.write_if_changed(path, _MSVC_TEE_WRAPPER_PY)
+            self.__msvc_wrapper_py_path = path
+        return self.__msvc_wrapper_py_path
 
     def _add_line(self, rule):
         """Append one rule to buffer."""
@@ -330,31 +418,40 @@ class _NinjaFileHeaderGenerator:
         optimize_flags = windows_config['optimize']
         optimize = ' '.join(optimize_flags.get(self.options.profile, []))
 
-        cc_command = ('%s /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} ${in}' % (
+        # The Python stderr-tee wrapper captures /showIncludes output and tees
+        # it to both stderr (for Ninja's deps=msvc) and the inclusion stack
+        # file (for inclusion checking).
+        py = sys.executable
+        wrapper = self._msvc_tee_wrapper_py()
+        template = '"%s" -B %s ${inclusion_stack} -- ' % (py, wrapper)
+
+        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} ${in}' % (
             cc, optimize, ' '.join(cppflags), ' '.join(cflags), include_flags))
         self.generate_rule(name='cc',
                            command=cc_command,
                            description='CC ${in}',
-                           deps='msvc')
+                           deps='msvc',
+                           restat=True)
 
-        cxx_command = ('%s /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
+        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxx',
                            command=cxx_command,
                            description='CXX ${in}',
-                           deps='msvc')
+                           deps='msvc',
+                           restat=True)
 
-        # For cxxhdrs: use /showIncludes to generate inclusion info.
-        # /P preprocesses (like GCC -E), /Tp forces C++ treatment of .h files.
-        # Wrap with cmd /c because Ninja on Windows can't handle shell redirections directly.
-        # Fall back to empty output on failure so the build can continue.
-        hdrs_command = ('cmd /c "%s /nologo /P /Tp${in} /showIncludes %s %s %s %s /Fi${out}.pre 2> ${out}'
-                        ' || (echo. > ${out}.pre & echo. > ${out})"' % (
+        # For cxxhdrs: use /showIncludes to generate inclusion info for header
+        # files. /P preprocesses (like GCC -E), /Tp forces C++ treatment of .h.
+        # The Python wrapper captures /showIncludes to ${out} (.incstk file);
+        # /Fi writes the preprocessed body to ${out}.pre.
+        hdrs_template = '"%s" -B %s ${out} -- ' % (py, wrapper)
+        hdrs_command = hdrs_template + ('"%s" /nologo /P /Tp${in} /showIncludes %s %s %s %s /Fi${out}.pre' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxxhdrs',
                            command=hdrs_command,
                            description='CXX HDRS ${in}',
-                           depfile=None,
+                           deps='msvc',
                            restat=True)
 
     def _generate_windows_ar_rules(self):
@@ -988,8 +1085,6 @@ class _NinjaFileHeaderGenerator:
         NVCC on Windows delegates host code to cl.exe.  Flags that pass
         through to the host compiler via -Xcompiler must be MSVC-compatible.
         """
-        nvcc_cmd = '${cmd}'
-
         cc_config = config.get_section('cc_config')
         ms_config = config.get_section('msvc_config')
         cuda_config = config.get_section('cuda_config')
@@ -1025,20 +1120,27 @@ class _NinjaFileHeaderGenerator:
         include_flags = ' '.join(_quote_if_needed(inc) for inc in includes)
 
         # NVCC -Xcompiler /showIncludes lets Ninja deps=msvc track headers.
+        # The Python wrapper tees /showIncludes to both stderr (for Ninja) and
+        # the inclusion stack file.
+        py = sys.executable
+        wrapper = self._msvc_tee_wrapper_py()
+        template = '"%s" -B %s ${inclusion_stack} -- ' % (py, wrapper)
+
         _, cxx, _ = self.build_accelerator.get_cc_commands()
-        cu_command = ('%s -ccbin "%s" -o ${out} -c '
-                      '-Xcompiler /nologo -Xcompiler /showIncludes '
-                      '%s %s %s '
-                      '%s ${includes} %s ${cu_warnings} ${in}' % (
-                          nvcc_cmd, cxx,
-                          host_cppflags, host_cxxflags,
-                          ' '.join(cuflags),
-                          include_flags, '${cppflags}'))
+        cu_command = template + ('"${cmd}" -ccbin "%s" -o ${out} -c '
+                                 '-Xcompiler /nologo -Xcompiler /showIncludes '
+                                 '%s %s %s '
+                                 '%s ${includes} %s ${cu_warnings} ${in}' % (
+                                     cxx,
+                                     host_cppflags, host_cxxflags,
+                                     ' '.join(cuflags),
+                                     include_flags, '${cppflags}'))
         self.generate_rule(
             name='cudacc',
             command=cu_command,
             description='CUDA LIBRARY ${in}',
             deps='msvc',
+            restat=True,
         )
 
         # NVCC linking delegates to the host linker automatically.
@@ -1047,14 +1149,14 @@ class _NinjaFileHeaderGenerator:
                      '--options-file ${out}.rsp ${extra_linkflags}' % include_flags)
         self.generate_rule(
             name='cudalink',
-            command=nvcc_cmd + ' -ccbin "%s" ' % cxx + link_args,
+            command='"${cmd}" -ccbin "%s" ' % cxx + link_args,
             rspfile='${out}.rsp',
             rspfile_content='${target_linkflags} ${in}',
             description='CUDA LINK BINARY ${out}')
 
         self.generate_rule(
             name='cudasolink',
-            command=nvcc_cmd + ' -ccbin "%s" -shared ' % cxx + link_args,
+            command='"${cmd}" -ccbin "%s" -shared ' % cxx + link_args,
             rspfile='${out}.rsp',
             rspfile_content='${target_linkflags} ${in}',
             description='CUDA LINK SHARED ${out}')

@@ -637,12 +637,12 @@ class CcTarget(Target):
             implicit_deps.append(self._source_file_path(self.attr['secret_revision_file']))
 
         objs_dir = self._target_file_path(self.name + '.objs')
-        # The cc/cxx compile wrapper writes a `<src>.incstk` inclusion stack for
-        # real GCC/clang compiles; its name is independent of the object file, so
-        # the rule takes the path via the per-object `inclusion_stack` variable.
-        # Declaring it an implicit output (with `restat` on the rule) lets ninja
-        # prune the inclusion check when the stack is unchanged. See issue #1161.
-        # (Not produced for MSVC or compdb dump.)
+        # The compile wrapper writes a `<src>.incstk` inclusion stack (GCC via
+        # shell script with -H, MSVC via Python wrapper that tees /showIncludes).
+        # The file name is independent of the object suffix, so the rule takes
+        # the path via the per-object `inclusion_stack` variable. Declaring it
+        # an implicit output (with `restat` on the rule) lets ninja prune the
+        # inclusion check when the stack is unchanged. See issue #1161.
         emit_inclusion_stack = self._emits_inclusion_stack()
         objs = []
         inclusion_stacks = []
@@ -677,12 +677,10 @@ class CcTarget(Target):
     def _emits_inclusion_stack(self):
         """Whether the cc/cxx compile writes a `<src>.incstk` inclusion stack.
 
-        True only for real GCC/clang compiles (the wrapper emits it). False for
-        MSVC (no inclusion stack from compilation) and for compdb dump (the
-        wrapper, and thus `-H`, is bypassed). See issue #1161.
+        True for all real compiles (GCC via shell wrapper with -H, MSVC via
+        Python wrapper that tees /showIncludes). False for compdb dump where
+        the wrapper is bypassed. See issue #1161.
         """
-        if self.blade.get_build_toolchain().obj_suffix != '.o':
-            return False
         return not (self.blade.get_command() == 'dump' and
                     getattr(self.blade.get_options(), 'dump_compdb', False))
 
@@ -702,25 +700,11 @@ class CcTarget(Target):
             implicit_deps.append(output)
             self.generate_build('cxxhdrs', output, inputs=full_hdr,
                                 order_only_deps=order_only_deps, variables=vars, clean=[])
-        tc = self.blade.get_build_toolchain()
-        if tc.obj_suffix != '.o':
-            # MSVC does not generate inclusion stacks during compilation (unlike
-            # GCC's -H wrapper), so we need an explicit cxxhdrs preprocess step for
-            # source files too.
-            for src, full_src in self.attr['expanded_srcs']:
-                if path_under_dir(full_src, self.build_dir):
-                    continue
-                output = os.path.join(objs_dir, src) + '.incstk'
-                implicit_deps.append(output)
-                self.generate_build('cxxhdrs', output, inputs=full_src,
-                                    order_only_deps=order_only_deps, variables=vars, clean=[])
-            implicit_deps += objs
-        elif source_inclusion_stacks is not None:
-            # GCC/clang: each compile declares its `<obj>.H` inclusion stack as an
-            # implicit output (written write-if-changed, with `restat` on the rule).
-            # Triggering the check on those instead of the `.o` lets ninja prune it
-            # when the inclusion set is unchanged, while still ordering it after the
-            # compile. See issue #1161.
+        if source_inclusion_stacks is not None:
+            # Each compile declares its `<src>.incstk` as an implicit output
+            # (written write-if-changed, with `restat` on the rule). Triggering
+            # the check on those instead of the `.o` lets ninja prune it when
+            # the inclusion set is unchanged. See issue #1161.
             implicit_deps += source_inclusion_stacks
         else:
             # Fallback (e.g. cuda, or compdb dump where no `.H` is produced): the

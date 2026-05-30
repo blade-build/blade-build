@@ -8,7 +8,7 @@
 | --- | --- |
 | `src/blade/cc_targets.py` | 收集"头文件 → 库"的声明、为每个目标落盘检查信息、生成检查规则 |
 | `src/blade/build_manager.py` | 把全局声明写入 `inclusion_declaration.data` |
-| `src/blade/backend.py` | 生成产出包含栈的编译命令（`cc_wrapper.sh` 加 `-H`）、`cxxhdrs` 与 `ccincchk` 规则 |
+| `src/blade/backend.py` | 生成产出包含栈的编译命令（GCC：`cc_wrapper.sh` 加 `-H`；MSVC：`cc_wrapper.py` 旁路 `/showIncludes`）、`cxxhdrs` 与 `ccincchk` 规则 |
 | `src/blade/inclusion_check.py` | 真正的检查逻辑（在构建期作为子进程被调用） |
 
 ---
@@ -46,9 +46,9 @@
 
 检查需要知道每个源文件/头文件**实际**包含了哪些头文件。这一信息由编译器在编译时顺带产出：
 
-- **源文件**：每次编译都经由生成的包装脚本 `cc_wrapper.sh`（见 `backend.py`），它给编译命令追加 GCC 的 `-H` 选项，并用一段 awk 把"包含栈"从普通诊断里分离出来，写入 `<src>.incstk`。该路径通过每个目标文件各自的 `inclusion_stack` ninja 变量传入，因此与目标文件后缀（`.o` 还是 `.obj`）无关。
-- **公开头文件**：头文件本身不参与普通编译，所以单独生成 `cxxhdrs` 规则，用 `-E` 预处理产出 `<hdr>.incstk`。
-- **MSVC**：编译时不产出包含栈（它用 ninja 原生的 `deps = msvc` 解析 `/showIncludes`），因此对源文件也额外补一条 `cxxhdrs` 预处理步骤。
+- **源文件（GCC/Clang）**：每次编译都经由生成的包装脚本 `cc_wrapper.sh`（见 `backend.py`），它给编译命令追加 GCC 的 `-H` 选项，并用一段 awk 把"包含栈"从普通诊断里分离出来，写入 `<src>.incstk`。该路径通过每个目标文件各自的 `inclusion_stack` ninja 变量传入，因此与目标文件后缀（`.o` 还是 `.obj`）无关。
+- **源文件（MSVC）**：见下方 MSVC 说明——在正常编译过程中顺带产出同样的 `.incstk`，无需单独预处理。
+- **公开头文件（所有工具链）**：头文件从不被编译成目标文件，所以在**每种**工具链上都单独生成 `cxxhdrs` 规则，用预处理（GCC/Clang `-E`、MSVC `/P`）产出 `<hdr>.incstk`。这与下面的源文件路径无关——它是头文件获得包含栈的唯一途径。
 
 `.incstk` 文件用**前导点的个数表示包含层级**，例如（GCC 格式）：
 
@@ -60,6 +60,22 @@
 ```
 
 MSVC 格式则为 `Note: including file:  <路径>`，用前导空格数表示层级。两种格式都由 `inclusion_check._parse_hdr_level_line()` 解析。
+
+#### MSVC：旁路（tee）`/showIncludes`，而非单独预处理
+
+GCC 的 `-H` 把包含栈写到 stderr，由 awk 包装脚本分流到 `.incstk`。MSVC 没有 `-H`，它输出 `/showIncludes` 行（`Note: including file: <路径>`）与诊断信息交织在一起，而 ninja 原生的 `deps = msvc` 本就要解析这些行来构建依赖图。为避免把每个源文件**编译两遍**（一遍出 `.obj` + 喂 ninja deps，一遍预处理出包含栈），MSVC 的 `cc`/`cxx` 规则用 `cc_wrapper.py` 包裹编译命令，对编译器输出做**旁路（tee）**：
+
+- 把子进程的 stdout 与 stderr 合并到同一个管道（只读其中一侧会有管道缓冲死锁风险），逐行原样转发给 ninja 的 `deps = msvc` 解析器；
+- 同时把 `Note: including file:` 行写入 `<src>.incstk`，于是同一次编译同时喂饱两个消费者。
+
+有两类内容会被过滤，但处理方式**不同**：
+
+- 编译器回显的**裸文件名**——这是 cl.exe 的怪癖，无法关闭。ninja 的 `CLParser::FilterInputFilename` 已经会**按扩展名过滤源文件**的回显（匹配 `.c/.cc/.cxx/.cpp/.c++`），所以 `cc`/`cxx` 规则无需我们插手；但它**不**过滤头文件扩展名，于是 `cxxhdrs` 的 `/P` 规则回显的 `foo.h` 会漏出来。因此我们自己丢弃任何单独的文件名 token（这也顺带覆盖 nvcc——它会回显 `.cu` 源文件名和中间临时文件名）。这类 token **两边都不发**——既不写入 `.incstk`，也不转发给 ninja——因为它不是 `Note: including file:` 行，deps 解析器并不需要它；
+- **workspace 之外的绝对路径**（系统/SDK 头文件）：只从 `.incstk` 里滤掉（检查器本就会丢弃绝对路径，保留它们只会撑大文件、拖慢检查），**但仍转发给 ninja**——它的 `deps = msvc` 依赖图需要完整的 include 集合。
+
+因此在 MSVC 上，包含栈是正常编译的副产物，与 GCC 上的 `-H` 完全一致——不需要对每个源文件单独预处理。
+
+> **路径分隔符。** 后端写出的声明数据（`declared_hdrs`、全局 `public_hdrs` 表等）用的是操作系统分隔符，即 Windows 上的反斜杠，而 `/showIncludes` 路径已归一化为正斜杠。`inclusion_check.py` 在加载时把**所有**声明路径统一归一化为正斜杠（`_unix_path_set` / `_unix_path_dict` / `_unix_path_pairs`）来消除这一差异，使比较与分隔符无关、与产出数据的平台无关。
 
 ### 1.4 检查的触发（`ccincchk` 规则）
 

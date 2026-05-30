@@ -8,7 +8,7 @@ Source files involved:
 | --- | --- |
 | `src/blade/cc_targets.py` | Collect the "header → library" declarations, write per-target check info, generate the check rule |
 | `src/blade/build_manager.py` | Write the global declaration to `inclusion_declaration.data` |
-| `src/blade/backend.py` | Generate the compile command that emits the inclusion stack (`cc_wrapper.sh` adds `-H`), plus the `cxxhdrs` and `ccincchk` rules |
+| `src/blade/backend.py` | Generate the compile command that emits the inclusion stack (GCC: `cc_wrapper.sh` adds `-H`; MSVC: `cc_wrapper.py` tees `/showIncludes`), plus the `cxxhdrs` and `ccincchk` rules |
 | `src/blade/inclusion_check.py` | The actual check logic (invoked as a subprocess at build time) |
 
 ---
@@ -46,9 +46,9 @@ It also writes a `<target>.incchk.extra` containing `hdrs_deps` / `private_hdrs_
 
 The check needs to know which headers each source/header **actually** includes. The compiler produces this as a side effect of compilation:
 
-- **Source files**: every compile goes through the generated wrapper `cc_wrapper.sh` (see `backend.py`), which appends GCC's `-H` option to the compile command and uses an awk program to separate the "inclusion stack" from ordinary diagnostics, writing it to `<src>.incstk`. The path is passed via the per-object `inclusion_stack` ninja variable, so it is independent of the object-file suffix (`.o` vs `.obj`).
-- **Public headers**: a header is not compiled normally, so a separate `cxxhdrs` rule preprocesses it (`-E`) to produce `<hdr>.incstk`.
-- **MSVC**: it does not emit an inclusion stack during compilation (it uses ninja's native `deps = msvc` to parse `/showIncludes`), so an extra `cxxhdrs` preprocess step is added for source files too.
+- **Source files (GCC/Clang)**: every compile goes through the generated wrapper `cc_wrapper.sh` (see `backend.py`), which appends GCC's `-H` option to the compile command and uses an awk program to separate the "inclusion stack" from ordinary diagnostics, writing it to `<src>.incstk`. The path is passed via the per-object `inclusion_stack` ninja variable, so it is independent of the object-file suffix (`.o` vs `.obj`).
+- **Source files (MSVC)**: see the MSVC note below — the same `.incstk` is produced during the normal compile, no separate preprocess.
+- **Public headers (all toolchains)**: a header is never compiled into an object, so on **every** toolchain a separate `cxxhdrs` rule preprocesses it (GCC/Clang `-E`, MSVC `/P`) to produce `<hdr>.incstk`. This is independent of the source-file path below — it is the only inclusion stack a header gets.
 
 A `.incstk` file encodes the **inclusion level with the number of leading dots**, for example (GCC format):
 
@@ -60,6 +60,22 @@ A `.incstk` file encodes the **inclusion level with the number of leading dots**
 ```
 
 The MSVC format is `Note: including file:  <path>`, using the number of leading spaces for the level. Both are parsed by `inclusion_check._parse_hdr_level_line()`.
+
+#### MSVC: tee `/showIncludes` instead of a separate preprocess
+
+GCC's `-H` writes the inclusion stack to stderr, which the awk wrapper splits off into `.incstk`. MSVC has no `-H`; it emits `/showIncludes` lines (`Note: including file: <path>`) interleaved with diagnostics, and ninja's native `deps = msvc` already parses those same lines to build the dependency graph. To avoid compiling each source file *twice* (once for `.obj` + ninja deps, once to preprocess for the inclusion stack), the MSVC `cc`/`cxx` rules wrap the compile in `cc_wrapper.py`, which **tees** the compiler output:
+
+- it merges the child's stdout and stderr into one pipe (reading only one side risks a pipe-buffer deadlock) and streams every line back to ninja's `deps = msvc` parser unchanged;
+- in parallel it writes the `Note: including file:` lines to `<src>.incstk`, so the same single compile feeds both consumers.
+
+Two things are filtered, with **different** treatment for each:
+
+- the **bare basename** the compiler echoes for the file it processes — a cl.exe quirk that cannot be turned off. ninja's `CLParser::FilterInputFilename` already strips this echo **for source files** (it matches `.c/.cc/.cxx/.cpp/.c++`), so the `cc`/`cxx` rules need no help; but it does **not** strip header extensions, so the echoed `foo.h` from the `cxxhdrs` `/P` rule leaks through. We therefore drop any lone filename token ourselves (this also covers nvcc, which echoes its `.cu` source plus intermediate temp names). Such a token is **dropped from both sides** — neither written to `.incstk` nor forwarded to ninja — since it is not a `Note: including file:` line and the deps parser does not need it;
+- **absolute paths outside the workspace** (system/SDK headers): these are dropped from `.incstk` only (the checker discards absolute paths anyway, so keeping them would just bloat the file and slow the check), **but still forwarded to ninja** — its `deps = msvc` graph needs the complete include set.
+
+So on MSVC the inclusion stack is a by-product of the normal compile, exactly as `-H` is on GCC — no separate per-source preprocess is needed.
+
+> **Path separators.** The backend writes the declaration data (`declared_hdrs`, the global `public_hdrs` map, …) with the OS separator, i.e. backslashes on Windows, while `/showIncludes` paths are normalized to forward slashes. `inclusion_check.py` reconciles the two by normalizing **all** declaration paths to forward slashes as they are loaded (`_unix_path_set` / `_unix_path_dict` / `_unix_path_pairs`), so the comparisons are separator-agnostic regardless of which platform produced the data.
 
 ### 1.4 Triggering the check (the `ccincchk` rule)
 

@@ -96,6 +96,29 @@ def to_unix_path(path):
     return path.replace('\\', '/')
 
 
+# The backend writes declaration data (`declared_hdrs`, `public_hdrs`, ...)
+# with `os.sep` -- backslashes on Windows -- but inclusion stacks are parsed to
+# forward slashes.  These helpers reconcile both sides here, in the consumer,
+# so the path comparisons work regardless of the platform that produced them.
+def _unix_path_set(paths):
+    """Normalize a set/list of paths to forward slashes (None passes through)."""
+    if paths is None:
+        return paths
+    return {to_unix_path(p) for p in paths}
+
+
+def _unix_path_dict(mapping):
+    """Normalize the path keys of a dict to forward slashes (None passes through)."""
+    if mapping is None:
+        return mapping
+    return {to_unix_path(k): v for k, v in mapping.items()}
+
+
+def _unix_path_pairs(pairs):
+    """Normalize a list of (name, full_path) pairs to forward slashes."""
+    return [(to_unix_path(name), to_unix_path(full)) for name, full in pairs]
+
+
 def path_under_dir(path, dir):
     """Check whether *path* is under *dir*.
 
@@ -133,11 +156,13 @@ class GlobalDeclaration:
         with open(self._declaration_file, 'rb') as f:
             declaration = pickle.load(f)
         # pylint: disable=attribute-defined-outside-init
-        self._hdr_targets_map = declaration['public_hdrs']
-        self._hdr_dir_targets_map = declaration['public_incs']
-        self._private_hdrs_target_map = declaration['private_hdrs']
+        # Normalize path keys to forward slashes (the backend writes them with
+        # os.sep). `header_less` holds target keys, not paths, so it is left as-is.
+        self._hdr_targets_map = _unix_path_dict(declaration['public_hdrs'])
+        self._hdr_dir_targets_map = _unix_path_dict(declaration['public_incs'])
+        self._private_hdrs_target_map = _unix_path_dict(declaration['private_hdrs'])
         self._header_less = declaration.get('header_less', set())
-        self._allowed_undeclared_hdrs = declaration['allowed_undeclared_hdrs']
+        self._allowed_undeclared_hdrs = _unix_path_set(declaration['allowed_undeclared_hdrs'])
         self._initialized = True
 
     def find_libs_by_header(self, hdr):
@@ -325,17 +350,20 @@ class Checker:
         self.key = target['key']
         self.deps = target['deps']
         self.build_dir = to_unix_path(target['build_dir'])
-        self.expanded_srcs = target['expanded_srcs']
-        self.expanded_hdrs = target['expanded_hdrs']
+        # Normalize all declared paths to forward slashes so they match the
+        # forward-slash header paths parsed from inclusion stacks. The backend
+        # writes them with os.sep (backslashes on Windows). See `to_unix_path`.
+        self.expanded_srcs = _unix_path_pairs(target['expanded_srcs'])
+        self.expanded_hdrs = _unix_path_pairs(target['expanded_hdrs'])
         self.source_location = target['source_location']
-        self.declared_hdrs = target['declared_hdrs']
-        self.declared_incs = target['declared_incs']
-        self.declared_genhdrs = target['declared_genhdrs']
-        self.declared_genincs = target['declared_genincs']
-        self.hdrs_deps = target['hdrs_deps']
-        self.private_hdrs_deps = target['private_hdrs_deps']
-        self.allowed_undeclared_hdrs = target['allowed_undeclared_hdrs']
-        self.suppress = target['suppress']
+        self.declared_hdrs = _unix_path_set(target['declared_hdrs'])
+        self.declared_incs = _unix_path_set(target['declared_incs'])
+        self.declared_genhdrs = _unix_path_set(target['declared_genhdrs'])
+        self.declared_genincs = _unix_path_set(target['declared_genincs'])
+        self.hdrs_deps = _unix_path_dict(target['hdrs_deps'])
+        self.private_hdrs_deps = _unix_path_dict(target['private_hdrs_deps'])
+        self.allowed_undeclared_hdrs = _unix_path_dict(target['allowed_undeclared_hdrs'])
+        self.suppress = _unix_path_dict(target['suppress'])
         self.severity = target['severity']
         # Unused-deps check (forward-compatible defaults for older incchk files).
         self.unused_deps_severity = target.get('unused_deps_severity', 'debug')
