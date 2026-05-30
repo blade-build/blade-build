@@ -17,7 +17,14 @@ This rule will generate a library and a header file.
 
 Attributes:
 
-- recursive=True Generate resursice C scanner
+- `recursive=True` — generate a reentrant C scanner.
+- `prefix='xxx'` — rename the `yy` symbol prefix (passed as flex `-P` / bison
+  `-p`), so several parsers can coexist in one binary without their `yyparse`
+  / `yylval` / ... globals colliding.
+- `lexflags=[...]` / `yaccflags=[...]` — extra flags passed straight through to
+  flex / bison. Note that flags which change the names of the generated files
+  are not supported: blade derives those names by its own rule and will not see
+  the override.
 
 lex_yacc_library also support most [cc_library attributes](cc.md#cc_library).
 
@@ -36,3 +43,22 @@ lex_yacc_library(
      recursive = True
 )
 ```
+
+### The generated header
+
+The header `bison -d` emits is named after the yacc source: `<yacc_file>.hh`
+for a C++ grammar (`.yy`), or `<yacc_file>.h` for a C grammar (`.y`). For the
+example above it is `line_parser.yy.hh`, and it declares the tokens and
+`yyparse`.
+
+A target that uses the parser includes it by its workspace-relative path, the
+same as any other generated header:
+
+```c++
+#include "path/to/line_parser.yy.hh"
+```
+
+Including it is also what lets the header dependency check see that your target
+genuinely uses the `lex_yacc_library`; relying only on the symbols (via your
+own forward declarations) without including this header would make the
+dependency look unused.

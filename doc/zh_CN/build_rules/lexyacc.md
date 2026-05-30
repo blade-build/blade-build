@@ -10,7 +10,11 @@
 
 属性：
 
-- recursive=True 生成可重入的 C scanner。
+- `recursive=True` — 生成可重入的 C scanner。
+- `prefix='xxx'` — 修改 `yy` 符号前缀（传给 flex `-P` / bison `-p`），让多个
+  parser 可在同一个二进制中共存，避免 `yyparse` / `yylval` 等全局符号冲突。
+- `lexflags=[...]` / `yaccflags=[...]` — 直接透传给 flex / bison 的额外参数。
+  注意：改变生成文件名的参数不受支持——blade 按自己的规则推算这些文件名，不会感知到此类覆盖。
 
 也支持大部分 [cc_library 的属性](cc.md#cc_library)。
 
@@ -29,3 +33,19 @@ lex_yacc_library(
      recursive = True
 )
 ```
+
+### 生成的头文件
+
+`bison -d` 生成的头文件以 yacc 源文件命名：C++ 语法（`.yy`）为 `<yacc 文件>.hh`，
+C 语法（`.y`）为 `<yacc 文件>.h`。上例即 `line_parser.yy.hh`，其中声明了 token
+和 `yyparse`。
+
+使用该 parser 的目标按工作区相对路径 `#include` 它，与引用其它生成头文件一样：
+
+```c++
+#include "path/to/line_parser.yy.hh"
+```
+
+include 这个头文件也是头文件依赖检查识别"你的目标确实用到了该 `lex_yacc_library`"
+的依据；如果只靠自己的前向声明使用其中的符号而不 include 此头文件，这条依赖会被
+判定为未使用。
