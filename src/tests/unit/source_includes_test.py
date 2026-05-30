@@ -187,6 +187,7 @@ class ReadAllIncstkPathsTest(unittest.TestCase):
 
     # --- MSVC format paths ---
 
+    @unittest.skipUnless(os.name == 'nt', 'MSVC format only used on Windows')
     def test_msvc_format_collects_paths(self):
         path = self._write(
             'Note: including file:  pkg/a.h\n'
@@ -199,6 +200,7 @@ class ReadAllIncstkPathsTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    @unittest.skipUnless(os.name == 'nt', 'MSVC format only used on Windows')
     def test_msvc_format_strips_build_dir_prefix(self):
         path = self._write(
             'Note: including file:  pkg/a.h\n'
