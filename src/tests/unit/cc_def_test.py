@@ -106,6 +106,43 @@ class ExportMapParseTest(unittest.TestCase):
         globals_, _ = self._parse('{ global: my_c_func; local: *; };')
         self.assertEqual([('my_c_func', False, False)], globals_)
 
+    def test_extern_c_block_is_not_cpp(self):
+        globals_, _ = self._parse(
+            '{ global: extern "C" { c_api; }; local: *; };')
+        self.assertEqual([('c_api', False, False)], globals_)
+
+    def test_global_before_and_after_extern_block(self):
+        # A top-level pattern, then an extern "C++" block, then another
+        # top-level pattern -- cpp must toggle on entry and back off on exit.
+        globals_, _ = self._parse(
+            '{ global: top1; extern "C++" { ns::*; }; top2; local: *; };')
+        self.assertEqual(
+            [('top1', False, False), ('ns::*', True, False), ('top2', False, False)],
+            globals_)
+
+    def test_named_version_nodes_are_flattened(self):
+        # The node names (VER_1, VER_2) and the `} VER_1;` dependency must not
+        # be read as patterns; their global/local lists are unioned.
+        globals_, locals_ = self._parse(
+            'VER_1 { global: a; local: la; };\n'
+            'VER_2 { global: b; local: *; } VER_1;\n')
+        self.assertEqual([('a', False, False), ('b', False, False)], globals_)
+        self.assertEqual([('la', False, False), ('*', False, False)], locals_)
+
+    def test_line_comment_and_only_global(self):
+        globals_, locals_ = self._parse(
+            '{\n'
+            '  global:\n'
+            '    keep_me;  // keep this one\n'
+            '}; // no local section\n')
+        self.assertEqual([('keep_me', False, False)], globals_)
+        self.assertEqual([], locals_)
+
+    def test_specific_local_patterns(self):
+        _, locals_ = self._parse('{ local: secret_*; _internal; };')
+        self.assertEqual(
+            [('secret_*', False, False), ('_internal', False, False)], locals_)
+
 
 class ExportMapKeepsTest(unittest.TestCase):
     def setUp(self):

@@ -247,8 +247,14 @@ def _parse_export_map(path):
             if tok == '{':
                 cpp = (pending_lang == 'C++') if pending_extern else cpp_stack[-1]
                 cpp_stack.append(cpp)
-            elif len(cpp_stack) > 1:
-                cpp_stack.pop()
+            else:  # '}'
+                if len(cpp_stack) > 1:
+                    cpp_stack.pop()
+                if len(cpp_stack) == 1:
+                    # Closed a version node: the next token (a named-version tag
+                    # like `VER_2`, or a `} VER_1;` dependency) must not be read
+                    # as a pattern under the previous node's section.
+                    section = None
             pending_extern, pending_lang = False, None
         elif tok == ';':
             continue
