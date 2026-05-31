@@ -772,7 +772,7 @@ class CcTarget(Target):
         if inclusion_check_result:
             incchk_deps.append(inclusion_check_result)
         self._cc_link(output, 'solink', objs=objs, deps=usr_libs, sys_libs=sys_libs,
-                      version_scripts=self.attr.get('vers_fullpath'),
+                      version_scripts=self.attr.get('export_map_fullpath'),
                       order_only_deps=incchk_deps, target_linkflags=target_linkflags)
         self._add_target_file(tc.DYNAMIC_LIB_LABEL, output)
 
@@ -831,7 +831,7 @@ class CcTarget(Target):
 
         Returns the full paths as a list with at most one entry (kept as a
         list so it splices straight into the existing list-shaped
-        ``lds_fullpath`` / ``vers_fullpath`` handling and ``_cc_link``).
+        ``linker_script_fullpath`` / ``export_map_fullpath`` handling and ``_cc_link``).
 
         Emits a deprecation warning when the plural alias is used, and warns
         when more than one file is given -- a single file is the only
@@ -1093,7 +1093,7 @@ class CcLibrary(CcTarget):
         # the shared library exports; passed to `--version-script` on Linux when
         # the dynamic library is built (see `_dynamic_cc_library`). No deprecated
         # plural alias here -- `cc_library` never had `version_scripts`.
-        self.attr['vers_fullpath'] = self._resolve_linker_input_file(
+        self.attr['export_map_fullpath'] = self._resolve_linker_input_file(
             export_map, None, 'export_map', 'version_scripts')
         # `generate_dynamic` is a tri-state: None inherits the global default
         # (already computed in CcTarget.__init__ from --generate-dynamic /
@@ -1624,9 +1624,9 @@ class CcBinary(CcTarget):
                 kwargs=kwargs)
         self.attr['embed_version'] = embed_version
         self.attr['dynamic_link'] = dynamic_link
-        self.attr['lds_fullpath'] = self._resolve_linker_input_file(
+        self.attr['linker_script_fullpath'] = self._resolve_linker_input_file(
             linker_script, linker_scripts, 'linker_script', 'linker_scripts')
-        self.attr['vers_fullpath'] = self._resolve_linker_input_file(
+        self.attr['export_map_fullpath'] = self._resolve_linker_input_file(
             export_map, version_scripts, 'export_map', 'version_scripts')
         self.attr['export_dynamic'] = export_dynamic
         self.attr['dwp'] = is_fission() and need_dwp()
@@ -1703,8 +1703,8 @@ class CcBinary(CcTarget):
         output = self._target_file_path(
             self.blade.get_build_toolchain().executable_file_name(self.name))
         self._cc_link(output, 'link', objs=objs, deps=usr_libs, sys_libs=sys_libs,
-                      linker_scripts=self.attr.get('lds_fullpath'),
-                      version_scripts=self.attr.get('vers_fullpath'),
+                      linker_scripts=self.attr.get('linker_script_fullpath'),
+                      version_scripts=self.attr.get('export_map_fullpath'),
                       target_linkflags=target_linkflags,
                       implicit_deps=implicit_deps,
                       order_only_deps=order_only_deps)
@@ -1894,9 +1894,9 @@ class CcPlugin(CcTarget):
         self.attr['suffix'] = suffix
         self.attr['allow_undefined'] = allow_undefined
         self.attr['strip'] = strip
-        self.attr['lds_fullpath'] = self._resolve_linker_input_file(
+        self.attr['linker_script_fullpath'] = self._resolve_linker_input_file(
             linker_script, linker_scripts, 'linker_script', 'linker_scripts')
-        self.attr['vers_fullpath'] = self._resolve_linker_input_file(
+        self.attr['export_map_fullpath'] = self._resolve_linker_input_file(
             export_map, version_scripts, 'export_map', 'version_scripts')
         self._add_tags('lang:cc', 'type:plugin')
 
@@ -1930,8 +1930,8 @@ class CcPlugin(CcTarget):
             else:
                 link_output = output
             self._cc_link(link_output, 'solink', objs=objs, deps=usr_libs, sys_libs=sys_libs,
-                          linker_scripts=self.attr.get('lds_fullpath'),
-                          version_scripts=self.attr.get('vers_fullpath'),
+                          linker_scripts=self.attr.get('linker_script_fullpath'),
+                          version_scripts=self.attr.get('export_map_fullpath'),
                           target_linkflags=target_linkflags,
                           implicit_deps=link_all_symbols_libs, order_only_deps=incchk_deps)
             if self.attr['strip']:

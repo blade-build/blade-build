@@ -524,43 +524,72 @@ Attributes:
   Its role is mainly to specify how to put the sections in the input file into the output file and to control the layout of the sections in the input file in the program address space.
   The linker has a default built-in linking script, which can be viewed with `ld --verbose`. This option will replace the system's default linking script.
   The linker script file usually has the extension `.ld` or `.lds`.
-  Only a single file is accepted: a SECTIONS script replaces the default, so multiple `-T` scripts do not meaningfully combine. This is a GNU-ld / ELF (Linux) feature only — macOS `ld64` and Windows `link.exe` have no `-T` equivalent.
+  Only a single file is accepted: a SECTIONS script replaces the default, so multiple `-T` scripts do not meaningfully combine.
   Linker scripts are usually quite complex, so if you just want to control the visibility of the symbols, use the `export_map` option below.
+  > **GNU-ld feature.** `linker_script` is the GNU-ld `-T` option. It works with a GNU-ld-compatible linker: GNU `ld` / `ld.lld` on ELF (Linux), and **MinGW's GNU `ld`** when targeting Windows. It is **not** supported by MSVC `link.exe` or Apple's `ld64` (passing it there makes the link fail).
   > The plural `linker_scripts` (a list) is a **deprecated alias**; using it emits a warning and only the first file is used.
 - `export_map`: str, a single [linker "version" script](https://sourceware.org/binutils/docs/ld/VERSION.html) used to control which symbols the shared library exports.
   Despite the linker term "version script", the mechanism here is *export filtering*, not ABI versioning — hence the name `export_map` (the industry term for a symbol-export control file). Use the anonymous-version form (no version id) to control visibility only.
-  Only a single file is accepted (GNU ld rejects more than one anonymous version node). It is available on `cc_library`, `cc_binary` and `cc_plugin`. On Linux it is passed to `--version-script`; the export-map files usually have the extension `.exp`, `.sym`, `.ver` or `.map`.
+  Only a single file is accepted (GNU ld rejects more than one anonymous version node). It is available on `cc_library`, `cc_binary` and `cc_plugin`. It is passed to GNU ld's `--version-script`; the export-map files usually have the extension `.exp`, `.sym`, `.ver` or `.map`. See [the C++ example below](#controlling-which-symbols-a-shared-library-exports).
+  > **GNU-ld feature.** Like `linker_script`, this is a GNU-ld option. Full symbol versioning is ELF-only; MSVC uses a generated `.def` instead (see [Windows DLL support](#windows-dll-support)).
   > The plural `version_scripts` (a list) is a **deprecated alias** for `export_map`; using it emits a warning and only the first file is used.
 
 `prefix` and `suffix` control the file name of the generated dynamic library. Assuming `name='file'`, on a Linux toolchain the default output is `libfile.so`;
 setting `prefix=''` makes it `file.so`. Passing a `name` that already carries a shared-library extension (e.g. `name='file.so'`) is no longer implicitly treated as "the full output file name"; to fully customize the output name, pass `prefix=''` and `suffix='.so'` explicitly.
 
-### Controlling the visibility of symbols in dynamic libraries
+### Controlling which symbols a shared library exports
 
-To control the external visibility of symbols in the linking result, you can use [GCC extended attributes in the source code or command line options](https://gcc.gnu.org/wiki/Visibility).
+To control the external visibility of symbols in the linking result, you can use [GCC extended attributes in the source code or command line options](https://gcc.gnu.org/wiki/Visibility). When you don't want to (or can't) annotate the sources, `export_map` does the same from the link line: it lists the symbols to keep `global` (exported); everything under `local` becomes hidden.
 
-With the linker version file, it is possible to control or override the visibility settings in the source code when linking,eg:
+#### A C++ example
+
+Suppose a library should expose only the `mylib::Api` class and the `mylib::Create()` factory, and hide everything else (helpers, third-party symbols pulled in statically, etc.):
+
+```cpp
+// api.h
+namespace mylib {
+class Api {
+ public:
+    void Run();
+};
+Api* Create();
+}  // namespace mylib
+```
+
+Because C++ symbols are mangled, list the *demangled* names inside an `extern "C++"` block. Write the `export_map` file (e.g. `api.map`):
 
 ```ld
 {
-global:  # Globally visible
-    # Support wildcards
-    Name1;
-    _Name2*;
-    extern "C++" {  # C++ symbols
-        # Quoted strings do not match wildcards
-        "a()";
-        "a(int)";
-        "operator<<(std::ostream&, B const&)";
+global:
+    extern "C++" {
+        # Quoted names are matched literally (no wildcard) -- use this when
+        # the exact signature matters or to avoid matching overloads.
+        "mylib::Create()";
 
-        # Unquoted strings match wildcards
-        B::*;
-        typeinfo?for?magic::*;
-        vtable?for?magic::*;"
+        # Unquoted names allow wildcards: export every member of mylib::Api
+        # (constructors, Run(), ...).
+        mylib::Api::*;
+
+        # vtable / typeinfo are needed by code that inherits from or
+        # dynamic_casts the class across the library boundary. The demangler
+        # prints a space here; match it with the '?' single-char wildcard.
+        typeinfo?for?mylib::Api;
+        vtable?for?mylib::Api;
     };
-local:  # The rest are local symbols, not visible
-    *;
+local:
+    *;  # hide everything not listed above
 };
+```
+
+Wire it into the BUILD file (only the shared library is affected; the static archive is unchanged):
+
+```python
+cc_library(
+    name = 'mylib',
+    srcs = ['api.cc'],
+    hdrs = ['api.h'],
+    export_map = 'api.map',
+)
 ```
 
 To see the visibility of symbols in the library, you can use the `nm` command.

@@ -510,42 +510,70 @@ cc_plugin(
   它的作用主要是规定如何把输入文件内的 section 放入输出文件内，并控制输入文件内各部分在程序地址空间内的布局。
   链接器有个默认的内置链接脚本，可用 `ld --verbose` 查看。此选项将会替换系统的默认链接脚本。
   链接器脚本文件的扩展名一般为 `.ld` 或者 `.lds`。
-  只接受单个文件：SECTIONS 脚本会替换默认脚本，多个 `-T` 脚本无法有意义地组合。该特性仅限 GNU ld / ELF（Linux）；macOS `ld64` 和 Windows `link.exe` 没有 `-T` 的对应物。
+  只接受单个文件：SECTIONS 脚本会替换默认脚本，多个 `-T` 脚本无法有意义地组合。
   链接器脚本通常相当复杂，如果只是想控制符号的可见性，请使用下面的 `export_map` 选项。
+  > **GNU ld 特性。** `linker_script` 就是 GNU ld 的 `-T` 选项，需要 GNU ld 兼容的链接器：ELF（Linux）上的 GNU `ld` / `ld.lld`，以及面向 Windows 时 **MinGW 的 GNU `ld`**。MSVC `link.exe` 和 Apple `ld64` **不支持**（传给它们会导致链接失败）。
   > 复数形式 `linker_scripts`（列表）是**已废弃的别名**，使用时会告警，且只取第一个文件。
 - `export_map`: str，单个[链接器“版本”脚本](https://sourceware.org/binutils/docs/ld/VERSION.html)，用来控制共享库导出哪些符号。
   虽然链接器术语叫“版本脚本”，但这里的机制是*导出过滤*而非 ABI 版本管理，因此命名为 `export_map`（业界对符号导出控制文件的通称）。使用匿名版本形式（不指定版本号）即可只控制可见性。
-  只接受单个文件（GNU ld 不允许多于一个匿名版本节点）。可用于 `cc_library`、`cc_binary` 和 `cc_plugin`。在 Linux 上传给 `--version-script`；导出映射文件的扩展名一般为 `.exp`、`.sym`、`.ver` 或者 `.map`。
+  只接受单个文件（GNU ld 不允许多于一个匿名版本节点）。可用于 `cc_library`、`cc_binary` 和 `cc_plugin`。会传给 GNU ld 的 `--version-script`；导出映射文件的扩展名一般为 `.exp`、`.sym`、`.ver` 或者 `.map`。参见[下文的 C++ 示例](#控制共享库导出哪些符号)。
+  > **GNU ld 特性。** 与 `linker_script` 一样，这是 GNU ld 选项。完整的符号版本管理仅限 ELF；MSVC 改用自动生成的 `.def`（参见 [Windows DLL 支持](#windows-dll-支持)）。
   > 复数形式 `version_scripts`（列表）是 `export_map` 的**已废弃别名**，使用时会告警，且只取第一个文件。
 
 `prefix` 和 `suffix` 控制生成的动态库的文件名。假设 `name='file'`，在 Linux 工具链上默认生成 `libfile.so`；设置 `prefix=''` 则变为 `file.so`。传入已带共享库后缀的 `name`（如 `name='file.so'`）不再被隐式识别为"输出文件全名"，如需完全自定义输出文件名，请改用 `prefix=''` 与 `suffix='.so'` 显式表达。
 
-### 控制动态库中符号的可见性
+### 控制共享库导出哪些符号
 
-要控制链接结果中符号是否对外可见，可以通过[源代码中的 GCC 扩展属性或者命令行选项](https://gcc.gnu.org/wiki/Visibility)来进行。
+要控制链接结果中符号是否对外可见，可以通过[源代码中的 GCC 扩展属性或者命令行选项](https://gcc.gnu.org/wiki/Visibility)来进行。当你不想（或无法）改动源码时，`export_map` 能在链接阶段做同样的事：列出要保持 `global`（导出）的符号，其余落入 `local` 的一律隐藏。
 
-用链接器版本文件，则可以在链接时控制或者覆盖源代码中的可见性设置：
+#### C++ 示例
+
+假设某个库只想对外暴露 `mylib::Api` 类和工厂函数 `mylib::Create()`，而隐藏其余一切（辅助函数、被静态链入的第三方符号等）：
+
+```cpp
+// api.h
+namespace mylib {
+class Api {
+ public:
+    void Run();
+};
+Api* Create();
+}  // namespace mylib
+```
+
+由于 C++ 符号会被名字修饰（mangle），需要把*反修饰后*的名字写在 `extern "C++"` 块里。编写 `export_map` 文件（如 `api.map`）：
 
 ```ld
 {
-global:  # 全局可见
-    # 支持通配符
-    Name1;
-    _Name2*;
-    extern "C++" {  # C++ 符号
-        # 引号内的表示不匹配通配符
-        "a()";
-        "a(int)";
-        "operator<<(std::ostream&, B const&)";
+global:
+    extern "C++" {
+        # 加引号表示按字面精确匹配（不走通配符）——用于在意确切签名、
+        # 或避免误匹配重载的场合。
+        "mylib::Create()";
 
-        # 引号外的匹配通配符
-        B::*;
-        typeinfo?for?magic::*;
-        vtable?for?magic::*;"
+        # 不加引号则可用通配符：导出 mylib::Api 的全部成员
+        # （构造函数、Run() ……）。
+        mylib::Api::*;
+
+        # 跨库继承或 dynamic_cast 时需要 vtable / typeinfo。反修饰器在此
+        # 处会打印一个空格，用单字符通配符 '?' 去匹配它。
+        typeinfo?for?mylib::Api;
+        vtable?for?mylib::Api;
     };
-local:  # 其余为局部符号，对外不可见
-    *;
+local:
+    *;  # 隐藏上面未列出的一切
 };
+```
+
+在 BUILD 文件中接上（只影响共享库，静态库不变）：
+
+```python
+cc_library(
+    name = 'mylib',
+    srcs = ['api.cc'],
+    hdrs = ['api.h'],
+    export_map = 'api.map',
+)
 ```
 
 要查看库中的符号的可见性，可以用 nm 命令：

@@ -375,8 +375,8 @@ class CuBinary(CuTarget):
         output = self._target_file_path(self.blade.get_build_toolchain().executable_file_name(self.name))
         self._cc_link(output, 'cudalink', objs=objs, deps=usr_libs,
                       sys_libs=sys_libs,
-                      linker_scripts=self.attr.get('lds_fullpath'),
-                      version_scripts=self.attr.get('vers_fullpath'),
+                      linker_scripts=self.attr.get('linker_script_fullpath'),
+                      version_scripts=self.attr.get('export_map_fullpath'),
                       target_linkflags=target_linkflags,
                       implicit_deps=implicit_deps,
                       order_only_deps=order_only_deps,
