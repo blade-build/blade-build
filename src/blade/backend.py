@@ -119,11 +119,20 @@ def _in_workspace(hdr):
     except ValueError:  # different drive -> outside the workspace
         return False
 
+# Force the English "Note: including file:" prefix. cl.exe (and nvcc's cl)
+# localize /showIncludes on a non-English Visual Studio, which would silently
+# break both the inclusion stack written below and Ninja's deps=msvc header
+# tracking (the prefix _NOTE_PREFIX above and Ninja's msvc_deps_prefix are both
+# the English string). VSLANG=1033 is the en-US LCID; set it on the child only,
+# not the whole build, so nothing else is affected. See issue #1154.
+env = dict(os.environ)
+env['VSLANG'] = '1033'
+
 # Merge stdout+stderr into one pipe (like Ninja).  Reading only stderr risks
 # a pipe deadlock: if cl.exe writes enough to stdout (even with /nologo a
 # leftover copyright banner fills the 4 KiB buffer), the process blocks and
 # never drains its stderr output through the unread stdout pipe.
-p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                      universal_newlines=True, encoding='utf-8', errors='replace')
 with open(outfile + '.new', 'w', newline='', encoding='utf-8') as f:
     for line in p.stdout:
