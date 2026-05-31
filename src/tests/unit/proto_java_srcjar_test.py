@@ -12,6 +12,7 @@ javac side: it turns a `.srcjar` input back into its `.java` files.
 """
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -55,6 +56,58 @@ class GenerateProtoJavaSrcjarTest(unittest.TestCase):
             with zipfile.ZipFile(srcjar) as z:
                 names = set(z.namelist())
             self.assertNotIn('Stale.java', names)  # cleared before protoc
+
+
+_MULTI_PROTO = '''\
+syntax = "proto3";
+package e2e;
+option java_package = "e2e.gen";
+option java_multiple_files = true;
+message Alpha { string a = 1; }
+message Beta { int32 b = 1; }
+enum Color { RED = 0; GREEN = 1; }
+'''
+
+_SINGLE_PROTO = '''\
+syntax = "proto3";
+package e2e;
+option java_package = "e2e.gen";
+message Solo { string s = 1; }
+'''
+
+
+@unittest.skipUnless(shutil.which('protoc'), 'protoc not on PATH')
+class RealProtocSrcjarTest(unittest.TestCase):
+    """End-to-end with the real protoc: the srcjar must capture protoc's actual
+    output, however many files it is -- in particular the java_multiple_files
+    case (one .java per top-level type), which the old single-file prediction
+    could not handle. See #1054."""
+
+    def _srcjar_entries(self, proto_text, name):
+        with tempfile.TemporaryDirectory() as d:
+            proto = os.path.join(d, name + '.proto')
+            with open(proto, 'w') as f:
+                f.write(proto_text)
+            srcjar = os.path.join(d, name + '.srcjar')
+            gendir = os.path.join(d, name + '.javagen')
+            cmd = ['protoc', '--proto_path=' + d, '--java_out=' + gendir, proto]
+            builtin_tools.generate_proto_java_srcjar([srcjar, gendir, '--'] + cmd)
+            with zipfile.ZipFile(srcjar) as z:
+                return set(z.namelist())
+
+    def test_java_multiple_files_yields_one_file_per_type(self):
+        entries = self._srcjar_entries(_MULTI_PROTO, 'multi')
+        # protoc emits a separate .java per top-level message/enum (+OrBuilder).
+        self.assertIn('e2e/gen/Alpha.java', entries)
+        self.assertIn('e2e/gen/Beta.java', entries)
+        self.assertIn('e2e/gen/Color.java', entries)
+        self.assertGreaterEqual(len(entries), 3)
+
+    def test_single_file_layout_yields_one_outer_class(self):
+        entries = self._srcjar_entries(_SINGLE_PROTO, 'single')
+        # Default layout: one outer class containing the nested type.
+        self.assertEqual(1, len(entries))
+        self.assertTrue(next(iter(entries)).endswith('.java'))
 
 
 class ExpandJavaSrcjarsTest(unittest.TestCase):

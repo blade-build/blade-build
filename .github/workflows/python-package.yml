@@ -71,6 +71,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install -r requirements-dev.txt
+    - name: Install protoc
+      # So the real-protoc proto->java srcjar e2e (proto_java_srcjar_test.py)
+      # runs instead of being skipped; it needs only protoc (no protobuf-java).
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     - name: Run unit tests
       run: |
         PYTHONPATH=src python -m pytest src/tests/unit -v
