@@ -256,10 +256,9 @@ def _parse_inclusion_stacks(path, build_dir):
         return current_level, skip_level
 
     current_level = 0
-    current_line = ''
     skip_level = -1
     with open(path) as f:
-        for index, line in enumerate(f):
+        for line in f:
             line = line.rstrip()  # Strip `\n`
             if not _is_inclusion_line(line):
                 # The remaining lines are useless for us
@@ -273,25 +272,23 @@ def _parse_inclusion_stacks(path, build_dir):
             if level > current_level:
                 if skip_level != -1 and level > skip_level:
                     continue
-                try:
-                    assert level == current_level + 1
-                except AssertionError:
-                    console.error(
-                        'path: %s, line_number: %d\n'
-                        'level: %d, current_level: %d\n'
-                        'line: %s\ncurrent_line: %s' % (
-                            path, index+1,
-                            level, current_level,
-                            line, current_line))
-                    raise
+                if level > current_level + 1:
+                    # Depth gap: the intervening header(s) (levels
+                    # current_level+1 .. level-1) are absolute/system headers
+                    # that were filtered out of the incstk (GCC awk `[^/]`;
+                    # MSVC in-workspace filter). This header is reached only
+                    # through them, so -- like an absolute header -- it and its
+                    # subtree are not tracked includes of this TU. Skip the
+                    # subtree instead of aborting the whole build. See #953.
+                    if skip_level == -1:
+                        skip_level = current_level + 1
+                    continue
                 current_level, skip_level = _process_hdr(level, hdr, current_level)
-                current_line = line
             else:
                 while current_level >= level:
                     current_level -= 1
                     hdrs_stack.pop()
                 current_level, skip_level = _process_hdr(level, hdr, current_level)
-                current_line = line
 
     return direct_hdrs, stacks
 
