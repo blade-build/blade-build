@@ -131,9 +131,9 @@ pyright
 
 1. **Create a target class** in a new or existing `*_targets.py` module. Inherit from `Target` (or a suitable subclass) and implement `generate()`.
 2. **Define the rule-entry function** (e.g., `windows_resources()`) — this function normalizes BUILD-file-friendly types (`StrOrListOpt`) into `list[str]` via `var_to_list` / `var_to_list_or_none`, creates the target instance, and registers it via `build_manager.instance.register_target()`.
-3. **Expose it in the DSL** by adding the function to `blade/__init__.py` and [dsl_api.py](src/blade/dsl_api.py).
+3. **Expose it in the DSL** by adding the function to `blade/__init__.py` and [dsl_api.py](../../src/blade/dsl_api.py).
 4. **Add integration test data** under `src/test/testdata/<rule_name>/` with a `BUILD` file and source fixtures, then add a test class in `src/test/<rule_name>_test.py`.
-5. **Update documentation** in [doc/en/build_rules/cc.md](doc/en/build_rules/cc.md) (or a new file for a new category).
+5. **Update documentation** in [build_rules/cc.md](build_rules/cc.md) (or a new file for a new category).
 
 ### Key design patterns
 

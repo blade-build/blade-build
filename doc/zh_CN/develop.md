@@ -129,9 +129,9 @@ pyright
 
 1. **创建目标类** — 在新增或已有的 `*_targets.py` 模块中创建目标类，继承 `Target`（或合适的子类）并实现 `generate()` 方法。
 2. **定义规则入口函数**（如 `windows_resources()`）—— 此函数负责将 BUILD 友好的类型（`StrOrListOpt`）通过 `var_to_list` / `var_to_list_or_none` 规范化为 `list[str]`，创建目标实例，通过 `build_manager.instance.register_target()` 注册。
-3. **暴露到 DSL** — 将规则函数加入 `blade/__init__.py` 和 [dsl_api.py](src/blade/dsl_api.py)。
+3. **暴露到 DSL** — 将规则函数加入 `blade/__init__.py` 和 [dsl_api.py](../../src/blade/dsl_api.py)。
 4. **添加集成测试数据** — 在 `src/test/testdata/<rule_name>/` 下放置 BUILD 文件和源文件夹具，在 `src/test/<rule_name>_test.py` 添加测试类。
-5. **更新文档** — 在 [doc/zh_CN/build_rules/cc.md](doc/zh_CN/build_rules/cc.md)（或新规则类别对应的新文件）中添加说明。
+5. **更新文档** — 在 [build_rules/cc.md](build_rules/cc.md)（或新规则类别对应的新文件）中添加说明。
 
 ### 核心设计模式
 
