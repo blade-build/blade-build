@@ -69,6 +69,15 @@ class WindowsResourcesTarget(Target):
             kwargs=kwargs)
         self._add_tags('type:windows_resources')
 
+        # A windows_resources target is a link-only dependency: it contributes a
+        # compiled `.res`, never a public C/C++ header a dependent would
+        # `#include`. So exempt it from the unused-deps check (which is
+        # header-inclusion based) -- otherwise every `cc_binary` that links a
+        # resource is flagged "Unused dependency". Declare it header-less, the
+        # same exemption header-less cc_libraries use.
+        from blade.cc_targets import declare_header_less  # noqa: E402  (avoid import cycle)
+        declare_header_less(self)
+
         self.attr['rc_files'] = rc_files
         self.attr['hdrs'] = hdrs
         self.attr['resources'] = resources
