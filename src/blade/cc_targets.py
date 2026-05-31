@@ -223,6 +223,9 @@ class CcTarget(Target):
                  extra_cppflags: list[str],
                  extra_linkflags: list[str],
                  kwargs: dict[str, object],
+                 extra_cflags: 'StrOrListOpt' = None,
+                 extra_cxxflags: 'StrOrListOpt' = None,
+                 extra_asflags: 'StrOrListOpt' = None,
                  src_exts: list[str] | None = None,
                  cmd: str = ''):
         """Init method.
@@ -275,6 +278,12 @@ class CcTarget(Target):
         self.attr['linkflags'] = var_to_list_or_none(linkflags)
         self.attr['extra_cppflags'] = var_to_list(extra_cppflags)
         self.attr['extra_linkflags'] = var_to_list(extra_linkflags)
+        # Per-language extra compile flags (in addition to extra_cppflags, which
+        # applies to all C-family sources). Selected per source file by suffix
+        # in `_extra_compile_flags_for`. See issue #492.
+        self.attr['extra_cflags'] = var_to_list(extra_cflags)
+        self.attr['extra_cxxflags'] = var_to_list(extra_cxxflags)
+        self.attr['extra_asflags'] = var_to_list(extra_asflags)
         # TODO(chen3feng): Move to CcLibrary
         options = self.blade.get_options()
         self.attr['generate_dynamic'] = (getattr(options, 'generate_dynamic', False) or
@@ -474,6 +483,20 @@ class CcTarget(Target):
             if src.endswith(suffix):
                 return 'cxx'
         return 'cc'
+
+    def _extra_compile_flags_for(self, src):
+        """Per-source-language extra compile flags (issue #492).
+
+        `extra_cxxflags` for C++ (`.cc`/`.cpp`/`.cxx`, matching the cxx rule
+        selection above), `extra_asflags` for assembly (`.s`/`.S`/`.asm`), and
+        `extra_cflags` for everything else (C). These are *in addition to*
+        `extra_cppflags`, which applies to all C-family sources.
+        """
+        if src.endswith(('.cc', '.cpp', '.cxx')):
+            return self.attr.get('extra_cxxflags', [])
+        if src.endswith(('.s', '.S', '.asm')):
+            return self.attr.get('extra_asflags', [])
+        return self.attr.get('extra_cflags', [])
 
     def _get_cc_vars(self):
         """Get warning, compile options and include directories for cc build."""
@@ -692,9 +715,14 @@ class CcTarget(Target):
             obj = os.path.join(objs_dir, self.blade.get_build_toolchain().object_file_of(src))
             rule = self._get_rule_from_suffix(src, secret)
             objvars, stack = vars, None
-            if emit_inclusion_stack:
-                stack = os.path.join(objs_dir, src) + '.incstk'
-                objvars = dict(vars, inclusion_stack=stack)
+            extra = self._extra_compile_flags_for(src)
+            if emit_inclusion_stack or extra:
+                objvars = dict(vars)
+                if emit_inclusion_stack:
+                    stack = os.path.join(objs_dir, src) + '.incstk'
+                    objvars['inclusion_stack'] = stack
+                if extra:
+                    objvars['extra_compile_flags'] = ' '.join(extra)
             self.generate_build(rule, obj, inputs=full_src,
                                 implicit_deps=implicit_deps,
                                 order_only_deps=order_only_deps,
@@ -1053,6 +1081,9 @@ class CcLibrary(CcTarget):
                  deprecated: bool,
                  linkflags: StrOrListOpt,
                  extra_cppflags: StrOrListOpt,
+                 extra_cflags: StrOrListOpt,
+                 extra_cxxflags: StrOrListOpt,
+                 extra_asflags: StrOrListOpt,
                  extra_linkflags: StrOrListOpt,
                  allow_undefined: bool,
                  secret: bool,
@@ -1094,6 +1125,9 @@ class CcLibrary(CcTarget):
                 optimize=optimize_list,
                 linkflags=linkflags_list,
                 extra_cppflags=extra_cppflags,
+                extra_cflags=extra_cflags,
+                extra_cxxflags=extra_cxxflags,
+                extra_asflags=extra_asflags,
                 extra_linkflags=extra_linkflags,
                 kwargs=kwargs)
         self.attr['link_all_symbols'] = link_all_symbols
@@ -1349,6 +1383,9 @@ def cc_library(
         deprecated: bool = False,
         linkflags: StrOrListOpt = None,
         extra_cppflags: StrOrListOpt = None,
+        extra_cflags: StrOrListOpt = None,
+        extra_cxxflags: StrOrListOpt = None,
+        extra_asflags: StrOrListOpt = None,
         extra_linkflags: StrOrListOpt = None,
         allow_undefined: bool = False,
         secret: bool = False,
@@ -1408,6 +1445,9 @@ def cc_library(
             deprecated=deprecated,
             linkflags=linkflags,
             extra_cppflags=extra_cppflags,
+            extra_cflags=extra_cflags,
+            extra_cxxflags=extra_cxxflags,
+            extra_asflags=extra_asflags,
             extra_linkflags=extra_linkflags,
             allow_undefined=allow_undefined,
             secret=secret or secure,
@@ -1592,6 +1632,9 @@ class CcBinary(CcTarget):
                  dynamic_link: bool,
                  linkflags: StrOrListOpt,
                  extra_cppflags: StrOrListOpt,
+                 extra_cflags: StrOrListOpt,
+                 extra_cxxflags: StrOrListOpt,
+                 extra_asflags: StrOrListOpt,
                  extra_linkflags: StrOrListOpt,
                  linker_script: str | None,
                  linker_scripts: StrOrListOpt,
@@ -1632,6 +1675,9 @@ class CcBinary(CcTarget):
                 optimize=optimize_list,
                 linkflags=linkflags_list,
                 extra_cppflags=extra_cppflags,
+                extra_cflags=extra_cflags,
+                extra_cxxflags=extra_cxxflags,
+                extra_asflags=extra_asflags,
                 extra_linkflags=extra_linkflags,
                 kwargs=kwargs)
         self.attr['embed_version'] = embed_version
@@ -1782,6 +1828,9 @@ def cc_binary(name: str,
               dynamic_link: bool = False,
               linkflags: StrOrListOpt = None,
               extra_cppflags: StrOrListOpt = None,
+              extra_cflags: StrOrListOpt = None,
+              extra_cxxflags: StrOrListOpt = None,
+              extra_asflags: StrOrListOpt = None,
               extra_linkflags: StrOrListOpt = None,
               linker_script: str | None = None,
               linker_scripts: StrOrListOpt = None,
@@ -1805,6 +1854,9 @@ def cc_binary(name: str,
             dynamic_link=dynamic_link,
             linkflags=linkflags,
             extra_cppflags=extra_cppflags,
+            extra_cflags=extra_cflags,
+            extra_cxxflags=extra_cxxflags,
+            extra_asflags=extra_asflags,
             extra_linkflags=extra_linkflags,
             linker_script=linker_script,
             linker_scripts=linker_scripts,
@@ -1854,6 +1906,9 @@ class CcPlugin(CcTarget):
                  suffix: str | None,
                  linkflags: 'StrOrListOpt',
                  extra_cppflags: 'StrOrListOpt',
+                 extra_cflags: 'StrOrListOpt',
+                 extra_cxxflags: 'StrOrListOpt',
+                 extra_asflags: 'StrOrListOpt',
                  extra_linkflags: 'StrOrListOpt',
                  linker_script: str | None,
                  linker_scripts: 'StrOrListOpt',
@@ -1896,6 +1951,9 @@ class CcPlugin(CcTarget):
                   optimize=optimize,
                   linkflags=linkflags,
                   extra_cppflags=extra_cppflags,
+                  extra_cflags=extra_cflags,
+                  extra_cxxflags=extra_cxxflags,
+                  extra_asflags=extra_asflags,
                   extra_linkflags=extra_linkflags,
                   kwargs=kwargs)
         # Soft-deprecation: before this change, `cc_plugin(name='foo.so')` was
@@ -1981,6 +2039,9 @@ def cc_plugin(
         suffix: str | None = None,
         linkflags: 'StrOrListOpt' = None,
         extra_cppflags: 'StrOrListOpt' = None,
+        extra_cflags: 'StrOrListOpt' = None,
+        extra_cxxflags: 'StrOrListOpt' = None,
+        extra_asflags: 'StrOrListOpt' = None,
         extra_linkflags: 'StrOrListOpt' = None,
         linker_script: str | None = None,
         linker_scripts: 'StrOrListOpt' = None,
@@ -2005,6 +2066,9 @@ def cc_plugin(
             suffix=suffix,
             linkflags=linkflags,
             extra_cppflags=extra_cppflags,
+            extra_cflags=extra_cflags,
+            extra_cxxflags=extra_cxxflags,
+            extra_asflags=extra_asflags,
             extra_linkflags=extra_linkflags,
             linker_script=linker_script,
             linker_scripts=linker_scripts,
@@ -2042,6 +2106,9 @@ class CcTest(CcBinary):
             testdata: StrOrListOpt,
             linkflags: StrOrListOpt,
             extra_cppflags: StrOrListOpt,
+            extra_cflags: StrOrListOpt,
+            extra_cxxflags: StrOrListOpt,
+            extra_asflags: StrOrListOpt,
             extra_linkflags: StrOrListOpt,
             export_dynamic: bool,
             always_run: bool,
@@ -2069,6 +2136,9 @@ class CcTest(CcBinary):
                 linkflags=linkflags,
                 dynamic_link=dynamic_link,
                 extra_cppflags=extra_cppflags,
+                extra_cflags=extra_cflags,
+                extra_cxxflags=extra_cxxflags,
+                extra_asflags=extra_asflags,
                 extra_linkflags=extra_linkflags,
                 linker_script=None,
                 linker_scripts=[],
@@ -2123,6 +2193,9 @@ def cc_test(name: str,
             testdata: StrOrListOpt = None,
             linkflags: StrOrListOpt = None,
             extra_cppflags: StrOrListOpt = None,
+            extra_cflags: StrOrListOpt = None,
+            extra_cxxflags: StrOrListOpt = None,
+            extra_asflags: StrOrListOpt = None,
             extra_linkflags: StrOrListOpt = None,
             export_dynamic: bool = False,
             always_run: bool = False,
@@ -2148,6 +2221,9 @@ def cc_test(name: str,
             testdata=testdata,
             linkflags=linkflags,
             extra_cppflags=extra_cppflags,
+            extra_cflags=extra_cflags,
+            extra_cxxflags=extra_cxxflags,
+            extra_asflags=extra_asflags,
             extra_linkflags=extra_linkflags,
             export_dynamic=export_dynamic,
             always_run=always_run,

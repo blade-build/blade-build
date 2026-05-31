@@ -175,5 +175,38 @@ class ResolveLinkerInputFileTest(unittest.TestCase):
         self.assertTrue(any('single file' in w for w in target.warnings))
 
 
+class ExtraCompileFlagsForTest(unittest.TestCase):
+    """Per-source-language selection of extra_cflags/cxxflags/asflags (#492)."""
+
+    def _target(self):
+        t = cc_targets.CcTarget.__new__(cc_targets.CcTarget)
+        t.attr = {
+            'extra_cflags': ['-c-only'],
+            'extra_cxxflags': ['-cxx-only'],
+            'extra_asflags': ['-as-only'],
+        }
+        return t
+
+    def test_cxx_sources_get_cxxflags(self):
+        t = self._target()
+        for src in ('a.cc', 'a.cpp', 'a.cxx'):
+            self.assertEqual(['-cxx-only'], t._extra_compile_flags_for(src), src)
+
+    def test_asm_sources_get_asflags(self):
+        t = self._target()
+        for src in ('a.s', 'a.S', 'a.asm'):
+            self.assertEqual(['-as-only'], t._extra_compile_flags_for(src), src)
+
+    def test_c_and_other_sources_get_cflags(self):
+        t = self._target()
+        self.assertEqual(['-c-only'], t._extra_compile_flags_for('a.c'))
+
+    def test_unset_returns_empty(self):
+        t = cc_targets.CcTarget.__new__(cc_targets.CcTarget)
+        t.attr = {}
+        self.assertEqual([], t._extra_compile_flags_for('a.cc'))
+        self.assertEqual([], t._extra_compile_flags_for('a.c'))
+
+
 if __name__ == '__main__':
     unittest.main()

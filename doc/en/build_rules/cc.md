@@ -28,10 +28,21 @@ Compiler optimization flags.
 **Rationale:** Optimization flags are separated from `extra_cppflags` because they should be disabled in debug mode to preserve debugging capability. For mature, performance-critical libraries (e.g., hash, compression, cryptography) where debugging is rarely needed, set `always_optimize = True`.
 
 ### `extra_cppflags`: string[] = []
-Additional C/C++ compilation flags.
+Additional compilation flags applied to **all** C-family sources (C, C++ and assembly).
 
 **Example:** `extra_cppflags = ['-Wno-format-literal']`
 **Note:** Essential flags like `-g` and `-fPIC` are built-in, so this parameter should be used sparingly.
+
+### `extra_cflags` / `extra_cxxflags` / `extra_asflags`: string[] = []
+Additional compilation flags applied to a **single source language**, in addition to `extra_cppflags`:
+
+- `extra_cflags` — C sources (`.c`)
+- `extra_cxxflags` — C++ sources (`.cc`, `.cpp`, `.cxx`)
+- `extra_asflags` — assembly sources (`.s`, `.S`, `.asm`)
+
+Use these when a flag is only valid for one language (e.g. a C++-only `-std=` or warning) so it isn't passed to the others. They are selected per source file by extension.
+
+**Example:** `extra_cxxflags = ['-fno-rtti']`
 
 ### `extra_linkflags`: string[] = []
 Additional linker flags.

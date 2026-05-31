@@ -505,7 +505,7 @@ class _NinjaFileHeaderGenerator:
         wrapper = self._msvc_tee_wrapper_py()
         template = '"%s" -B %s ${inclusion_stack} -- ' % (py, wrapper)
 
-        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} ${in}' % (
+        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} ${extra_compile_flags} ${in}' % (
             cc, optimize, ' '.join(cppflags), ' '.join(cflags), include_flags))
         self.generate_rule(name='cc',
                            command=cc_command,
@@ -513,7 +513,7 @@ class _NinjaFileHeaderGenerator:
                            deps='msvc',
                            restat=True)
 
-        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} ${in}' % (
+        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} ${extra_compile_flags} ${in}' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxx',
                            command=cxx_command,
@@ -631,7 +631,7 @@ class _NinjaFileHeaderGenerator:
         template = self._cc_compile_command_wrapper_template('${inclusion_stack}')
 
         cc_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
-                      '${c_warnings} ${cppflags} %s ${includes} ${in}') % (
+                      '${c_warnings} ${cppflags} ${extra_compile_flags} %s ${includes} ${in}') % (
                               cc, ' '.join(cflags), ' '.join(cppflags), includes)
         self.generate_rule(name='cc',
                            command=template % cc_command,
@@ -644,7 +644,7 @@ class _NinjaFileHeaderGenerator:
                            restat=True)
 
         cxx_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
-                       '${cxx_warnings} ${cppflags} %s ${includes} ${in}') % (
+                       '${cxx_warnings} ${cppflags} ${extra_compile_flags} %s ${includes} ${in}') % (
                                cxx, ' '.join(cxxflags), ' '.join(cppflags), includes)
         self.generate_rule(name='cxx',
                            command=template % cxx_command,
