@@ -70,5 +70,71 @@ class SelectDllExportsTest(unittest.TestCase):
             [n for n, _ in builtin_tools._select_dll_exports(symbols, {})])
 
 
+_API_MAP = '''\
+{
+global:
+    extern "C++" {
+        # exported literally (signature stripped on MSVC)
+        "mylib::Create()";
+        mylib::Api::*;   /* every member */
+    };
+local:
+    *;
+};
+'''
+
+
+class ExportMapParseTest(unittest.TestCase):
+    def _parse(self, text):
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.map', delete=False) as f:
+            f.write(text)
+            path = f.name
+        try:
+            return builtin_tools._parse_export_map(path)
+        finally:
+            os.unlink(path)
+
+    def test_extern_cpp_quoted_and_glob_with_comments(self):
+        globals_, locals_ = self._parse(_API_MAP)
+        self.assertEqual(
+            [('mylib::Create()', True, True), ('mylib::Api::*', True, False)],
+            globals_)
+        self.assertEqual([('*', False, False)], locals_)
+
+    def test_top_level_pattern_is_not_cpp(self):
+        globals_, _ = self._parse('{ global: my_c_func; local: *; };')
+        self.assertEqual([('my_c_func', False, False)], globals_)
+
+
+class ExportMapKeepsTest(unittest.TestCase):
+    def setUp(self):
+        self.globals_ = [('mylib::Create()', True, True), ('mylib::Api::*', True, False)]
+        self.locals_ = [('*', False, False)]
+
+    def _keeps(self, name, dname):
+        return builtin_tools._export_map_keeps(name, dname, self.globals_, self.locals_)
+
+    def test_glob_matches_member(self):
+        self.assertTrue(self._keeps('?Greet@Api@mylib@@QEBA...', 'mylib::Api::Greet'))
+
+    def test_quoted_matches_by_name_part(self):
+        # name-only demangling drops the "()" -> match the pattern's name part
+        self.assertTrue(self._keeps('?Create@mylib@@YAPEAVApi@1@XZ', 'mylib::Create'))
+
+    def test_unlisted_symbol_hidden_by_local_star(self):
+        self.assertFalse(self._keeps('?Decorate@mylib@@YA...', 'mylib::Decorate'))
+
+    def test_no_local_section_does_not_restrict(self):
+        keeps = builtin_tools._export_map_keeps(
+            'bar', 'bar', [('foo*', False, False)], [])
+        self.assertTrue(keeps)  # global-only version node hides nothing
+
+    def test_top_level_pattern_matches_raw_name(self):
+        keeps = builtin_tools._export_map_keeps(
+            'my_c_func', 'my_c_func', [('my_c_func', False, False)], [('*', False, False)])
+        self.assertTrue(keeps)
+
+
 if __name__ == '__main__':
     unittest.main()

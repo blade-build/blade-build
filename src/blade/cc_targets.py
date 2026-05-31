@@ -785,15 +785,6 @@ class CcTarget(Target):
         (`<name>.dll.lib`); `DYNAMIC_LIB_LABEL` therefore points at the import
         lib, while the DLL is recorded separately as the runtime artifact.
         """
-        if self.attr.get('export_map_fullpath'):
-            # `export_map` is a GNU-ld `--version-script`; MSVC has no
-            # equivalent. Here exports are derived from the object files into an
-            # auto-generated `.def` (see cc_windef), so the map is not applied.
-            # Warn rather than silently ignore it. Translating a version script
-            # into a `.def` (undname + glob matching) is tracked separately.
-            self.warning('export_map is not honored on the MSVC toolchain; '
-                         'the DLL exports are derived from the object files. '
-                         'The export map is ignored.')
         try:
             dll = self._target_file_path(_windows_dll_basename(self.path, self.name))
         except ValueError as e:
@@ -802,8 +793,18 @@ class CcTarget(Target):
         implib = self._target_file_path(tc.import_library_name(self.name))
         def_file = self._target_file_path(self.name + '.def')
         # Object files -> auto-export `.def` (COMDAT-filtered; see cc_windef).
+        # An `export_map` further filters those exports through its version
+        # script, matched by demangled name (undname); overloads collapse and
+        # quoted signature patterns match by name only -- see cc_windef / #1194.
+        export_map = self.attr.get('export_map_fullpath')
+        def_vars, def_implicit = None, None
+        if export_map:
+            def_vars = {'defflags': '--export_map=%s' % export_map[0]}
+            def_implicit = [export_map[0]]
         self.generate_build('cc_windef', def_file, inputs=objs,
-                            order_only_deps=inclusion_check_result)
+                            implicit_deps=def_implicit,
+                            order_only_deps=inclusion_check_result,
+                            variables=def_vars)
         target_linkflags = self._generate_link_flags()
         sys_libs, usr_libs, incchk_deps = self._dynamic_dependencies()
         if inclusion_check_result:

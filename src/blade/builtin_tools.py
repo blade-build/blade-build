@@ -181,6 +181,140 @@ def _select_dll_exports(symbols, section_selection):
     return list(seen.items())
 
 
+# --- export_map (GNU-ld version script) filtering on MSVC ------------------
+#
+# `export_map` is a GNU-ld `--version-script`; MSVC has no equivalent. To honor
+# it on Windows we filter the auto-`.def` (above) through the map: keep only
+# symbols matched by a `global:` pattern (and not hidden by `local:`).
+#
+# Version-script patterns are written against Itanium-demangled names; MSVC
+# symbols are decorated differently, so we demangle each candidate with
+# `UnDecorateSymbolName(UNDNAME_NAME_ONLY)`, which yields just the qualified
+# name (e.g. `mylib::Api::Greet`). That matches `extern "C++"` globs like
+# `mylib::Api::*` well, but it drops the signature -- so overloads collapse to
+# one name and quoted signature patterns (`"mylib::Create()"`) are matched by
+# their name part only. See blade-build#1194.
+
+_UNDNAME_NAME_ONLY = 0x1000
+_undname_fn = None
+
+
+def _undecorate_name_only(symbol):
+    """Return the MSVC symbol's demangled qualified name (no signature).
+
+    Windows-only (uses dbghelp). For a non-decorated name (e.g. an `extern "C"`
+    symbol) UnDecorateSymbolName returns it unchanged. Falls back to the raw
+    symbol if demangling is unavailable or fails.
+    """
+    global _undname_fn  # pylint: disable=global-statement
+    if _undname_fn is None:
+        import ctypes  # pylint: disable=import-outside-toplevel
+        from ctypes import wintypes  # pylint: disable=import-outside-toplevel
+        fn = ctypes.WinDLL('dbghelp').UnDecorateSymbolName
+        fn.argtypes = [wintypes.LPCSTR, wintypes.LPSTR, wintypes.DWORD, wintypes.DWORD]
+        fn.restype = wintypes.DWORD
+        _undname_fn = fn
+    import ctypes  # pylint: disable=import-outside-toplevel
+    buf = ctypes.create_string_buffer(4096)
+    n = _undname_fn(symbol.encode('ascii', 'replace'), buf, 4096, _UNDNAME_NAME_ONLY)
+    return buf.value.decode('ascii', 'replace') if n else symbol
+
+
+def _parse_export_map(path):
+    """Parse a GNU-ld version script into (global_patterns, local_patterns).
+
+    Each pattern is ``(text, is_cpp, is_quoted)``: ``is_cpp`` marks patterns
+    inside an ``extern "C++"`` block (matched against the demangled name);
+    ``is_quoted`` marks a quoted literal (no wildcards). Comments (``#``,
+    ``//``, ``/* */``), version-node names and ``extern "C"`` blocks are
+    handled; named version tags are flattened (their global/local patterns are
+    unioned -- on PE there is no symbol versioning, only export filtering).
+    """
+    import re  # pylint: disable=import-outside-toplevel
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
+    text = re.sub(r'/\*.*?\*/', ' ', text, flags=re.S)
+    text = re.sub(r'(?:#|//).*', ' ', text)
+    tokens = re.findall(r'"[^"]*"|[{};]|(?:global|local)\s*:|extern|[^\s{};]+', text)
+
+    globals_, locals_ = [], []
+    section = None
+    cpp_stack = [False]
+    pending_extern = False
+    pending_lang = None
+    for tok in tokens:
+        if tok in ('{', '}'):
+            if tok == '{':
+                cpp = (pending_lang == 'C++') if pending_extern else cpp_stack[-1]
+                cpp_stack.append(cpp)
+            elif len(cpp_stack) > 1:
+                cpp_stack.pop()
+            pending_extern, pending_lang = False, None
+        elif tok == ';':
+            continue
+        elif tok.rstrip().rstrip(':') in ('global', 'local') and tok.endswith(':'):
+            section = tok.rstrip().rstrip(':')
+        elif tok == 'extern':
+            pending_extern = True
+        elif pending_extern and tok.startswith('"'):
+            pending_lang = tok.strip('"')
+        else:
+            quoted = tok.startswith('"')
+            pat = tok.strip('"') if quoted else tok
+            if not pat:
+                continue
+            entry = (pat, cpp_stack[-1], quoted)
+            if section == 'global':
+                globals_.append(entry)
+            elif section == 'local':
+                locals_.append(entry)
+    return globals_, locals_
+
+
+def _export_map_match(patterns, name, dname):
+    """True if `name` (raw) / `dname` (demangled name-only) matches a pattern."""
+    import fnmatch  # pylint: disable=import-outside-toplevel
+    for pat, is_cpp, quoted in patterns:
+        target = dname if is_cpp else name
+        if quoted:
+            # Name-only demangling drops the signature, so match the pattern's
+            # name part (everything before '(') exactly. Overloads collapse.
+            if target == pat.split('(', 1)[0]:
+                return True
+        elif fnmatch.fnmatchcase(target, pat):
+            return True
+    return False
+
+
+def _export_map_keeps(name, dname, globals_, locals_):
+    """Version-script export decision: keep iff `global`, else drop if `local`.
+
+    A symbol matched by a `global:` pattern is exported (a specific global wins
+    over a wildcard `local: *`). Otherwise it is hidden when any `local:`
+    pattern matches it -- which includes the usual `local: *;` catch-all. With
+    no `local:` section the map does not restrict exports.
+    """
+    if _export_map_match(globals_, name, dname):
+        return True
+    return not _export_map_match(locals_, name, dname)
+
+
+def _filter_exports_by_map(seen, export_map):
+    """Filter the auto-export `seen` dict through an export_map version script."""
+    globals_, locals_ = _parse_export_map(export_map)
+    if any(quoted for _, _, quoted in globals_ + locals_):
+        console.warning(
+            'cc_windef: %s: quoted signature patterns are matched by name only '
+            'on MSVC (UnDecorateSymbolName has no Itanium signature); overloads '
+            'are not distinguished.' % export_map)
+    kept = {}
+    for name, is_data in seen.items():
+        dname = _undecorate_name_only(name)
+        if _export_map_keeps(name, dname, globals_, locals_):
+            kept[name] = is_data
+    return kept
+
+
 def _parse_coff(data):
     """Parse a COFF object file's symbol table (pure stdlib `struct`).
 
@@ -224,11 +358,13 @@ def _parse_coff(data):
     return symbols, section_selection
 
 
-def generate_cc_windef(args):
+def generate_cc_windef(args, export_map=None):
     """Generate a `.def` exporting the symbols of the given objects (Windows).
 
-    Invoked as ``cc_windef <output.def> <obj>...``. Parses each object's COFF
-    symbol table directly and writes the filtered export list.
+    Invoked as ``cc_windef [--export_map=<file>] <output.def> <obj>...``. Parses
+    each object's COFF symbol table directly and writes the filtered export
+    list. When ``--export_map`` is given, the auto-export set is further
+    filtered through that GNU-ld version script (matched by demangled name).
     """
     output = args[0]
     objs = args[1:]
@@ -245,6 +381,8 @@ def generate_cc_windef(args):
             return 1
         for name, is_data in _select_dll_exports(symbols, section_selection):
             seen.setdefault(name, is_data)
+    if export_map:
+        seen = _filter_exports_by_map(seen, export_map)
     with open(output, 'w', encoding='utf-8') as f:
         f.write('EXPORTS\n')
         for name, is_data in seen.items():

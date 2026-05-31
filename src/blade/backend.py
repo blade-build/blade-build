@@ -512,7 +512,7 @@ class _NinjaFileHeaderGenerator:
         # `cc_windef` builtin tool). Windows-only; nothing emits this edge
         # elsewhere.
         self.generate_rule(name='cc_windef',
-                           command=self._builtin_command('cc_windef'),
+                           command=self._builtin_command('cc_windef', '${defflags} ${out} ${in}'),
                            description='CC WINDEF ${out}')
 
     def _generate_cc_vars(self):
