@@ -171,14 +171,23 @@ sys.exit(ec)
 '''
 
 
-# MSVC link wrapper: runs a link command and drops link.exe's redundant
-#   "   Creating library X.dll.lib and object X.dll.exp"
-# notice -- Ninja already prints "LINK DLL <out>" -- while passing every other
-# line through and preserving link's exit code (a plain `| findstr` pipe would
-# mask link failures). VSLANG=1033 forces English so the match is reliable on a
-# localized Visual Studio. Invoked as: python link_wrapper.py -- <link cmd...>
+# Link-output scrubber: runs a link command and drops the redundant chatter the
+# MSVC/CUDA linkers print, which Ninja already covers with its "LINK ..." line:
+#   * link.exe: "   Creating library X.dll.lib and object X.dll.exp" (emitted
+#     whenever a DLL/exe creates an import library);
+#   * nvcc: the bare object/source name it echoes at link time (e.g.
+#     "test.cu.obj") -- the link-time analog of cl's compile-time filename echo,
+#     which the cc tee-wrapper already strips for compiles.
+# Everything else passes through and link's exit code is preserved (a plain
+# `| findstr` pipe would mask link failures). VSLANG=1033 forces English so the
+# "Creating library" match is reliable on a localized Visual Studio.
+# Invoked as: python link_wrapper.py -- <link command...>
 _MSVC_LINK_WRAPPER_PY = r'''
-import os, subprocess, sys
+import os, re, subprocess, sys
+
+# A lone filename token (no spaces/path, at least one dot) -- same shape the cc
+# wrapper drops. Real diagnostics carry spaces/colons and never match.
+_BARE_FILENAME_RE = re.compile(r'^[\w.+\-]+\.[\w.+\-]+$')
 
 cmd = sys.argv[sys.argv.index('--') + 1:]
 env = dict(os.environ)
@@ -188,9 +197,11 @@ p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                      stderr=subprocess.STDOUT, universal_newlines=True,
                      encoding='utf-8', errors='replace')
 for line in p.stdout:
-    s = line.lstrip()
+    s = line.strip()
     if s.startswith('Creating library ') and ' and object ' in s:
-        continue  # redundant with Ninja's "LINK DLL <out>" description
+        continue  # link.exe import-library notice (redundant with "LINK ...")
+    if _BARE_FILENAME_RE.match(s):
+        continue  # nvcc's echoed object/source name (e.g. test.cu.obj)
     sys.stdout.write(line)
     sys.stdout.flush()
 sys.exit(p.wait())
@@ -1205,18 +1216,23 @@ class _NinjaFileHeaderGenerator:
 
         # NVCC linking delegates to the host linker automatically.
         # Include -ccbin so nvcc can find cl.exe even without a VS dev shell.
+        # Route through the link scrubber so nvcc's echoed object name
+        # (e.g. "test.cu.obj") doesn't leak past Ninja's "CUDA LINK ..." line.
+        link_wrapper = self._msvc_link_wrapper_py()
+        link_prefix = '"%s" -B %s -- "${cmd}" -ccbin "%s" ' % (
+            sys.executable, link_wrapper, cxx)
         link_args = ('-o ${out} %s ${cppflags} '
                      '--options-file ${out}.rsp ${extra_linkflags}' % include_flags)
         self.generate_rule(
             name='cudalink',
-            command='"${cmd}" -ccbin "%s" ' % cxx + link_args,
+            command=link_prefix + link_args,
             rspfile='${out}.rsp',
             rspfile_content='${target_linkflags} ${in}',
             description='CUDA LINK BINARY ${out}')
 
         self.generate_rule(
             name='cudasolink',
-            command='"${cmd}" -ccbin "%s" -shared ' % cxx + link_args,
+            command=link_prefix + '-shared ' + link_args,
             rspfile='${out}.rsp',
             rspfile_content='${target_linkflags} ${in}',
             description='CUDA LINK SHARED ${out}')
