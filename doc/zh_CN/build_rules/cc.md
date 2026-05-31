@@ -462,29 +462,6 @@ cc_test(
 )
 ```
 
-## lex_yacc_library
-
-srcs 必须为二元列表，后缀分别为 ll 和 yy
-构建时自动调用 flex 和 bison, 并且编译成对应的 cc_library
-
-```python
-lex_yacc_library(
-     name = 'parser',
-     srcs = [
-         'line_parser.ll',
-         'line_parser.yy'
-     ],
-     deps = [
-         ":xcubetools",
-     ],
-     recursive = True
-)
-```
-
-- `recursive`: bool =True
-
-  生成可重入的 C scanner.
-
 ## cc_plugin
 
 生成一个通过静态链接方式包含了其所有依赖的动态链接库，用于在其他语言环境中动态加载。
