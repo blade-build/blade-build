@@ -1683,7 +1683,19 @@ class CcBinary(CcTarget):
                 and sys.platform != 'darwin'):
             linkflags += ['-static-libgcc', '-static-libstdc++']
         if self.attr.get('export_dynamic'):
-            linkflags.append('-rdynamic')
+            # `-rdynamic` is a GNU-ld / ld64 (ELF/Mach-O) flag. MSVC link.exe
+            # has no equivalent -- it just answers LNK4044 and ignores it -- so
+            # don't emit it there; warn that the option has no effect instead of
+            # leaking a bogus flag. Explicit exe symbol export on Windows is
+            # tracked in #1201.
+            if toolchain.cc_is('msvc'):
+                self.warning(
+                    'export_dynamic has no effect on the MSVC toolchain; an '
+                    'executable does not export its symbols. Export them '
+                    'explicitly with /EXPORT linker options (linkflags) or a '
+                    '.def file. See issue #1201.')
+            else:
+                linkflags.append('-rdynamic')
         linkflags += self._generate_link_flags()
         for rpath_link in self._get_rpath_links():
             linkflags.append('-Wl,--rpath-link=%s' % rpath_link)
