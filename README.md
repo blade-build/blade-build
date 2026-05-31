@@ -1,5 +1,6 @@
 # Blade Build System
 
+[![Website](https://img.shields.io/badge/website-blade--build.github.io-1f6feb.svg)](https://blade-build.github.io/)
 [![license NewBSD](https://img.shields.io/badge/License-NewBSD-yellow.svg)](COPYING)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
@@ -26,7 +27,7 @@ First, let's see a cool demo:
 
 ## Releases
 
-The `master` branch contains the development version. The `v3` branch is the current stable line. For production use, prefer tagged versions.
+The `master` branch is the current development line for **v3**; the former `v3` branch has been removed, so `master` is now the v3 line. v3 is at pre-release ([`v3.0.0-beta`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0-beta)) with no stable release yet — the latest stable release is [`v2.1.0`](https://github.com/blade-build/blade-build/releases/tag/v2.1.0). See all [Releases](https://github.com/blade-build/blade-build/releases).
 
 ### Blade 3.0
 
@@ -141,7 +142,7 @@ In terms of ease of use, besides automatic dependency maintenance, Blade can als
 * Support for incremental testing (unchanged test programs are automatically skipped).
 * Integration with gperftools for automatic memory leak detection in test programs.
 * Vim syntax highlighting for build scripts.
-* SVN-style subcommand command line interface.
+* git-style subcommand command line interface.
 * Support for bash command line completion.
 * Written in Python, no compilation needed, direct installation and use.
 

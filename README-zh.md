@@ -1,5 +1,6 @@
 # Blade Build System
 
+[![Website](https://img.shields.io/badge/website-blade--build.github.io-1f6feb.svg)](https://blade-build.github.io/)
 [![license NewBSD](https://img.shields.io/badge/License-NewBSD-yellow.svg)](COPYING)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-google-blue.svg)](https://google.github.io/styleguide/pyguide.html)
@@ -26,7 +27,7 @@ Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based deve
 
 ## 版本发布
 
-`master` 分支上为开发版本，`v3` 分支为当前的稳定主线。生产环境请优先使用 tag 上的版本。
+`master` 分支是 **v3** 的当前开发主线；原先的 `v3` 分支已删除，现在 `master` 即 v3 主线。v3 目前处于预发布阶段（[`v3.0.0-beta`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0-beta)），尚无稳定发布——当前最新的稳定发布是 [`v2.1.0`](https://github.com/blade-build/blade-build/releases/tag/v2.1.0)。完整列表见 [Releases](https://github.com/blade-build/blade-build/releases)。
 
 ### Blade 3.0
 
@@ -140,7 +141,7 @@ cc_binary(
 * 支持增量测试（无需重新运行的测试自动跳过）。
 * 集成 gperftools，自动检测测试程序中的内存泄漏。
 * 为构建脚本提供 Vim 语法高亮。
-* 采用 SVN 风格的子命令式命令行接口。
+* 采用 git 风格的子命令式命令行接口。
 * 支持 Bash 命令行补全。
 * 使用 Python 编写，无需编译，直接安装使用。
 

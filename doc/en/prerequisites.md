@@ -10,7 +10,7 @@ Linux is the primary, fully supported platform; macOS and Windows support is
 experimental.
 
 - **Linux:** All major distributions (Ubuntu, CentOS, Debian, etc.)
-- **macOS** *(experimental)*: macOS 10.12+ with Xcode Command Line Tools
+- **macOS** *(experimental)*: macOS 10.12+ with Xcode, or just the Xcode Command Line Tools
 - **Windows** *(experimental)*: Windows 10/11 with Visual Studio Build Tools (MSVC toolchain)
   - Developer Mode is recommended (Settings → Privacy & security → For developers)
     to enable NTFS symlink support; if not enabled, `blade-bin` symlink is skipped
@@ -56,7 +56,7 @@ Blade integrates with the following tools for enhanced build performance:
 - **Python Packages:** Ensure pip and setuptools are available
 
 ### macOS Installation
-- **Xcode:** Install Xcode Command Line Tools (`xcode-select --install`)
+- **Xcode:** A full Xcode installation works, but the Xcode Command Line Tools alone are sufficient — you do not need the full IDE. Install just the tools with `xcode-select --install`
 - **Homebrew:** Recommended for package management
 - **Python:** Use Homebrew Python or system Python with pip
 - **Bison** *(only for `lex_yacc_library` targets)*: macOS ships bison 2.3
