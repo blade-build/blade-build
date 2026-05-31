@@ -1046,7 +1046,7 @@ class CcLibrary(CcTarget):
                  secret: bool,
                  secret_revision_file: str | None,
                  generate_dynamic: bool | None,
-                 export_map: StrOrListOpt,
+                 export_map: str | None,
                  kwargs: dict[str, object]):
         """Init method.
 
@@ -1343,7 +1343,7 @@ def cc_library(
         secret_revision_file: str | None = None,
         secure: bool = False,
         generate_dynamic: bool | None = None,
-        export_map: StrOrListOpt = None,
+        export_map: str | None = None,
         **kwargs: object):
     """cc_library target.
 
@@ -1581,9 +1581,9 @@ class CcBinary(CcTarget):
                  linkflags: StrOrListOpt,
                  extra_cppflags: StrOrListOpt,
                  extra_linkflags: StrOrListOpt,
-                 linker_script: StrOrListOpt,
+                 linker_script: str | None,
                  linker_scripts: StrOrListOpt,
-                 export_map: StrOrListOpt,
+                 export_map: str | None,
                  version_scripts: StrOrListOpt,
                  export_dynamic: bool,
                  kwargs: dict[str, object]):
@@ -1759,9 +1759,9 @@ def cc_binary(name: str,
               linkflags: StrOrListOpt = None,
               extra_cppflags: StrOrListOpt = None,
               extra_linkflags: StrOrListOpt = None,
-              linker_script: StrOrListOpt = None,
+              linker_script: str | None = None,
               linker_scripts: StrOrListOpt = None,
-              export_map: StrOrListOpt = None,
+              export_map: str | None = None,
               version_scripts: StrOrListOpt = None,
               export_dynamic: bool = False,
               **kwargs: object):
@@ -1831,9 +1831,9 @@ class CcPlugin(CcTarget):
                  linkflags: 'StrOrListOpt',
                  extra_cppflags: 'StrOrListOpt',
                  extra_linkflags: 'StrOrListOpt',
-                 linker_script: 'StrOrListOpt',
+                 linker_script: str | None,
                  linker_scripts: 'StrOrListOpt',
-                 export_map: 'StrOrListOpt',
+                 export_map: str | None,
                  version_scripts: 'StrOrListOpt',
                  allow_undefined: bool,
                  strip: bool,
@@ -1958,9 +1958,9 @@ def cc_plugin(
         linkflags: 'StrOrListOpt' = None,
         extra_cppflags: 'StrOrListOpt' = None,
         extra_linkflags: 'StrOrListOpt' = None,
-        linker_script: 'StrOrListOpt' = None,
+        linker_script: str | None = None,
         linker_scripts: 'StrOrListOpt' = None,
-        export_map: 'StrOrListOpt' = None,
+        export_map: str | None = None,
         version_scripts: 'StrOrListOpt' = None,
         allow_undefined: bool = True,
         strip: bool = False,
