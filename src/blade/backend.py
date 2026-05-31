@@ -94,7 +94,7 @@ exit $ec
 # only, matching what Ninja's CLParser::FilterInputFilename does for .c/.cpp
 # etc., extended to header extensions.
 _MSVC_TEE_WRAPPER_PY = r'''
-import os, re, subprocess, sys
+import os, re, subprocess, sys, tempfile
 
 outfile = sys.argv[1]
 # sys.argv[2] is "--"
@@ -119,6 +119,27 @@ def _in_workspace(hdr):
     except ValueError:  # different drive -> outside the workspace
         return False
 
+# nvcc writes its intermediates (tmpxft_*.cudafe1.stub.c, *.fatbin.c, ...) into
+# a temp dir and lists them in /showIncludes. They are deleted after the build,
+# so recording them as deps makes ninja rebuild the CUDA object every time (the
+# dep targets are perpetually "missing"). They are never real source deps ->
+# drop such include lines entirely (neither incstk nor forwarded to ninja).
+#
+# All nvcc intermediates are named `tmpxft_*`, which is the reliable signal --
+# independent of *where* nvcc puts them. Also catch anything under the temp dir
+# as a backstop (normcase so the Windows case-insensitive match works; the temp
+# dir nvcc uses may differ from this process's, so the name check is primary).
+_TEMP_DIR = os.path.normcase(os.path.realpath(tempfile.gettempdir()))
+
+def _in_temp(hdr):
+    if os.path.basename(hdr).startswith('tmpxft_'):
+        return True
+    try:
+        p = os.path.normcase(os.path.realpath(hdr))
+        return p == _TEMP_DIR or p.startswith(_TEMP_DIR + os.sep)
+    except (ValueError, OSError):  # bad path -> not in temp
+        return False
+
 # Force the English "Note: including file:" prefix. cl.exe (and nvcc's cl)
 # localize /showIncludes on a non-English Visual Studio, which would silently
 # break both the inclusion stack written below and Ninja's deps=msvc header
@@ -137,10 +158,14 @@ p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STD
 with open(outfile + '.new', 'w', newline='', encoding='utf-8') as f:
     for line in p.stdout:
         if line.startswith(_NOTE_PREFIX):
+            hdr = line[len(_NOTE_PREFIX):].lstrip().rstrip('\r\n')
+            if os.path.isabs(hdr) and _in_temp(hdr):
+                # nvcc intermediate in the temp dir -- not a real dependency;
+                # drop entirely so ninja doesn't record it and rebuild forever.
+                continue
             # Record only workspace headers in the incstk (smaller file; the
             # inclusion checker discards absolute/system paths anyway), but
             # forward every include line to ninja's deps=msvc parser below.
-            hdr = line[len(_NOTE_PREFIX):].lstrip().rstrip('\r\n')
             if not os.path.isabs(hdr) or _in_workspace(hdr):
                 f.write(line)
         elif _BARE_FILENAME_RE.match(line.strip()):
