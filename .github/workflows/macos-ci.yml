@@ -107,4 +107,4 @@ jobs:
     - name: Run blade-test suites
       working-directory: blade-test
       run: |
-        PYTHONPATH="$GITHUB_WORKSPACE/blade-build/src" ./blade.sh test //suites/cc_basic:hello_test //suites/cc_basic:hello_dynamic_test //suites/cc_basic:hello-world //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test
+        PYTHONPATH="$GITHUB_WORKSPACE/blade-build/src" ./blade.sh test //suites/cc_basic:hello_test //suites/cc_basic:hello_dynamic_test //suites/cc_basic:cross_package_dynamic_test //suites/cc_basic:hello-world //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test
