@@ -20,8 +20,12 @@ Python 库）给下游消费，所以 `cc_library` 直接 `deps = [':my_proto']`
   继承 `CcTarget`，把它们直接编进 `cc_library`。
 - **Python**：`_pb2.py`，由 target 的 `target_languages` 属性或全局
   `--generate-python` 控制。
-- **Java**：`<Class>.java` 加打包 `.jar`，受 `target_languages='java'`
-  / `--generate-java` 控制。路径来自 proto 的 `option java_package`。
+- **Java**：打包成 `.jar`，受 `target_languages='java'` / `--generate-java`
+  控制。protoc 把生成的 `.java` 写进每个 proto 各自的生成目录，`protojava`
+  规则再把它打成 `<proto>.srcjar`（`proto_java_srcjar` builtin）；`javac_compile`
+  随后解包并编译。生成的 `.java` 集合**不再被预测**，因此
+  `option java_multiple_files = true;`（每个顶层类型一个 `.java`、无外层类）
+  与默认的单文件布局一样可用。见 issue #1054。
 - **Go**：`.pb.go`，类似机制。输出路径来自 `option go_package`。
 - **Descriptor set**：`.descriptors.pb`，按需。
 

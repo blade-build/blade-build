@@ -583,10 +583,68 @@ def generate_javac_compile(args):
     shutil.rmtree(classes_dir, ignore_errors=True)
     os.makedirs(classes_dir, exist_ok=True)
 
+    # A source input may be a `.srcjar` (a jar of generated `.java`, e.g. from
+    # proto_library) rather than a plain `.java` file. javac can't compile a
+    # srcjar directly, so extract its `.java` and compile those. This is how
+    # we support an unpredictable generated-source set (e.g. proto
+    # `java_multiple_files`). See issue #1054.
+    sources = _expand_java_srcjars(sources, classes_dir + '.srcs')
+
     cmd = ['javac', '-encoding', source_encoding, '-d', classes_dir,
            '-classpath', classpath] + javacflags + sources
     subprocess.check_call(cmd)
     subprocess.check_call(['jar', 'cf', output, '-C', classes_dir, '.'])
+
+
+def _expand_java_srcjars(sources, extract_dir):
+    """Replace any `.srcjar`/`.jar` entry in `sources` with the `.java` files it
+    contains (extracted under `extract_dir`); plain sources pass through."""
+    import zipfile  # pylint: disable=import-outside-toplevel
+    if not any(s.endswith(('.srcjar', '.jar')) for s in sources):
+        return sources
+    shutil.rmtree(extract_dir, ignore_errors=True)
+    os.makedirs(extract_dir, exist_ok=True)
+    expanded = []
+    for s in sources:
+        if s.endswith(('.srcjar', '.jar')):
+            with zipfile.ZipFile(s) as z:
+                for name in z.namelist():
+                    if name.endswith('.java'):
+                        z.extract(name, extract_dir)
+                        expanded.append(os.path.join(extract_dir, name))
+        else:
+            expanded.append(s)
+    return expanded
+
+
+def generate_proto_java_srcjar(args):
+    """Run protoc to generate Java, then zip the result into a `.srcjar`.
+
+    Invoked as: ``proto_java_srcjar <out.srcjar> <gendir> -- <protoc cmd...>``.
+
+    protoc emits an unpredictable set of `.java` files (one outer class, or --
+    with ``option java_multiple_files = true;`` -- one per top-level type), so
+    instead of predicting filenames we collect everything protoc wrote under
+    ``gendir`` into a single srcjar. See issue #1054.
+    """
+    import subprocess  # pylint: disable=import-outside-toplevel
+    import zipfile  # pylint: disable=import-outside-toplevel
+    srcjar = args[0]
+    gendir = args[1]
+    assert args[2] == '--', 'proto_java_srcjar: expected "--" before the protoc command'
+    cmd = args[3:]
+    _declare_outputs(srcjar)
+    shutil.rmtree(gendir, ignore_errors=True)
+    os.makedirs(gendir, exist_ok=True)
+    subprocess.check_call(cmd)
+    with zipfile.ZipFile(srcjar, 'w', zipfile.ZIP_DEFLATED) as z:
+        for root, _, files in os.walk(gendir):
+            for name in sorted(files):
+                if name.endswith('.java'):
+                    full = os.path.join(root, name)
+                    # Jar entries always use '/' (Windows relpath yields '\').
+                    arcname = os.path.relpath(full, gendir).replace(os.sep, '/')
+                    z.write(full, arcname)
 
 
 def generate_java_jar(compression_level, args):
@@ -976,6 +1034,7 @@ _BUILTIN_TOOLS = {
     'scm': generate_scm,
     'package': generate_package,
     'javac_compile': generate_javac_compile,
+    'proto_java_srcjar': generate_proto_java_srcjar,
     'cc_inclusion_check': generate_cc_inclusion_check,
     'cc_windef': generate_cc_windef,
     'resource': generate_resource,

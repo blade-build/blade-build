@@ -366,7 +366,15 @@ def parse_command_line(argv):
     """
     options = {}
     args = []
-    for arg in argv:
+    for i, arg in enumerate(argv):
+        if arg == '--':
+            # Stop option parsing: everything from here on is positional (GNU
+            # convention). The `--` is kept in args so callers can split on it
+            # (javac_compile, proto_java_srcjar). This lets a forwarded
+            # sub-command carry its own `--flag=value` (e.g. protoc's
+            # `--java_out=...`) without it being eaten as an option here.
+            args.extend(argv[i:])
+            break
         if arg.startswith('--'):
             pos = arg.find('=')
             if pos < 0:

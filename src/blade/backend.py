@@ -798,10 +798,17 @@ class _NinjaFileHeaderGenerator:
                                    '--cpp_out=%s ${protocflags} ${protoccpppluginflags} ${in}' % (
                                        protoc, protobuf_incs, self.build_dir),
                            description='PROTOC CPP ${in}')
+        # Generate Java into a per-proto gen dir (${javagen}) and zip whatever
+        # protoc produced into a single `.srcjar` (${out}). This handles an
+        # unpredictable output set -- e.g. `option java_multiple_files = true;`
+        # emits one .java per top-level type -- without predicting filenames.
+        # The Java protoc plugins also target ${javagen} (see
+        # _protoc_plugin_parameters) so insertion points still resolve. #1054.
+        protojava_cmd = '%s --proto_path=. %s --java_out=${javagen} ${protocjavapluginflags} ${in}' % (
+            protoc_java, protobuf_java_incs)
         self.generate_rule(name='protojava',
-                           command='%s --proto_path=. %s --java_out=%s/${srcdir} '
-                                   '${protocjavapluginflags} ${in}' % (
-                                       protoc_java, protobuf_java_incs, self.build_dir),
+                           command=self._builtin_command(
+                               'proto_java_srcjar', '${out} ${javagen} -- ' + protojava_cmd),
                            description='PROTOC JAVA ${in}')
         self.generate_rule(name='protopython',
                            command='%s --proto_path=. %s -I=${srcdir} '

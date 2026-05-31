@@ -23,9 +23,13 @@ A single proto file potentially produces multiple output sets:
   into a real `cc_library` output.
 - **Python**: `_pb2.py` files, gated by the target's `target_languages`
   attribute or the global `--generate-python` flag.
-- **Java**: `<Class>.java` files plus a packaged `.jar`, gated by
-  `target_languages='java'` / `--generate-java`. Path comes from the
-  proto's `option java_package`.
+- **Java**: a packaged `.jar`, gated by `target_languages='java'` /
+  `--generate-java`. protoc writes its `.java` into a per-proto gen dir which
+  the `protojava` rule zips into a `<proto>.srcjar` (the `proto_java_srcjar`
+  builtin); `javac_compile` then extracts and compiles those. The output `.java`
+  set is **not** predicted, so `option java_multiple_files = true;` (one `.java`
+  per top-level type, no outer class) works the same as the default single-file
+  layout. See issue #1054.
 - **Go**: `.pb.go`, gated similarly. Output path from `option go_package`.
 - **Descriptor set**: `.descriptors.pb` for tooling, on request.
 

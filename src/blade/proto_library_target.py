@@ -174,7 +174,6 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             cpp_headers.extend(headers)
         self.attr['generated_hdrs'] = full_cpp_headers
         self._set_hdrs(cpp_headers)
-        self.src_java_info = {}
         if self.attr['generate_java']:
             self.update_java_gen_info()
 
@@ -228,15 +227,16 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         self._check_proto_deps()
 
     def update_java_gen_info(self):
-        """Update java package name and source path for java target for fingerprint."""
+        """Record the per-proto Java srcjar outputs for the target fingerprint.
+
+        The actual generated `.java` set is produced by protoc into the srcjar
+        at build time and is not predicted here (it depends on
+        `java_multiple_files` etc.) -- see _proto_java_rules / #1054.
+        """
         if "generated_java_sources" in self.attr:
             return
-        self.attr["generated_java_sources"] = []
-        for src in self.srcs:
-            input = self._source_file_path(src)
-            package_dir, java_name = self._proto_java_gen_file(src)
-            self.src_java_info[src] = (package_dir, java_name)
-            self.attr["generated_java_sources"].append(f"{input}__{package_dir}__{java_name}")
+        self.attr["generated_java_sources"] = [
+            self._target_file_path(src + '.srcjar') for src in self.srcs]
 
     def _expand_deps_generation(self):
         if self.attr['generate_java']:
@@ -269,20 +269,6 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
     def _get_java_pack_deps(self):
         return self._get_pack_deps()
 
-    def _get_java_package_name(self, content):
-        """Get the java package name from proto file if it is specified."""
-        java_package_pattern = r'^\s*option\s+java_package\s*=\s*["\']([\w.]+)'
-        m = re.search(java_package_pattern, content, re.MULTILINE)
-        if m:
-            return m.group(1)
-
-        package_pattern = r'^\s*package\s+([\w.]+)'
-        m = re.search(package_pattern, content, re.MULTILINE)
-        if m:
-            return m.group(1)
-
-        return ''
-
     def _get_go_package_name(self, path):
         with open(path) as f:
             content = f.read()
@@ -293,25 +279,6 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         self.error('"go_package" is mandatory to generate golang code '
                    'in protocol buffers but is missing in %s.' % path)
         return ''
-
-    def _proto_java_gen_class_name(self, src, content):
-        """Get generated java class name"""
-        pattern = r'^\s*option\s+java_outer_classname\s*=\s*[\'"](\w+)["\']'
-        m = re.search(pattern, content, re.MULTILINE)
-        if m:
-            return m.group(1)
-        proto_name = src[:-6]
-        base_name = os.path.basename(proto_name)
-        return ''.join([p[0].upper() + p[1:] for p in base_name.split('_') if p])
-
-    def _proto_java_gen_file(self, src):
-        """Generate the java files name of the proto library."""
-        with open(self._source_file_path(src), encoding='utf-8') as f:
-            content = f.read()
-        package_dir = self._get_java_package_name(content).replace('.', '/')
-        class_name = self._proto_java_gen_class_name(src, content)
-        java_name = '%s.java' % class_name
-        return package_dir, java_name
 
     def protoc_direct_dependencies(self):
         """
@@ -350,12 +317,13 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             if language in p.code_generation:
                 paths.append(p.path)
                 flag_key = 'protoc%spluginflags' % language
-                # For Java, we need to be consistent with native java output directory
-                # which is the build target directory for insertion points to be effected.
-                # See `protojava` rules for details
+                # For Java the plugin must write into the same dir as the
+                # native `--java_out` so insertion points resolve. Both are the
+                # per-proto gen dir `${javagen}` (a ninja var set per edge in
+                # _proto_java_rules), which is then zipped into the srcjar. #1054
                 plugin_opts = self.attr["plugin_opts"].get(p.name, [])
                 if language == 'java':
-                    flag_value = p.protoc_plugin_flag(self._target_dir(), plugin_opts)
+                    flag_value = p.protoc_plugin_flag('${javagen}', plugin_opts)
                 else:
                     flag_value = p.protoc_plugin_flag(self.build_dir, plugin_opts)
                 vars[flag_key] = vars[flag_key] + ' ' + flag_value if flag_key in vars else flag_value
@@ -393,17 +361,22 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         plugin_paths, vars = self._protoc_plugin_parameters('java')
         implicit_deps = self.protoc_direct_dependencies()
         implicit_deps.extend(plugin_paths)
-        java_sources = []
+        srcjars = []
         for src in self.srcs:
             input = self._source_file_path(src)
-            package_dir, java_name = self.src_java_info[src]
-            output = self._target_file_path(os.path.join(os.path.dirname(src), package_dir, java_name))
-            vars['srcdir'] = to_unix_path(os.path.dirname(input))
-            self.generate_build('protojava', output, inputs=input,
-                                implicit_deps=implicit_deps, variables=vars)
-            java_sources.append(output)
+            # protoc writes its (unpredictable) `.java` set into ${javagen};
+            # the protojava rule then zips it into this `.srcjar`. The output
+            # set is not predicted, so `option java_multiple_files = true;`
+            # works the same as the single-outer-class layout. See #1054.
+            srcjar = self._target_file_path(src + '.srcjar')
+            javagen = self._target_file_path(src + '.javagen')
+            self.generate_build('protojava', srcjar, inputs=input,
+                                implicit_deps=implicit_deps,
+                                variables=dict(vars, javagen=javagen))
+            srcjars.append(srcjar)
 
-        jar = self._build_jar(inputs=java_sources, source_encoding=self.attr.get('source_encoding'))
+        # javac_compile extracts the `.java` from each srcjar and compiles them.
+        jar = self._build_jar(inputs=srcjars, source_encoding=self.attr.get('source_encoding'))
         self._add_target_file('jar', jar)
 
     def _proto_python_rules(self):
