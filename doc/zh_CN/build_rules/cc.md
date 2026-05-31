@@ -517,7 +517,7 @@ cc_plugin(
 - `export_map`: str，单个[链接器“版本”脚本](https://sourceware.org/binutils/docs/ld/VERSION.html)，用来控制共享库导出哪些符号。
   虽然链接器术语叫“版本脚本”，但这里的机制是*导出过滤*而非 ABI 版本管理，因此命名为 `export_map`（业界对符号导出控制文件的通称）。使用匿名版本形式（不指定版本号）即可只控制可见性。
   只接受单个文件（GNU ld 不允许多于一个匿名版本节点）。可用于 `cc_library`、`cc_binary` 和 `cc_plugin`。会传给 GNU ld 的 `--version-script`；导出映射文件的扩展名一般为 `.exp`、`.sym`、`.ver` 或者 `.map`。参见[下文的 C++ 示例](#控制共享库导出哪些符号)。
-  > **GNU ld 特性。** 与 `linker_script` 一样，这是 GNU ld 选项。完整的符号版本管理仅限 ELF；MSVC 改用自动生成的 `.def`（参见 [Windows DLL 支持](#windows-dll-支持)）。
+  > **GNU ld 特性。** 与 `linker_script` 一样，这是 GNU ld 选项。完整的符号版本管理仅限 ELF；在 MSVC 上该映射**不会**生效（导出由自动生成的 `.def` 决定，参见 [Windows DLL 支持](#windows-dll-支持)），Blade 会告警以免被静默忽略。
   > 复数形式 `version_scripts`（列表）是 `export_map` 的**已废弃别名**，使用时会告警，且只取第一个文件。
 
 `prefix` 和 `suffix` 控制生成的动态库的文件名。假设 `name='file'`，在 Linux 工具链上默认生成 `libfile.so`；设置 `prefix=''` 则变为 `file.so`。传入已带共享库后缀的 `name`（如 `name='file.so'`）不再被隐式识别为"输出文件全名"，如需完全自定义输出文件名，请改用 `prefix=''` 与 `suffix='.so'` 显式表达。

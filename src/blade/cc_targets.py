@@ -785,6 +785,15 @@ class CcTarget(Target):
         (`<name>.dll.lib`); `DYNAMIC_LIB_LABEL` therefore points at the import
         lib, while the DLL is recorded separately as the runtime artifact.
         """
+        if self.attr.get('export_map_fullpath'):
+            # `export_map` is a GNU-ld `--version-script`; MSVC has no
+            # equivalent. Here exports are derived from the object files into an
+            # auto-generated `.def` (see cc_windef), so the map is not applied.
+            # Warn rather than silently ignore it. Translating a version script
+            # into a `.def` (undname + glob matching) is tracked separately.
+            self.warning('export_map is not honored on the MSVC toolchain; '
+                         'the DLL exports are derived from the object files. '
+                         'The export map is ignored.')
         try:
             dll = self._target_file_path(_windows_dll_basename(self.path, self.name))
         except ValueError as e:
