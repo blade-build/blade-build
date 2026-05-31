@@ -171,6 +171,32 @@ sys.exit(ec)
 '''
 
 
+# MSVC link wrapper: runs a link command and drops link.exe's redundant
+#   "   Creating library X.dll.lib and object X.dll.exp"
+# notice -- Ninja already prints "LINK DLL <out>" -- while passing every other
+# line through and preserving link's exit code (a plain `| findstr` pipe would
+# mask link failures). VSLANG=1033 forces English so the match is reliable on a
+# localized Visual Studio. Invoked as: python link_wrapper.py -- <link cmd...>
+_MSVC_LINK_WRAPPER_PY = r'''
+import os, subprocess, sys
+
+cmd = sys.argv[sys.argv.index('--') + 1:]
+env = dict(os.environ)
+env['VSLANG'] = '1033'  # force English so the filter below matches
+
+p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
+                     stderr=subprocess.STDOUT, universal_newlines=True,
+                     encoding='utf-8', errors='replace')
+for line in p.stdout:
+    s = line.lstrip()
+    if s.startswith('Creating library ') and ' and object ' in s:
+        continue  # redundant with Ninja's "LINK DLL <out>" description
+    sys.stdout.write(line)
+    sys.stdout.flush()
+sys.exit(p.wait())
+'''
+
+
 def _incs_list_to_string(incs):
     """Convert incs list to string.
 
@@ -205,6 +231,7 @@ class _NinjaFileHeaderGenerator:
         self.__all_rule_names = set()
         self.__inclusion_wrapper_path = None
         self.__msvc_wrapper_py_path = None
+        self.__msvc_link_wrapper_py_path = None
 
     def _inclusion_wrapper_script(self):
         """Path to the cc inclusion-stack splitter wrapper, written on first use.
@@ -227,6 +254,14 @@ class _NinjaFileHeaderGenerator:
             util.write_if_changed(path, _MSVC_TEE_WRAPPER_PY)
             self.__msvc_wrapper_py_path = path
         return self.__msvc_wrapper_py_path
+
+    def _msvc_link_wrapper_py(self):
+        """Path to the MSVC link-output filter wrapper, written on first use."""
+        if self.__msvc_link_wrapper_py_path is None:
+            path = os.path.join(self.build_dir, 'link_wrapper.py')
+            util.write_if_changed(path, _MSVC_LINK_WRAPPER_PY)
+            self.__msvc_link_wrapper_py_path = path
+        return self.__msvc_link_wrapper_py_path
 
     def _add_line(self, rule):
         """Append one rule to buffer."""
@@ -504,8 +539,13 @@ class _NinjaFileHeaderGenerator:
         # cc_library DLL (empty for other solink edges, e.g. cc_plugin). The
         # `.def` (auto-export, COMDAT-filtered) makes the DLL export its symbols
         # without source annotations; the import library is what dependents link.
+        # Route the DLL link through a small Python wrapper that drops link.exe's
+        # redundant "Creating library ... and object ..." notice (the import lib
+        # is always created for a DLL, so it always prints). See
+        # `_MSVC_LINK_WRAPPER_PY`.
+        link_wrapper = self._msvc_link_wrapper_py()
         self.generate_rule(name='solink',
-                           command=f'{ld} /nologo /DLL ${{dllflags}} /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
+                           command=f'"{sys.executable}" -B {link_wrapper} -- {ld} /nologo /DLL ${{dllflags}} /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
                            description='LINK DLL ${out}')
 
         # Synthesize the auto-export `.def` from the object files (see the
