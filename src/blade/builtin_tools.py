@@ -129,6 +129,129 @@ def generate_cc_inclusion_check(args):
     return None
 
 
+# --- Windows DLL auto-export: synthesize a .def from object files ----------
+#
+# To make a Windows DLL export its symbols without `__declspec(dllexport)`
+# annotations, we parse the COFF object files directly (pure stdlib `struct`,
+# the same approach as CMake's bindexplib / Bazel's def_parser) and emit a
+# `.def`. Unlike those tools, we *filter out the dedup COMDAT symbols* —
+# template instantiations, inline functions, string/float constants, vtables,
+# RTTI — which the consumer always instantiates itself from headers and never
+# needs to import. That keeps the export table small (the naive "export all"
+# is what makes WINDOWS_EXPORT_ALL_SYMBOLS blow the 64k export limit on
+# template-heavy C++).
+#
+# The discriminator is the COMDAT *selection*, not merely "is COMDAT": under
+# /Gy (on at /O2) even ordinary functions become COMDAT, but with selection
+# NODUPLICATES (a unique definition) — those we keep. The dedup selections
+# (ANY / SAME_SIZE / EXACT_MATCH / LARGEST) are the header-provided copies we
+# drop. See blade-build/blade-build#1181.
+
+_IMAGE_SYM_CLASS_EXTERNAL = 2
+_IMAGE_SYM_CLASS_STATIC = 3
+_IMAGE_SYM_DTYPE_FUNCTION = 0x20  # Type high nibble == FUNCTION
+# COMDAT selection values that mean "duplicates are expected and folded" — the
+# symbol is provided by every TU that uses it, so the DLL needn't export it.
+_COMDAT_DEDUP_SELECTIONS = frozenset((2, 3, 4, 6))
+
+
+def _select_dll_exports(symbols, section_selection):
+    """Pick the symbols a DLL should export, from parsed COFF symbol records.
+
+    ``symbols`` is a list of ``(name, storage_class, section_number, coff_type)``
+    and ``section_selection`` maps a section number to its COMDAT selection
+    (0 / absent = not COMDAT). Returns an ordered, de-duplicated list of
+    ``(name, is_data)``.
+
+    A symbol is exported when it is **external** and **defined here**
+    (``section_number > 0``) and its section is not a *dedup* COMDAT. Functions
+    (COFF type FUNCTION) are exported plain; everything else is data and gets
+    the ``DATA`` keyword in the `.def`.
+    """
+    seen = {}
+    for name, storage_class, section_number, coff_type in symbols:
+        if storage_class != _IMAGE_SYM_CLASS_EXTERNAL or section_number <= 0:
+            continue
+        if section_selection.get(section_number, 0) in _COMDAT_DEDUP_SELECTIONS:
+            continue
+        if not name:
+            continue
+        is_data = coff_type != _IMAGE_SYM_DTYPE_FUNCTION
+        seen.setdefault(name, is_data)  # first definition wins
+    return list(seen.items())
+
+
+def _parse_coff(data):
+    """Parse a COFF object file's symbol table (pure stdlib `struct`).
+
+    Returns ``(symbols, section_selection)`` as consumed by
+    :func:`_select_dll_exports`. Raises ``NotImplementedError`` for the
+    "bigobj" variant (used only by objects with > 65279 sections), which the
+    caller should surface as an actionable error.
+    """
+    import struct  # pylint: disable=import-outside-toplevel
+    machine, = struct.unpack_from('<H', data, 0)
+    sig2, = struct.unpack_from('<H', data, 2)
+    if machine == 0 and sig2 == 0xFFFF:
+        raise NotImplementedError('bigobj COFF object is not supported')
+    # IMAGE_FILE_HEADER: skip to symbol-table pointer / count.
+    _num_sections, _ts, sym_off, num_syms = struct.unpack_from('<HIII', data, 2)
+    strtab_off = sym_off + num_syms * 18
+
+    def read_name(name8):
+        if name8[:4] == b'\x00\x00\x00\x00':
+            off, = struct.unpack('<I', name8[4:8])
+            end = data.index(b'\x00', strtab_off + off)
+            return data[strtab_off + off:end].decode('latin-1')
+        return name8.rstrip(b'\x00').decode('latin-1')
+
+    symbols = []
+    section_selection = {}
+    i = 0
+    while i < num_syms:
+        rec = sym_off + i * 18
+        name8 = data[rec:rec + 8]
+        value, secnum, ctype, sclass, naux = struct.unpack_from('<IhHBB', data, rec + 8)
+        # A section-definition symbol (Static, type NULL, value 0, one aux)
+        # carries the COMDAT selection of its section in that aux record.
+        if (sclass == _IMAGE_SYM_CLASS_STATIC and ctype == 0 and value == 0
+                and naux >= 1 and secnum > 0):
+            selection, = struct.unpack_from('<B', data, rec + 18 + 14)
+            section_selection[secnum] = selection
+        elif sclass == _IMAGE_SYM_CLASS_EXTERNAL:
+            symbols.append((read_name(name8), sclass, secnum, ctype))
+        i += 1 + naux
+    return symbols, section_selection
+
+
+def generate_cc_def(args):
+    """Generate a `.def` exporting the symbols of the given objects (Windows).
+
+    Invoked as ``cc_def <output.def> <obj>...``. Parses each object's COFF
+    symbol table directly and writes the filtered export list.
+    """
+    output = args[0]
+    objs = args[1:]
+    _declare_outputs(output)
+    seen = {}
+    for obj in objs:
+        with open(obj, 'rb') as f:
+            data = f.read()
+        try:
+            symbols, section_selection = _parse_coff(data)
+        except NotImplementedError as e:
+            console.error('cc_def: %s: %s. Use an export_map or '
+                          'generate_dynamic=False for this target.' % (obj, e))
+            return 1
+        for name, is_data in _select_dll_exports(symbols, section_selection):
+            seen.setdefault(name, is_data)
+    with open(output, 'w', encoding='utf-8') as f:
+        f.write('EXPORTS\n')
+        for name, is_data in seen.items():
+            f.write('    %s%s\n' % (name, ' DATA' if is_data else ''))
+    return None
+
+
 _PACKAGE_MANIFEST = 'MANIFEST.TXT'
 
 
@@ -706,6 +829,7 @@ _BUILTIN_TOOLS = {
     'package': generate_package,
     'javac_compile': generate_javac_compile,
     'cc_inclusion_check': generate_cc_inclusion_check,
+    'cc_def': generate_cc_def,
     'resource': generate_resource,
     'resource_index': generate_resource_index,
     'java_jar': generate_java_jar,

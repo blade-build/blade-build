@@ -834,6 +834,16 @@ class MsvcToolChain(ToolChain):
         """MSVC dynamic libraries use .dll extension."""
         return '%s.dll' % name
 
+    def import_library_name(self, name):
+        """Import library for a DLL: `<name>.dll.lib`.
+
+        Mirrors MinGW's `lib<name>.dll.a` convention so the DLL's import
+        library is distinct from a static library (`<name>.lib`). The name
+        follows the target (consistent with the static lib); the runtime DLL
+        name it points to is recorded inside the import lib by the linker.
+        """
+        return '%s.dll.lib' % name
+
     def executable_file_name(self, name):
         """MSVC executables use .exe extension."""
         return name + '.exe'
