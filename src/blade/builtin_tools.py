@@ -224,10 +224,10 @@ def _parse_coff(data):
     return symbols, section_selection
 
 
-def generate_cc_def(args):
+def generate_cc_windef(args):
     """Generate a `.def` exporting the symbols of the given objects (Windows).
 
-    Invoked as ``cc_def <output.def> <obj>...``. Parses each object's COFF
+    Invoked as ``cc_windef <output.def> <obj>...``. Parses each object's COFF
     symbol table directly and writes the filtered export list.
     """
     output = args[0]
@@ -240,7 +240,7 @@ def generate_cc_def(args):
         try:
             symbols, section_selection = _parse_coff(data)
         except NotImplementedError as e:
-            console.error('cc_def: %s: %s. Use an export_map or '
+            console.error('cc_windef: %s: %s. Use an export_map or '
                           'generate_dynamic=False for this target.' % (obj, e))
             return 1
         for name, is_data in _select_dll_exports(symbols, section_selection):
@@ -829,7 +829,7 @@ _BUILTIN_TOOLS = {
     'package': generate_package,
     'javac_compile': generate_javac_compile,
     'cc_inclusion_check': generate_cc_inclusion_check,
-    'cc_def': generate_cc_def,
+    'cc_windef': generate_cc_windef,
     'resource': generate_resource,
     'resource_index': generate_resource_index,
     'java_jar': generate_java_jar,
