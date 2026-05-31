@@ -176,6 +176,29 @@ def _cc_plugin_default_prefix_suffix(toolchain) -> tuple[str, str]:
     return (toolchain.lib_prefix, toolchain.dynamic_lib_suffix)
 
 
+def _windows_dll_basename(path, name):
+    """Encode a target's package path + name into a unique DLL base name.
+
+    On Windows a DLL's base name must be unique within the search path (and the
+    import lib records it), and DLLs can't be renamed per directory; at test
+    time they are flattened into one directory. So the package path is encoded
+    into the name, joined by '.' (rarer than '_' in directory names):
+    ``//common/net:rpc`` -> ``common.net.rpc.dll``.
+
+    Components are assumed dot-free (target names are identifier-like, and blade
+    directories rarely contain '.'); a literal '.' would make the encoding
+    ambiguous (``a.b/c`` vs ``a/b.c``), so it is rejected rather than silently
+    collided.
+    """
+    parts = [p for p in path.split('/') if p] + [name]
+    bad = [p for p in parts if '.' in p]
+    if bad:
+        raise ValueError(
+            "cannot encode a Windows DLL name: path component(s) %s contain "
+            "'.'; rename them or set generate_dynamic=False on this target" % bad)
+    return '.'.join(parts) + '.dll'
+
+
 class CcTarget(Target):
     """
     This class is derived from Target and it is the base class
@@ -476,7 +499,11 @@ class CcTarget(Target):
         if 'allow_undefined' in self.attr:
             allow_undefined = self.attr['allow_undefined']
             if not allow_undefined:
-                if self.blade.get_build_toolchain().target_os != 'darwin':
+                # `-Wl,--no-undefined` is GNU ld syntax. macOS ld64 rejects it,
+                # and MSVC does not understand it (LNK4044) — and already errors
+                # on unresolved externals by default — so emit it only for the
+                # GNU-family linkers that accept it.
+                if self.blade.get_build_toolchain().target_os not in ('darwin', 'windows'):
                     linkflags.append('-Wl,--no-undefined')
         return linkflags
 
@@ -727,6 +754,9 @@ class CcTarget(Target):
 
     def _dynamic_cc_library(self, objs, inclusion_check_result):
         tc = self.blade.get_build_toolchain()
+        if tc.target_os == 'windows':
+            self._dynamic_cc_library_windows(objs, inclusion_check_result, tc)
+            return
         output = self._target_file_path(tc.dynamic_library_name(self.name))
         target_linkflags = self._generate_link_flags()
         sys_libs, usr_libs, incchk_deps = self._dynamic_dependencies()
@@ -735,6 +765,37 @@ class CcTarget(Target):
         self._cc_link(output, 'solink', objs=objs, deps=usr_libs, sys_libs=sys_libs,
                       order_only_deps=incchk_deps, target_linkflags=target_linkflags)
         self._add_target_file(tc.DYNAMIC_LIB_LABEL, output)
+
+    def _dynamic_cc_library_windows(self, objs, inclusion_check_result, tc):
+        """Build a Windows DLL: auto-export `.def` -> DLL + import library.
+
+        The DLL is named with its package path encoded in (so DLLs flattened
+        into one search dir at test time can't collide and need no per-dir
+        rename, which Windows forbids). Dependents link the **import library**
+        (`<name>.dll.lib`); `DYNAMIC_LIB_LABEL` therefore points at the import
+        lib, while the DLL is recorded separately as the runtime artifact.
+        """
+        try:
+            dll = self._target_file_path(_windows_dll_basename(self.path, self.name))
+        except ValueError as e:
+            self.error(str(e))
+            return
+        implib = self._target_file_path(tc.import_library_name(self.name))
+        def_file = self._target_file_path(self.name + '.def')
+        # Object files -> auto-export `.def` (COMDAT-filtered; see cc_windef).
+        self.generate_build('cc_windef', def_file, inputs=objs,
+                            order_only_deps=inclusion_check_result)
+        target_linkflags = self._generate_link_flags()
+        sys_libs, usr_libs, incchk_deps = self._dynamic_dependencies()
+        if inclusion_check_result:
+            incchk_deps.append(inclusion_check_result)
+        self._cc_link(dll, 'solink', objs=objs, deps=usr_libs, sys_libs=sys_libs,
+                      order_only_deps=incchk_deps, target_linkflags=target_linkflags,
+                      implicit_deps=[def_file], implicit_outputs=[implib],
+                      extra_vars={'dllflags': '/DEF:%s /IMPLIB:%s' % (def_file, implib)})
+        # Dependents link the import lib; the DLL is the runtime payload.
+        self._add_target_file(tc.DYNAMIC_LIB_LABEL, implib)
+        self.data['windows_dll'] = dll
 
     def _soname_of(self, so_path):
         """Get the `soname` of a shared library."""
@@ -756,7 +817,7 @@ class CcTarget(Target):
 
     def _cc_link(self, output, rule, objs, deps, sys_libs, linker_scripts=None, version_scripts=None,
                  target_linkflags=None, implicit_deps=None,
-                 order_only_deps=None, cmd=None):
+                 order_only_deps=None, cmd=None, implicit_outputs=None, extra_vars=None):
         vars = {}
         linkflags = self.attr.get('linkflags')
         if linkflags is not None:
@@ -777,10 +838,13 @@ class CcTarget(Target):
             implicit_deps += version_scripts
         if extra_linkflags:
             vars['extra_linkflags'] = ' '.join(extra_linkflags)
+        if extra_vars:
+            vars.update(extra_vars)
         self.generate_build(rule, output,
                             inputs=objs + deps,
                             implicit_deps=implicit_deps,
                             order_only_deps=order_only_deps,
+                            implicit_outputs=implicit_outputs,
                             variables=vars)
 
     def _write_inclusion_check_info(self):

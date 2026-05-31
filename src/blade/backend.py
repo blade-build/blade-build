@@ -491,9 +491,20 @@ class _NinjaFileHeaderGenerator:
                            command=f'{ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
                            description='LINK EXE ${out}')
 
+        # ${dllflags} carries the per-target `/DEF:<def> /IMPLIB:<implib>` for a
+        # cc_library DLL (empty for other solink edges, e.g. cc_plugin). The
+        # `.def` (auto-export, COMDAT-filtered) makes the DLL export its symbols
+        # without source annotations; the import library is what dependents link.
         self.generate_rule(name='solink',
-                           command=f'{ld} /nologo /DLL /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
+                           command=f'{ld} /nologo /DLL ${{dllflags}} /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
                            description='LINK DLL ${out}')
+
+        # Synthesize the auto-export `.def` from the object files (see the
+        # `cc_windef` builtin tool). Windows-only; nothing emits this edge
+        # elsewhere.
+        self.generate_rule(name='cc_windef',
+                           command=self._builtin_command('cc_windef'),
+                           description='CC WINDEF ${out}')
 
     def _generate_cc_vars(self):
         warnings, cxx_warnings, c_warnings, cu_warnings = self._get_warning_flags()

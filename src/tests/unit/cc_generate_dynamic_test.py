@@ -38,6 +38,23 @@ def _dep(**attr):
     return types.SimpleNamespace(attr=dict(attr))
 
 
+class WindowsDllBasenameTest(unittest.TestCase):
+    """Package-path encoding for collision-free, flatten-able DLL names."""
+
+    def test_encodes_package_path_with_dots(self):
+        self.assertEqual(
+            'common.net.rpc.dll',
+            cc_targets._windows_dll_basename('common/net', 'rpc'))
+
+    def test_top_level_target(self):
+        self.assertEqual('foo.dll', cc_targets._windows_dll_basename('', 'foo'))
+
+    def test_dotted_component_is_rejected(self):
+        # 'a.b/c' vs 'a/b.c' would both encode to 'a.b.c' -> reject the ambiguity.
+        with self.assertRaises(ValueError):
+            cc_targets._windows_dll_basename('a.b/c', 'd')
+
+
 class ExpandDepsGenerationTest(unittest.TestCase):
     def test_dynamic_link_forces_generate_dynamic_on_plain_deps(self):
         normal = _dep()
