@@ -12,3 +12,7 @@ jobs:
       with:
         use-quiet-mode: 'yes'
         check-modified-files-only: 'yes'
+        # Accept bot-blocked hosts (StackOverflow/SourceForge answer 403 to CI)
+        # and tolerate flaky timeouts so pre-existing external links in a
+        # touched file don't fail the check. See markdown-link-check-config.json.
+        config-file: '.github/workflows/markdown-link-check-config.json'

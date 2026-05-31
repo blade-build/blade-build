@@ -1,0 +1,10 @@
+{
+  "aliveStatusCodes": [200, 206, 403, 429],
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "30s",
+  "timeout": "20s",
+  "ignorePatterns": [
+    { "pattern": "^https?://www\\.gnu\\.org/" }
+  ]
+}
