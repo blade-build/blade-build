@@ -389,10 +389,14 @@ def generate_cc_windef(args, export_map=None):
             seen.setdefault(name, is_data)
     if export_map:
         seen = _filter_exports_by_map(seen, export_map)
-    with open(output, 'w', encoding='utf-8') as f:
-        f.write('EXPORTS\n')
-        for name, is_data in seen.items():
-            f.write('    %s%s\n' % (name, ' DATA' if is_data else ''))
+    lines = ['EXPORTS']
+    lines += ['    %s%s' % (name, ' DATA' if is_data else '') for name, is_data in seen.items()]
+    # Write-if-changed: keep the .def's mtime when the export set is unchanged.
+    # Otherwise every build rewrites it, making it newer than the import library
+    # (which link.exe does NOT rewrite when exports are unchanged), so `solink`
+    # would relink the DLL on every build. Paired with restat on the cc_windef /
+    # solink rules. See the incremental-build fix.
+    util.write_if_changed(output, '\n'.join(lines) + '\n')
     return None
 
 

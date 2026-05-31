@@ -555,16 +555,25 @@ class _NinjaFileHeaderGenerator:
         # is always created for a DLL, so it always prints). See
         # `_MSVC_LINK_WRAPPER_PY`.
         link_wrapper = self._msvc_link_wrapper_py()
+        # restat: link.exe doesn't rewrite the import library (`/IMPLIB`) when
+        # the DLL's exports are unchanged, so its mtime can lag; re-stat outputs
+        # after linking so an unchanged DLL/implib prunes dependent relinks.
         self.generate_rule(name='solink',
                            command=f'"{sys.executable}" -B {link_wrapper} -- {ld} /nologo /DLL ${{dllflags}} /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
-                           description='LINK DLL ${out}')
+                           description='LINK DLL ${out}',
+                           restat=True)
 
         # Synthesize the auto-export `.def` from the object files (see the
         # `cc_windef` builtin tool). Windows-only; nothing emits this edge
         # elsewhere.
+        # restat: the `.def` is written write-if-changed, so when the export set
+        # is unchanged ninja keeps its old mtime and prunes the downstream DLL
+        # relink (the import lib stays newer than the def). See the
+        # incremental-build fix / issue #1161 pattern.
         self.generate_rule(name='cc_windef',
                            command=self._builtin_command('cc_windef', '${defflags} ${out} ${in}'),
-                           description='CC WINDEF ${out}')
+                           description='CC WINDEF ${out}',
+                           restat=True)
 
     def _generate_cc_vars(self):
         warnings, cxx_warnings, c_warnings, cu_warnings = self._get_warning_flags()
