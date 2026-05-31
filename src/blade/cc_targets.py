@@ -941,6 +941,7 @@ class CcLibrary(CcTarget):
                  allow_undefined: bool,
                  secret: bool,
                  secret_revision_file: str | None,
+                 generate_dynamic: bool | None,
                  kwargs: dict[str, object]):
         """Init method.
 
@@ -983,6 +984,16 @@ class CcLibrary(CcTarget):
         self.attr['always_optimize'] = always_optimize
         self.attr['deprecated'] = deprecated
         self.attr['allow_undefined'] = allow_undefined
+        # `generate_dynamic` is a tri-state: None inherits the global default
+        # (already computed in CcTarget.__init__ from --generate-dynamic /
+        # cc_library_config.generate_dynamic); an explicit True/False overrides
+        # it per target. An explicit False additionally opts the library out of
+        # the implicit "generate_dynamic = True" a dynamic_link binary forces on
+        # its deps (see Target._expand_deps_generation), so it is always linked
+        # statically (the static archive is produced unconditionally).
+        if generate_dynamic is not None:
+            self.attr['generate_dynamic'] = generate_dynamic
+            self.attr['generate_dynamic_forced_off'] = generate_dynamic is False
         self._add_tags('lang:cc', 'type:library')
         self._set_secret(secret, secret_revision_file)
         self._set_hdrs(hdrs)
@@ -1220,6 +1231,7 @@ def cc_library(
         secret: bool = False,
         secret_revision_file: str | None = None,
         secure: bool = False,
+        generate_dynamic: bool | None = None,
         **kwargs: object):
     """cc_library target.
 
@@ -1276,6 +1288,7 @@ def cc_library(
             allow_undefined=allow_undefined,
             secret=secret or secure,
             secret_revision_file=secret_revision_file,
+            generate_dynamic=generate_dynamic,
             kwargs=kwargs)
     target.attr['keep_deps'] = [target._unify_dep(d) for d in keep_deps]
     build_manager.instance.register_target(target)
@@ -1516,6 +1529,11 @@ class CcBinary(CcTarget):
             build_targets = self.blade.get_build_targets()
             assert self.expanded_deps is not None, 'expanded_deps not expanded'
             for dep in self.expanded_deps:
+                # Respect a library's explicit `generate_dynamic = False`: such a
+                # dep is never built as a shared library and is linked statically
+                # even into a dynamic_link binary.
+                if build_targets[dep].attr.get('generate_dynamic_forced_off'):
+                    continue
                 build_targets[dep].attr['generate_dynamic'] = True
 
     def _get_rpath_links(self):
