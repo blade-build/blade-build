@@ -2,6 +2,8 @@
 
 ## gen\_rule
 
+> **Not supported on the Windows (MSVC) toolchain yet.** `gen_rule` runs its command through a POSIX shell — the scaffold uses `ls` / `/dev/null`, and commands are typically written for `sh` — which Windows `cmd.exe` does not provide. Tracked in [#1204](https://github.com/blade-build/blade-build/issues/1204).
+
 Used to customize your own construction rules, parameters:
 
 - src_exts: list(str) The list of file extensions allowed in `src`.

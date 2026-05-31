@@ -2,6 +2,8 @@
 
 ## gen\_rule
 
+> **暂不支持 Windows（MSVC）工具链。** `gen_rule` 的命令通过 POSIX shell 执行——脚手架用到 `ls` / `/dev/null`，且命令通常按 `sh` 编写——而 Windows 的 `cmd.exe` 不提供这些。进展见 [#1204](https://github.com/blade-build/blade-build/issues/1204)。
+
 用于定制自己的构建规则，参数：
 
 - src_exts: list(str) `src` 里允许的文件扩展名列表。
