@@ -112,6 +112,14 @@ cc_library(
 
   如还有疑问，可以进一步阅读[更多解答](https://stackoverflow.com/questions/805555/ld-linker-question-the-whole-archive-option)。
 
+- `generate_dynamic`: bool | None = None，是否在静态库之外额外生成动态库（`.so`/`.dylib`/`.dll`）。
+
+  默认的 `None` 表示“自动判断”：仅当本库被某个 `dynamic_link` 可执行文件依赖、或使用 `--generate-dynamic` 构建时才生成动态库。无论如何静态库都会生成。
+
+  设为 `generate_dynamic = False` 表示永久退出：不再生成动态库，并且即便被 `dynamic_link` 可执行文件依赖也以**静态**方式链接。对于跨链接边界暴露全局可变数据的库（例如带全局用例注册表的测试框架），这是正确的选择——这类数据无法通过自动导出的动态库安全共享，详见下文[Windows DLL 支持](#windows-dll-支持)。
+
+  设为 `generate_dynamic = True` 则强制无条件生成动态库。
+
 - `binary_link_only`: bool = False，本库只能作为可执行文件目标（比如 `cc_binary` 或者 `cc_test`）的依赖，而不是其他 `cc_library` 的依赖。
 
   本属性适用于排他性的库，比如 malloc 库。
@@ -552,6 +560,17 @@ local:  # 其余为局部符号，对外不可见
 
 `cc_plugin` 主要是为 `JNI`，python 扩展等需要运行期间通过调用某些函数动态加载的场合而设计的，不应该用于其他目的。
 即使它出现在其他 cc 目标的 `deps` 里，链接时也会被忽略。
+
+### Windows DLL 支持
+
+在 Windows（MSVC）工具链下，需要动态库的 `cc_library` 会被构建为 **DLL 加导入库（import library）**，对应它在 Linux 上会产出的 `.so`。触发条件与其他平台一致：本库被某个 `dynamic_link` 可执行文件依赖，或使用 `--generate-dynamic` 构建。
+
+有两个 Windows 特性已为你自动处理：
+
+- **自动导出。** ELF 默认导出所有全局符号，而 Windows 默认不导出任何符号，除非以 `__declspec(dllexport)` 标注或在模块定义文件（`.def`）中列出。为避免改动源码，Blade 会扫描库的目标文件并生成 `.def`，导出每一个已定义的、对外可见的符号——但会排除位于去重 COMDAT 段中的符号（模板实例化、内联函数等），这些符号不应被导出。这样一个普通的 `cc_library` 无需任何标注即可当作 DLL 使用，就像它已经能当作 `.so` 使用一样。
+- **运行期查找。** Windows 没有 rpath，且 PE 导入表只记录 DLL 的基本名（base name）。因此在测试/运行时，Blade 会把每个依赖 DLL 平铺（flatten）到目标的 `runfiles` 目录，并将该目录前置到 `PATH`——这是 `LD_LIBRARY_PATH` 在 Windows 上的对应物。由于每个 DLL 的名字都编码了它的包路径，平铺时不会冲突。
+
+**注意——跨 DLL 边界的全局可变数据。** 自动导出让*函数*透明可用，但定义在一个 DLL、又在另一个模块中使用的全局变量，使用处需要 `__declspec(dllimport)`；否则每个模块会各自链接一份副本。因此依赖共享全局状态的库——最典型的是带全局用例注册表的测试框架——应设置 `generate_dynamic = False`，使其以静态方式链接进可执行文件，而不是变成 DLL。这样依赖图的其余部分仍可以是 DLL，而有状态的库保持正确。
 
 ## windows_resources
 

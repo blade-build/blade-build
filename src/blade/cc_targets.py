@@ -551,6 +551,15 @@ class CcTarget(Target):
                 usr_libs.append(lib)
                 continue
 
+            # A dependency that opted out of dynamic generation
+            # (`generate_dynamic = False`) has no shared library; link its static
+            # library into this dynamic_link binary instead. (Like a static build,
+            # the dynamic-link path does not apply whole-archive here.)
+            static_lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
+            if static_lib:
+                usr_libs.append(static_lib)
+                continue
+
             # Windows .res files from windows_resources deps (CcInfo-like propagation)
             res_files = dep.data.get('res_files', [])
             if res_files:

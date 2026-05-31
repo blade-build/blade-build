@@ -119,6 +119,16 @@ Attributes:
   Youi also need to know, the `link_all_symbols` is the attribute of the library, not the user of it.
   Click [here](https://stackoverflow.com/questions/805555/ld-linker-question-the-whole-archive-option) to learn more details if you have interesting.
 
+- `generate_dynamic`: bool | None = None
+
+  Whether a shared library (`.so`/`.dylib`/`.dll`) is generated for this library in addition to the static one.
+
+  The default `None` means "decide automatically": the shared library is generated only when the library is depended on by a `dynamic_link` executable, or when building with `--generate-dynamic`. The static library is always generated regardless.
+
+  Setting `generate_dynamic = False` opts the library out permanently: no shared library is ever generated, and the library is linked **statically** even into a `dynamic_link` executable. This is the right choice for libraries that expose global mutable data across the link boundary (for example a test framework with a global test registry), because such data is not safe to share through an auto-exported shared library — see [Windows DLL support](#windows-dll-support) below.
+
+  Setting `generate_dynamic = True` forces the shared library to be generated unconditionally.
+
 - `binary_link_only`: bool = False
 
   This library can only be a depenedency of the executable targets (Such as `cc_binary` or `cc_test`), but not normal `cc_library`s. This attribute is
@@ -567,6 +577,17 @@ The second column is the symbol type. If lowercase, the symbol is usually local;
 `cc_plugin` is mainly used to create various extensions, such as JNI, python extension and other dynamic libraries
 that are dynamically loaded by calling certain functions during runtime.
 It will be ignored when linking even if it appears in the `deps` of other cc targets.
+
+### Windows DLL support
+
+On a Windows (MSVC) toolchain, a `cc_library` that needs a shared library is built as a **DLL plus an import library**, mirroring the `.so` it would produce on Linux. This happens under the same conditions as on other platforms: the library is depended on by a `dynamic_link` executable, or you build with `--generate-dynamic`.
+
+Two Windows specifics are handled for you:
+
+- **Automatic export.** Unlike ELF, where every global symbol is exported by default, Windows exports nothing unless symbols are marked `__declspec(dllexport)` or listed in a module-definition (`.def`) file. To avoid forcing source changes, Blade scans the library's object files and generates a `.def` that exports every defined, externally-visible symbol — except symbols in deduplicated COMDAT sections (template instantiations, inline functions, and similar), which must not be exported. This makes a plain `cc_library` usable as a DLL with no annotations, the way it already is as a `.so`.
+- **Runtime discovery.** Windows has no rpath, and a PE import table records only a DLL's base name. So at test/run time Blade flattens every dependency DLL into the target's `runfiles` directory and prepends that directory to `PATH` — the Windows analog of `LD_LIBRARY_PATH`. Because each DLL's name encodes its package path, flattening never collides.
+
+**Caveat — global mutable data across the DLL boundary.** Auto-export makes *functions* work transparently, but a global variable defined in one DLL and used from another needs `__declspec(dllimport)` at the use site; without it, each module links its own copy. A library that relies on shared global state — most notably a test framework with a global test registry — should therefore set `generate_dynamic = False` so it is linked statically into the executable instead of becoming a DLL. With that, the rest of the dependency graph can still be DLLs while the stateful library stays correct.
 
 ## windows_resources
 
