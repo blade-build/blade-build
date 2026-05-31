@@ -126,5 +126,54 @@ class GenerateLinkAllSymbolsLinkFlagsTest(unittest.TestCase):
             )
 
 
+class ResolveLinkerInputFileTest(unittest.TestCase):
+    """Cover the singular/deprecated-plural resolver used by export_map and
+    linker_script (and their plural aliases version_scripts / linker_scripts).
+    """
+
+    def _target(self):
+        target = _bare_cc_target()
+        target.warnings = []
+        target.warning = target.warnings.append
+        # _fullpath_sources is exercised elsewhere; here we only care about the
+        # selection/warning logic, so make it an identity over the file list.
+        target._fullpath_sources = lambda files: list(files)
+        return target
+
+    def test_singular_only_no_warning(self):
+        target = self._target()
+        self.assertEqual(['a.map'],
+                         target._resolve_linker_input_file('a.map', None, 'export_map', 'version_scripts'))
+        self.assertEqual([], target.warnings)
+
+    def test_none_returns_empty(self):
+        target = self._target()
+        self.assertEqual([],
+                         target._resolve_linker_input_file(None, None, 'export_map', 'version_scripts'))
+        self.assertEqual([], target.warnings)
+
+    def test_plural_alias_warns_and_is_used(self):
+        target = self._target()
+        result = target._resolve_linker_input_file(None, ['old.map'], 'export_map', 'version_scripts')
+        self.assertEqual(['old.map'], result)
+        self.assertEqual(1, len(target.warnings))
+        self.assertIn('version_scripts', target.warnings[0])
+        self.assertIn('export_map', target.warnings[0])
+
+    def test_both_given_prefers_singular(self):
+        target = self._target()
+        result = target._resolve_linker_input_file('new.map', ['old.map'], 'export_map', 'version_scripts')
+        self.assertEqual(['new.map'], result)
+        # Deprecation warning + a notice that the plural is ignored.
+        self.assertEqual(2, len(target.warnings))
+        self.assertTrue(any('ignored' in w for w in target.warnings))
+
+    def test_more_than_one_file_keeps_first(self):
+        target = self._target()
+        result = target._resolve_linker_input_file(['a.map', 'b.map'], None, 'export_map', 'version_scripts')
+        self.assertEqual(['a.map'], result)
+        self.assertTrue(any('single file' in w for w in target.warnings))
+
+
 if __name__ == '__main__':
     unittest.main()

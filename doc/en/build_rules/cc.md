@@ -520,15 +520,17 @@ Attributes:
   host process at runtime, the definition of these symbols does not exist in the link phase.
 - `strip`: bool = False, whether to remove the debugging symbol information. If enabled, the size of the generated library can be reduced, but symbolic debugging
   cannot be performed.
-- `linker_scripts`: list(string), uses linker scripts.
-  The [linker script](https://sourceware.org/binutils/docs/ld/Scripts.html) is a script used to control the linking process.
+- `linker_script`: str, a single [linker script](https://sourceware.org/binutils/docs/ld/Scripts.html) used to control the linking process.
   Its role is mainly to specify how to put the sections in the input file into the output file and to control the layout of the sections in the input file in the program address space.
   The linker has a default built-in linking script, which can be viewed with `ld --verbose`. This option will replace the system's default linking script.
-  The linker script files usually have the extension `.ld` or `.lds`.
-  Linker scripts are usually quite complex, so if you just want to control the version or visibility of the symbols, use the `version_scripts` option below.
-- `version_scripts`: list(string), using [linker "version" script](https://sourceware.org/binutils/docs/ld/VERSION.html).
-  The linker version script is used to control the version and visibility of the symbol, if no version id is specified, it only to control the visibility of the symbol.
-  Linker version script files usually have the extension `exp`, `sym`, `.ver` or `.map`.
+  The linker script file usually has the extension `.ld` or `.lds`.
+  Only a single file is accepted: a SECTIONS script replaces the default, so multiple `-T` scripts do not meaningfully combine. This is a GNU-ld / ELF (Linux) feature only — macOS `ld64` and Windows `link.exe` have no `-T` equivalent.
+  Linker scripts are usually quite complex, so if you just want to control the visibility of the symbols, use the `export_map` option below.
+  > The plural `linker_scripts` (a list) is a **deprecated alias**; using it emits a warning and only the first file is used.
+- `export_map`: str, a single [linker "version" script](https://sourceware.org/binutils/docs/ld/VERSION.html) used to control which symbols the shared library exports.
+  Despite the linker term "version script", the mechanism here is *export filtering*, not ABI versioning — hence the name `export_map` (the industry term for a symbol-export control file). Use the anonymous-version form (no version id) to control visibility only.
+  Only a single file is accepted (GNU ld rejects more than one anonymous version node). It is available on `cc_library`, `cc_binary` and `cc_plugin`. On Linux it is passed to `--version-script`; the export-map files usually have the extension `.exp`, `.sym`, `.ver` or `.map`.
+  > The plural `version_scripts` (a list) is a **deprecated alias** for `export_map`; using it emits a warning and only the first file is used.
 
 `prefix` and `suffix` control the file name of the generated dynamic library. Assuming `name='file'`, on a Linux toolchain the default output is `libfile.so`;
 setting `prefix=''` makes it `file.so`. Passing a `name` that already carries a shared-library extension (e.g. `name='file.so'`) is no longer implicitly treated as "the full output file name"; to fully customize the output name, pass `prefix=''` and `suffix='.so'` explicitly.

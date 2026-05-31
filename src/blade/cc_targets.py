@@ -772,6 +772,7 @@ class CcTarget(Target):
         if inclusion_check_result:
             incchk_deps.append(inclusion_check_result)
         self._cc_link(output, 'solink', objs=objs, deps=usr_libs, sys_libs=sys_libs,
+                      version_scripts=self.attr.get('vers_fullpath'),
                       order_only_deps=incchk_deps, target_linkflags=target_linkflags)
         self._add_target_file(tc.DYNAMIC_LIB_LABEL, output)
 
@@ -823,6 +824,36 @@ class CcTarget(Target):
         self._static_cc_library(objs, inclusion_check_result)
         if self.attr.get('generate_dynamic'):
             self._dynamic_cc_library(objs, inclusion_check_result)
+
+    def _resolve_linker_input_file(self, singular, plural, singular_name, plural_name):
+        """Resolve a single linker-input file from the canonical singular
+        attribute and its deprecated plural alias.
+
+        Returns the full paths as a list with at most one entry (kept as a
+        list so it splices straight into the existing list-shaped
+        ``lds_fullpath`` / ``vers_fullpath`` handling and ``_cc_link``).
+
+        Emits a deprecation warning when the plural alias is used, and warns
+        when more than one file is given -- a single file is the only
+        meaningful count for both a ``--version-script`` export map (GNU ld
+        rejects two anonymous version nodes) and a ``-T`` linker script
+        (a SECTIONS script replaces the default; multiple conflict).
+        """
+        files = var_to_list(singular)
+        plural_files = var_to_list(plural)
+        if plural_files:
+            self.warning('"%s" is deprecated, use "%s" (a single file) instead' %
+                         (plural_name, singular_name))
+            if files:
+                self.warning('both "%s" and "%s" are given, "%s" is ignored' %
+                             (singular_name, plural_name, plural_name))
+            else:
+                files = plural_files
+        if len(files) > 1:
+            self.warning('"%s" expects a single file, but %d were given; '
+                         'only the first is used' % (singular_name, len(files)))
+            files = files[:1]
+        return self._fullpath_sources(files)
 
     def _cc_link(self, output, rule, objs, deps, sys_libs, linker_scripts=None, version_scripts=None,
                  target_linkflags=None, implicit_deps=None,
@@ -1015,6 +1046,7 @@ class CcLibrary(CcTarget):
                  secret: bool,
                  secret_revision_file: str | None,
                  generate_dynamic: bool | None,
+                 export_map: StrOrListOpt,
                  kwargs: dict[str, object]):
         """Init method.
 
@@ -1057,6 +1089,12 @@ class CcLibrary(CcTarget):
         self.attr['always_optimize'] = always_optimize
         self.attr['deprecated'] = deprecated
         self.attr['allow_undefined'] = allow_undefined
+        # `export_map` (a single linker version script) controls which symbols
+        # the shared library exports; passed to `--version-script` on Linux when
+        # the dynamic library is built (see `_dynamic_cc_library`). No deprecated
+        # plural alias here -- `cc_library` never had `version_scripts`.
+        self.attr['vers_fullpath'] = self._resolve_linker_input_file(
+            export_map, None, 'export_map', 'version_scripts')
         # `generate_dynamic` is a tri-state: None inherits the global default
         # (already computed in CcTarget.__init__ from --generate-dynamic /
         # cc_library_config.generate_dynamic); an explicit True/False overrides
@@ -1305,6 +1343,7 @@ def cc_library(
         secret_revision_file: str | None = None,
         secure: bool = False,
         generate_dynamic: bool | None = None,
+        export_map: StrOrListOpt = None,
         **kwargs: object):
     """cc_library target.
 
@@ -1362,6 +1401,7 @@ def cc_library(
             secret=secret or secure,
             secret_revision_file=secret_revision_file,
             generate_dynamic=generate_dynamic,
+            export_map=export_map,
             kwargs=kwargs)
     target.attr['keep_deps'] = [target._unify_dep(d) for d in keep_deps]
     build_manager.instance.register_target(target)
@@ -1541,7 +1581,9 @@ class CcBinary(CcTarget):
                  linkflags: StrOrListOpt,
                  extra_cppflags: StrOrListOpt,
                  extra_linkflags: StrOrListOpt,
+                 linker_script: StrOrListOpt,
                  linker_scripts: StrOrListOpt,
+                 export_map: StrOrListOpt,
                  version_scripts: StrOrListOpt,
                  export_dynamic: bool,
                  kwargs: dict[str, object]):
@@ -1561,8 +1603,6 @@ class CcBinary(CcTarget):
         incs = var_to_list(incs)
         extra_cppflags = var_to_list(extra_cppflags)
         extra_linkflags = var_to_list(extra_linkflags)
-        linker_scripts = var_to_list(linker_scripts)
-        version_scripts = var_to_list(version_scripts)
         visibility_list = var_to_list_or_none(visibility)
         optimize_list = var_to_list_or_none(optimize)
         linkflags_list = var_to_list_or_none(linkflags)
@@ -1584,8 +1624,10 @@ class CcBinary(CcTarget):
                 kwargs=kwargs)
         self.attr['embed_version'] = embed_version
         self.attr['dynamic_link'] = dynamic_link
-        self.attr['lds_fullpath'] = self._fullpath_sources(linker_scripts)
-        self.attr['vers_fullpath'] = self._fullpath_sources(version_scripts)
+        self.attr['lds_fullpath'] = self._resolve_linker_input_file(
+            linker_script, linker_scripts, 'linker_script', 'linker_scripts')
+        self.attr['vers_fullpath'] = self._resolve_linker_input_file(
+            export_map, version_scripts, 'export_map', 'version_scripts')
         self.attr['export_dynamic'] = export_dynamic
         self.attr['dwp'] = is_fission() and need_dwp()
         self._add_tags('lang:cc', 'type:binary')
@@ -1717,7 +1759,9 @@ def cc_binary(name: str,
               linkflags: StrOrListOpt = None,
               extra_cppflags: StrOrListOpt = None,
               extra_linkflags: StrOrListOpt = None,
+              linker_script: StrOrListOpt = None,
               linker_scripts: StrOrListOpt = None,
+              export_map: StrOrListOpt = None,
               version_scripts: StrOrListOpt = None,
               export_dynamic: bool = False,
               **kwargs: object):
@@ -1738,7 +1782,9 @@ def cc_binary(name: str,
             linkflags=linkflags,
             extra_cppflags=extra_cppflags,
             extra_linkflags=extra_linkflags,
+            linker_script=linker_script,
             linker_scripts=linker_scripts,
+            export_map=export_map,
             version_scripts=version_scripts,
             export_dynamic=export_dynamic,
             kwargs=kwargs)
@@ -1785,7 +1831,9 @@ class CcPlugin(CcTarget):
                  linkflags: 'StrOrListOpt',
                  extra_cppflags: 'StrOrListOpt',
                  extra_linkflags: 'StrOrListOpt',
+                 linker_script: 'StrOrListOpt',
                  linker_scripts: 'StrOrListOpt',
+                 export_map: 'StrOrListOpt',
                  version_scripts: 'StrOrListOpt',
                  allow_undefined: bool,
                  strip: bool,
@@ -1807,8 +1855,6 @@ class CcPlugin(CcTarget):
         incs = var_to_list(incs)
         extra_cppflags = var_to_list(extra_cppflags)
         extra_linkflags = var_to_list(extra_linkflags)
-        linker_scripts = var_to_list(linker_scripts)
-        version_scripts = var_to_list(version_scripts)
         visibility = var_to_list_or_none(visibility)
         optimize = var_to_list_or_none(optimize)
         linkflags = var_to_list_or_none(linkflags)
@@ -1848,8 +1894,10 @@ class CcPlugin(CcTarget):
         self.attr['suffix'] = suffix
         self.attr['allow_undefined'] = allow_undefined
         self.attr['strip'] = strip
-        self.attr['lds_fullpath'] = self._fullpath_sources(linker_scripts)
-        self.attr['vers_fullpath'] = self._fullpath_sources(version_scripts)
+        self.attr['lds_fullpath'] = self._resolve_linker_input_file(
+            linker_script, linker_scripts, 'linker_script', 'linker_scripts')
+        self.attr['vers_fullpath'] = self._resolve_linker_input_file(
+            export_map, version_scripts, 'export_map', 'version_scripts')
         self._add_tags('lang:cc', 'type:plugin')
 
     def _before_generate(self):  # override
@@ -1910,7 +1958,9 @@ def cc_plugin(
         linkflags: 'StrOrListOpt' = None,
         extra_cppflags: 'StrOrListOpt' = None,
         extra_linkflags: 'StrOrListOpt' = None,
+        linker_script: 'StrOrListOpt' = None,
         linker_scripts: 'StrOrListOpt' = None,
+        export_map: 'StrOrListOpt' = None,
         version_scripts: 'StrOrListOpt' = None,
         allow_undefined: bool = True,
         strip: bool = False,
@@ -1932,7 +1982,9 @@ def cc_plugin(
             linkflags=linkflags,
             extra_cppflags=extra_cppflags,
             extra_linkflags=extra_linkflags,
+            linker_script=linker_script,
             linker_scripts=linker_scripts,
+            export_map=export_map,
             version_scripts=version_scripts,
             allow_undefined=allow_undefined,
             strip=strip,
@@ -1994,7 +2046,9 @@ class CcTest(CcBinary):
                 dynamic_link=dynamic_link,
                 extra_cppflags=extra_cppflags,
                 extra_linkflags=extra_linkflags,
+                linker_script=None,
                 linker_scripts=[],
+                export_map=None,
                 version_scripts=[],
                 export_dynamic=export_dynamic,
                 kwargs=kwargs)

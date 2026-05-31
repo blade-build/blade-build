@@ -506,15 +506,17 @@ cc_plugin(
 - `suffix`: str | None, 生成的动态库的文件名后缀。默认为 `None`，表示沿用当前工具链的平台默认后缀（Linux 为 `.so`，macOS 为 `.dylib`，Windows 为 `.dll`）。
 - `allow_undefined`: bool, 链接时是否允许未定义的符号。因为很多插件库运行时依赖宿主进程提供的符号名，链接阶段并不存在这些符号的定义。
 - `strip`: bool, 是否去除调试符号信息，开启后可以减少生成的库的大小，但是无法进行符号化调试。
-- `linker_scripts`: list(string)，使用链接器脚本。
-  [链接器脚本](https://sourceware.org/binutils/docs/ld/Scripts.html)是用来控制链接过程的脚本。
+- `linker_script`: str，单个[链接器脚本](https://sourceware.org/binutils/docs/ld/Scripts.html)，用来控制链接过程。
   它的作用主要是规定如何把输入文件内的 section 放入输出文件内，并控制输入文件内各部分在程序地址空间内的布局。
   链接器有个默认的内置链接脚本，可用 `ld --verbose` 查看。此选项将会替换系统的默认链接脚本。
   链接器脚本文件的扩展名一般为 `.ld` 或者 `.lds`。
-  链接器脚本通常相当复杂，如果只是想控制符号的版本和可见性，请使用下面的 `version_script` 选项。
-- `version_scripts`: list(string)，使用[链接器“版本”脚本](https://sourceware.org/binutils/docs/ld/VERSION.html)。
-  链接器版本脚本用来控制符号的版本及可见性，内容仅限于完整的链接脚本里 `VERSION {};` 内的部分，如果不指定版本号，那么可以只用来控制符号的可见性。
-  链接器版本脚本文件的扩展名一般为 `exp`、`sym`、`.ver` 或者 `.map`。
+  只接受单个文件：SECTIONS 脚本会替换默认脚本，多个 `-T` 脚本无法有意义地组合。该特性仅限 GNU ld / ELF（Linux）；macOS `ld64` 和 Windows `link.exe` 没有 `-T` 的对应物。
+  链接器脚本通常相当复杂，如果只是想控制符号的可见性，请使用下面的 `export_map` 选项。
+  > 复数形式 `linker_scripts`（列表）是**已废弃的别名**，使用时会告警，且只取第一个文件。
+- `export_map`: str，单个[链接器“版本”脚本](https://sourceware.org/binutils/docs/ld/VERSION.html)，用来控制共享库导出哪些符号。
+  虽然链接器术语叫“版本脚本”，但这里的机制是*导出过滤*而非 ABI 版本管理，因此命名为 `export_map`（业界对符号导出控制文件的通称）。使用匿名版本形式（不指定版本号）即可只控制可见性。
+  只接受单个文件（GNU ld 不允许多于一个匿名版本节点）。可用于 `cc_library`、`cc_binary` 和 `cc_plugin`。在 Linux 上传给 `--version-script`；导出映射文件的扩展名一般为 `.exp`、`.sym`、`.ver` 或者 `.map`。
+  > 复数形式 `version_scripts`（列表）是 `export_map` 的**已废弃别名**，使用时会告警，且只取第一个文件。
 
 `prefix` 和 `suffix` 控制生成的动态库的文件名。假设 `name='file'`，在 Linux 工具链上默认生成 `libfile.so`；设置 `prefix=''` 则变为 `file.so`。传入已带共享库后缀的 `name`（如 `name='file.so'`）不再被隐式识别为"输出文件全名"，如需完全自定义输出文件名，请改用 `prefix=''` 与 `suffix='.so'` 显式表达。
 
