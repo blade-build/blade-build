@@ -87,6 +87,11 @@ class BinaryRunner:
         # Prepare environments
         run_env = dict(os.environ)
         environ_add_path(run_env, 'LD_LIBRARY_PATH', runfiles_dir)
+        if os.name == 'nt':
+            # Windows analog of LD_LIBRARY_PATH: the loader searches PATH for the
+            # flattened dependency DLLs placed in runfiles (see
+            # _prepare_windows_dlls).
+            environ_add_path(run_env, 'PATH', os.path.abspath(runfiles_dir))
         run_lib_paths = config.get_item('cc_binary_config', 'run_lib_paths')
         if run_lib_paths:
             for path in run_lib_paths:
@@ -114,11 +119,13 @@ class BinaryRunner:
         they additionally get a ``runfiles/<soname>`` symlink found via
         ``LD_LIBRARY_PATH=runfiles``.
 
-        Windows uses a different DLL lookup (exe dir, PATH) and the PE import table
-        carries no path, so this scheme does not apply; skip it there (the
-        same-name-in-different-dirs case needs a unique-naming fix instead).
+        Windows uses a different DLL lookup (exe dir, PATH) and the PE import
+        table carries no path, so the symlink-the-build-dir scheme does not
+        apply; instead the dependency DLLs are flattened into runfiles and that
+        dir is prepended to PATH at run time (see `_prepare_windows_dlls`).
         """
         if os.name == 'nt':
+            self._prepare_windows_dlls(target, runfiles_dir)
             return
 
         # Symlink the build dir into runfiles so cwd-relative `<build_dir>/.../libX`
@@ -144,6 +151,24 @@ class BinaryRunner:
                                 % (dst, src, dst, os.path.realpath(dst)))
                 continue
             self._symlink_or_copy_file(src, dst)
+
+    def _prepare_windows_dlls(self, target, runfiles_dir):
+        """Flatten the transitive dependency DLLs into the runfiles dir.
+
+        Windows has no rpath and the PE import table records only a DLL's base
+        name, so the loader must find each DLL on PATH (or next to the exe).
+        blade names every DLL with its package path encoded in, so they never
+        collide when flattened into one directory; copy them in and the run env
+        prepends runfiles to PATH.
+        """
+        assert target.expanded_deps is not None, 'expanded_deps not expanded'
+        for dep in target.expanded_deps:
+            dll = self.target_database[dep].data.get('windows_dll')
+            if not dll:
+                continue
+            dst = os.path.join(runfiles_dir, os.path.basename(dll))
+            if not os.path.lexists(dst):
+                self._symlink_or_copy_file(os.path.abspath(dll), dst)
 
     def _get_shared_libraries_with_soname(self, target):
         """Get shared libraries with soname for one target that it depends."""
