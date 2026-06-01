@@ -1064,18 +1064,18 @@ class _NinjaFileHeaderGenerator:
                            description='SHELL TEST DATA ${out}')
 
     def generate_lex_yacc_rules(self):
-        if os.name == 'nt':
-            lex_cmd = 'win_flex --wincompat'
-            yacc_cmd = 'win_bison'
-            # win_bison may be invoked via WinGet Links hardlink, which causes
-            # bison to look for data/m4sugar/ next to the link instead of the
-            # real install dir. Set BISON_PKGDATADIR to the actual data dir.
+        lex_yacc_config = config.get_section('lex_yacc_config')
+        lex_cmd = lex_yacc_config['flex']
+        yacc_cmd = lex_yacc_config['bison']
+        # Windows-only: when the user hasn't overridden the bison command and
+        # we're falling back to the platform default `win_bison`, sniff the
+        # WinFlexBison data dir. win_bison invoked via the WinGet Links
+        # hardlink otherwise looks for data/m4sugar/ next to the link itself
+        # instead of the real install dir.
+        if os.name == 'nt' and yacc_cmd == 'win_bison':
             bison_data_dir = self._find_win_bison_data_dir()
             if bison_data_dir:
                 yacc_cmd = f'cmd /c set "BISON_PKGDATADIR={bison_data_dir}" && win_bison'
-        else:
-            lex_cmd = 'flex'
-            yacc_cmd = 'bison'
         self.generate_rule(name='lex',
                            command=f'{lex_cmd} ${{lexflags}} -o ${{out}} ${{in}}',
                            description='LEX ${in}')

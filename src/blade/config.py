@@ -271,6 +271,18 @@ _CONFIG_TEMPLATE = {
         'thrift_gen_params': 'cpp:include_prefix,pure_enums'
     },
 
+    'lex_yacc_config': {
+        '__help__': 'Lex/Yacc Configuration',
+        # Override the binary used to generate scanner/parser sources. Defaults
+        # are bare command names (Windows uses win_flex / win_bison from the
+        # WinFlexBison project) so PATH lookup is the normal path. Set an
+        # absolute path to pin a specific install, e.g. brew's keg-only bison
+        # 3.x on macOS:
+        #   lex_yacc_config(bison = '/opt/homebrew/opt/bison/bin/bison')
+        'flex': 'win_flex --wincompat' if os.name == 'nt' else 'flex',
+        'bison': 'win_bison' if os.name == 'nt' else 'bison',
+    },
+
     # Multi-instance config pattern:
     #   1. Define a private template `_<section_name>` with defaults.
     #   2. Declare `<section_name>: {}` as an empty dict.
@@ -865,6 +877,20 @@ def protoc_plugin(**kwargs):
 def thrift_library_config(append=None, **kwargs):
     """thrift config."""
     _blade_config.update_config('thrift_config', append, kwargs)
+
+
+@config_rule
+def lex_yacc_config(append=None, **kwargs):
+    """lex/yacc config — primarily for pinning the flex/bison binaries.
+
+    Example (macOS, brew's keg-only bison 3.x)::
+
+        lex_yacc_config(bison = '/opt/homebrew/opt/bison/bin/bison')
+
+    On Windows the win_flex / win_bison auto-detection in backend.py is used
+    instead and these settings are not consulted.
+    """
+    _blade_config.update_config('lex_yacc_config', append, kwargs)
 
 
 @config_rule
