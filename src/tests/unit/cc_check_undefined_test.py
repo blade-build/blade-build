@@ -328,7 +328,7 @@ class EnsureCacheTest(unittest.TestCase):
              mock.patch.object(system_symbols, '_nm_defined_externals',
                                return_value={'_foo', '_bar'}):
             cache = system_symbols.ensure_cache(self.tc, 'foo', self._tmpdir)
-        self.assertIsNotNone(cache)
+        assert cache is not None  # narrows type for pyright + acts as assertion
         with open(cache, encoding='utf-8') as f:
             content = f.read()
         self.assertIn('# alias: foo', content)
