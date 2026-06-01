@@ -132,6 +132,26 @@ cc_library(
 
   设为 `generate_dynamic = True` 则强制无条件生成动态库。
 
+- `check_undefined`: bool = True
+
+  是否在归档完成、最终链接之前**静态校验**：本库声明的 `deps` 是否覆盖了它引用的全部未定义符号。如果有未定义符号缺乏来源，立即报错并指出具体的缺失依赖；否则一直等到最终二进制链接才会爆出（往往滞后到几百个目标之后），错误消息只指向二进制名而非有问题的库本身。
+
+  检查方式：对本目标新生成的 `.a` 跑 `nm -u`，对每个传递的 `cc_library` 依赖归档跑 `nm --defined-only`，再加上每个 `#alias` 系统库（如 `#m`、`#pthread`、`#dl`）的预生成符号缓存（消费者用了 `pow()` 就必须显式声明 `'#m'`）。即便 `generate_dynamic = True`，本检查也仍然执行——它比最终链接更快、并能更早、按库粒度指出问题。
+
+  在 MSVC 工具链下自动跳过（`link.exe` 已经通过 LNK2019 拒绝未定义外部符号；而且 MSVC 的 `.obj` `DEFAULTLIB` 指令解析符号的方式我们的 nm 模型无法表达）。
+
+  详见 [静态未定义符号检查](#static-undefined-symbol-check)；本次调用级覆盖：`--cc-check-undefined` / `--no-cc-check-undefined`；全局默认：[`cc_library_config.check_undefined`](../config.md#cc_library_config)。
+
+- `allow_undefined`: bool | list[str] = False
+
+  允许本库引用 deps 中没有任何目标提供的符号——也就是这些符号会在最终链接时由依赖图之外的东西补齐（典型场景：插件被宿主进程加载、宿主提供符号）。
+
+  - `False`（默认）—— 所有未定义符号必须有 `deps` 覆盖，静态检查会强制这点。
+  - `True` —— 完全放行：跳过静态检查，并且也不传 `-Wl,--no-undefined` 给链接器。用于宿主装载的插件库。
+  - `list[str]` —— 窄化的允许清单，每条是一个正则表达式（按 `nm -u` 输出的 mangled 名字 `re.fullmatch` 匹配）。静态检查正好放行列出的几个名字，其余仍然强制闭合。
+
+  这是单目标设置。项目级（同样的正则语义）允许清单见 [`cc_library_config.allow_undefined`](../config.md#cc_library_config)。
+
 - `binary_link_only`: bool = False，本库只能作为可执行文件目标（比如 `cc_binary` 或者 `cc_test`）的依赖，而不是其他 `cc_library` 的依赖。
 
   本属性适用于排他性的库，比如 malloc 库。
@@ -281,6 +301,32 @@ cc_library(
 > 提示：在确定结构性解法（私有细节通过 `hdrs` 泄漏？伞库没再导出？冗余的传递性依赖？）已经不适用之前，不要急于用 `keep_deps` 或 `unused_deps_suppress` 来抑制检查。看起来像「Blade 太烦」的模式，几乎都是检查正确捕捉到的真问题。
 
 在 [`cc_config.unused_deps_suppress`](../config.md#cc_config) 中按 `{target: [deps]}` 列出的依赖也会被豁免（主要用于存量代码的逐步治理——批量改 BUILD 不现实时）。
+
+### Static undefined-symbol check
+
+Blade 的「缺失依赖检查」（上文）解决头文件遗漏；与之配套的**未定义符号检查**解决其链接侧对偶问题：本 `cc_library` 引用了某个符号，而它声明的 deps（含传递 `cc_library` 与 `#alias` 系统库）里没有任何目标真正定义这个符号。
+
+没有这个检查时，缺失的 `deps` 只能在最终二进制链接那一步才会爆出，往往是一片 `undefined reference to ...` 报错——错误信息只点名**二进制**，而不是出问题的库。本检查把这次失败前移到时间线上更早的位置：归档刚生成、按库粒度，错误消息直接指出该补哪条 dep。
+
+工作方式：
+
+- `nm -u <archive>` 列出本目标新归档里的未定义符号。
+- `nm --defined-only` 对每个传递的 `cc_library` 依赖归档做同样列举。
+- 传递依赖中每个 `#alias` 系统库（`#m`、`#pthread`、`#dl` …）贡献一份预生成的符号缓存。
+- 一份内置基线吸收平台符号（libc、libstdc++、弱引用等）。
+- 还有未匹配的符号 → 报错，给出符号名和所属目标，构建失败。
+
+**适用平台。** Linux 和 macOS。MSVC 跳过（`link.exe` 自身的 LNK2019 已经拒绝未定义外部符号；而且 MSVC 的 `.obj` DEFAULTLIB 指令解析 C/C++ 标准符号的路径在源码可见的 `-l<name>` 图之外，nm 模型无法忠实表达）。当 target 设了 `check_undefined = False` 或 `allow_undefined = True` 时也跳过。
+
+**`generate_dynamic = True` 时的行为。** 仍然执行本检查。最终动态链接的 `-Wl,--no-undefined` 才是最权威的答案，但 nm **在任何链接发生之前**、**按库**就能捕到同样的问题，速度更快、并能精确指向需要修改的那条 dep。
+
+**控制方式。**
+
+- 按目标 —— 在 `cc_library` 上设 [`check_undefined`](#cc_library) 或 [`allow_undefined`](#cc_library)。
+- 按本次调用 —— `--cc-check-undefined` 强制开启、`--no-cc-check-undefined` 强制关闭。CLI 覆盖项目默认；但 target 上的 `check_undefined = False` 仍然胜出。
+- 项目级 —— [`cc_library_config.check_undefined`](../config.md#cc_library_config) 以及全局正则白名单 [`cc_library_config.allow_undefined`](../config.md#cc_library_config)。
+
+**合法的未定义符号情形。** 被宿主进程装载的插件库，其引用的符号只会由宿主二进制提供——设 `allow_undefined = True`，该库同时退出静态检查和链接器 `--no-undefined`。如果只是放行少数个别符号（例如某种 toolchain 注入但不参与链接的特殊符号），用列表形式 `allow_undefined = [r'__some_symbol']` 让其他闭合性约束继续生效。
 
 ## prebuilt_cc_library
 

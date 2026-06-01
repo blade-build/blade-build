@@ -331,6 +331,42 @@ C/C++ library configuration
 
   Whether to generate a dynamic library in addition to the static library.
 
+- `check_undefined` : bool = True
+
+  Project-wide default for the [static undefined-symbol check](build_rules/cc.md#static-undefined-symbol-check).
+  When True (default), every `cc_library`'s undefined symbols are statically validated against
+  its declared `deps` immediately after the archive is built — moving "missing dep" failures
+  earlier in the build, with errors that point at the broken library instead of at the final
+  binary.
+
+  Override per-invocation with `--cc-check-undefined` / `--no-cc-check-undefined`.
+  Override per-target with `check_undefined = False` on `cc_library` (lowest setting wins —
+  a per-target `False` cannot be re-enabled from CLI or config).
+
+  Skipped automatically on the MSVC toolchain (`link.exe` LNK2019 already rejects undefined
+  externals, and `.obj` DEFAULTLIB directives resolve symbols in ways the nm model can't
+  represent).
+
+- `allow_undefined` : list = []
+
+  Project-wide regex allowlist of mangled symbol names permitted to remain undefined by the
+  `check_undefined` static check. Each entry is a Python regex matched with `re.fullmatch`
+  against the mangled name (what `nm -u` prints). System symbols (libc, libstdc++, weak
+  refs) are handled by an internal baseline; this list is for project-specific exceptions
+  (e.g. symbols injected by a code generator or supplied by a not-yet-modeled toolchain
+  feature). For a narrower per-target allowlist, set `allow_undefined = [r'pattern', …]`
+  on the `cc_library` itself.
+
+  ```python
+  cc_library_config(
+      check_undefined = True,
+      allow_undefined = [
+          r'__gcov_.*',         # gcov runtime, provided by --coverage at final link
+          r'_ZN3foo3barEv',     # known symbol injected by external codegen
+      ],
+  )
+  ```
+
 - `arflags` : list = ['rcs'] **(DEPRECATED)**
 
   Deprecated — use `deterministic` and/or `thin` instead.

@@ -519,7 +519,7 @@ class Checker:
             return '"%s"' % lib[len(self.path):]
         return '"//%s"' % lib
 
-    def _check_unused_deps(self, all_direct_hdrs: 'set[str]') -> 'set[str]':
+    def _check_unused_deps(self, all_direct_hdrs: set[str]) -> set[str]:
         """Return declared deps none of whose public headers is directly included.
 
         Exemptions:

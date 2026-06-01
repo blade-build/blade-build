@@ -103,7 +103,9 @@ Different subcommands support different options. Run `blade <subcommand> --help`
 - `-h`, `--help` - Display help information
 - `--color=yes/no/auto` - Enable/disable colored output
 - `--exclude-targets` - Comma-separated target patterns to exclude from loading
-- `--generate-dynamic` - Force generation of dynamic libraries
+- `--generate-dynamic` - Force generation of dynamic libraries (`.so` / `.dylib` / `.dll`) for every `cc_library`, even those not depended on by a `dynamic_link` executable. Useful when you want to validate shared-link closure across the project or smoke-test that every library can be loaded dynamically. Overridden per-target by `cc_library(..., generate_dynamic = False)` (the library still stays static).
+- `--cc-check-undefined` - Force-enable the [`cc_library` static undefined-symbol check](build_rules/cc.md#static-undefined-symbol-check) for this invocation, overriding [`cc_library_config.check_undefined`](config.md#cc_library_config). Per-target `check_undefined = False` still wins.
+- `--no-cc-check-undefined` - Force-disable the static undefined-symbol check for this invocation.
 - `--generate-java` - Generate Java files for proto_library and swig_library
 - `--generate-php` - Generate PHP files for proto_library and swig_library
 - `--generate-go` - Generate Go files for proto_library

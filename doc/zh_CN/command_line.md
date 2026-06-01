@@ -103,7 +103,9 @@ $ blade dump --all-tags ...
 - `-h`、`--help` —— 显示帮助信息
 - `--color=yes/no/auto` —— 启用或禁用彩色输出
 - `--exclude-targets` —— 加载阶段排除的目标模式（逗号分隔）
-- `--generate-dynamic` —— 强制生成动态库
+- `--generate-dynamic` —— 为每个 `cc_library` 强制生成动态库（`.so` / `.dylib` / `.dll`），即使该库没有被 `dynamic_link` 可执行文件依赖。用于全项目验证动态链接闭合性、或冒烟测试每个库都能动态加载。被单目标 `cc_library(..., generate_dynamic = False)` 覆盖时该库仍保持静态。
+- `--cc-check-undefined` —— 本次调用强制启用 [`cc_library` 静态未定义符号检查](build_rules/cc.md#static-undefined-symbol-check)，覆盖 [`cc_library_config.check_undefined`](config.md#cc_library_config) 的项目默认值。单目标 `check_undefined = False` 仍然胜出。
+- `--no-cc-check-undefined` —— 本次调用强制禁用静态未定义符号检查。
 - `--generate-java` —— 为 `proto_library` 和 `swig_library` 生成 Java 文件
 - `--generate-php` —— 为 `proto_library` 和 `swig_library` 生成 PHP 文件
 - `--generate-go` —— 为 `proto_library` 生成 Go 文件

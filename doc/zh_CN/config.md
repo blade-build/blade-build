@@ -341,6 +341,35 @@ Blade 支持构建多目标平台的产物，例如在 x64 Linux 下，可以通
 
 除了生成静态库之外，是否同时生成动态库。
 
+#### `check_undefined`：bool = True
+
+**[静态未定义符号检查](build_rules/cc.md#static-undefined-symbol-check)的项目级默认开关。**
+
+默认开启时，每个 `cc_library` 在归档完成后立即对其未定义符号进行静态校验，确认其声明的 `deps` 是否真的覆盖了所有用到的符号——把「缺依赖」的失败时机左移、按库报错，而不是堆到最终二进制链接才爆出。
+
+覆盖优先级：
+
+- 单次调用：`--cc-check-undefined` / `--no-cc-check-undefined`。
+- 单目标：在 `cc_library` 上设 `check_undefined = False`。**最低值胜出**——单目标 `False` 不能被 CLI 或配置重新开启。
+
+MSVC 工具链下自动跳过（`link.exe` 的 LNK2019 已经拒绝未定义外部符号；并且 `.obj` 的 DEFAULTLIB 指令解析方式 nm 模型无法表达）。
+
+#### `allow_undefined`：list = []
+
+**项目级正则白名单**：列出允许保留为未定义状态的 mangled 符号名（按 `nm -u` 的输出，用 `re.fullmatch` 匹配）。
+
+系统符号（libc、libstdc++、弱引用）由内置基线处理，本清单仅用于项目级别的例外（例如代码生成器注入的符号、或者尚未建模的工具链特性提供的符号）。若只需在某个库内放行，可在 `cc_library` 上直接设 `allow_undefined = [r'pattern', …]`。
+
+```python
+cc_library_config(
+    check_undefined = True,
+    allow_undefined = [
+        r'__gcov_.*',         # gcov 运行时，由最终链接的 --coverage 提供
+        r'_ZN3foo3barEv',     # 已知由外部 codegen 注入的符号
+    ],
+)
+```
+
 #### `deterministic`：bool = False
 
 **生成可重复构建（deterministic）的静态库。**

@@ -140,6 +140,26 @@ Attributes:
 
   Setting `generate_dynamic = True` forces the shared library to be generated unconditionally.
 
+- `check_undefined`: bool = True
+
+  Whether Blade statically validates — at archive time, before any link — that the target's declared `deps` cover every undefined symbol the library references. If a symbol is left unresolved, the check fails with an error pointing at the missing dep, instead of waiting for a final link to fail (often hundreds of targets later) with an opaque linker error.
+
+  The check uses `nm` on the target's just-built static archive and each transitive `cc_library` dep's archive, plus pre-generated symbol caches for every `#alias` system library (so e.g. consumers of `pow()` are required to actually declare `'#m'`). It runs even when `generate_dynamic = True` — it is faster than the link itself and catches the same misses earlier, per-library, with feedback that points at the specific dep instead of at the final binary.
+
+  Skipped automatically when the toolchain is MSVC (`link.exe` already rejects undefined externals via LNK2019, and MSVC's `.obj` `DEFAULTLIB` directives resolve symbols outside the source-visible graph in ways the nm model can't represent).
+
+  See [Static undefined-symbol check](#static-undefined-symbol-check) for the bigger picture; per-invocation overrides are `--cc-check-undefined` / `--no-cc-check-undefined`; the global default is [`cc_library_config.check_undefined`](../config.md#cc_library_config).
+
+- `allow_undefined`: bool | list[str] = False
+
+  Allows the target to reference symbols that no declared dep provides — i.e. the symbols will be resolved at the final link by something outside the dep graph (typical case: a plugin loaded by a host process that supplies the host's symbols).
+
+  - `False` (default) — every undefined symbol must be covered by `deps`; the static check enforces this.
+  - `True` — opt out entirely: skip the static check and pass `-Wl,--no-undefined`'s opposite (i.e. **don't** assert closure at link time either). Use this for plugin-style libraries that are loaded by an executable supplying the missing symbols.
+  - `list[str]` — a narrowed allowlist of regex patterns matched against the mangled name (what `nm -u` prints). The static check tolerates exactly the listed names while still enforcing closure for everything else.
+
+  This is per-target. A project-wide allowlist (matching the same regex semantics) lives in [`cc_library_config.allow_undefined`](../config.md#cc_library_config).
+
 - `binary_link_only`: bool = False
 
   This library can only be a depenedency of the executable targets (Such as `cc_binary` or `cc_test`), but not normal `cc_library`s. This attribute is
@@ -310,6 +330,32 @@ cc_library(
 > Tip: don't reach for `keep_deps` or `unused_deps_suppress` to silence the check until you've ruled out the structural fixes above. The patterns that look like "Blade is being annoying" are almost always actual structural smells (a private detail leaking through `hdrs`, an umbrella that doesn't re-export, a redundant transitive dep) that the check is correctly surfacing.
 
 Deps listed in [`cc_config.unused_deps_suppress`](../config.md#cc_config) as a `{target: [deps]}` map are also exempt (mainly for incrementally cleaning up an existing code base, where editing every BUILD file at once is impractical).
+
+### Static undefined-symbol check
+
+Blade's missing-deps check (above) catches header omissions. The companion **undefined-symbol check** catches the link-time complement: a `cc_library` references a symbol that no declared dep — including transitive `cc_library` deps and `#alias` system libraries — actually defines.
+
+Without this check, a missing `deps` entry surfaces only at the final binary's link step, often as a wall of `undefined reference to ...` errors that name the *binary*, not the broken library. The check moves that failure left in time: per-library, right after the archive is produced, with an error message that names the specific missing dep.
+
+How it works:
+
+- `nm -u <archive>` enumerates undefined symbols on the target's just-built `.a`.
+- `nm --defined-only` does the same for each transitive `cc_library` dep's archive.
+- Each `#alias` system library (`#m`, `#pthread`, `#dl`, …) declared in the transitive deps contributes a pre-generated symbol cache.
+- An internal baseline absorbs platform symbols (libc, libstdc++, weak refs).
+- Anything still unresolved is reported with the symbol and the target where it appears, and fails the build.
+
+**Where it runs.** On Linux and macOS. Skipped on MSVC because `link.exe` already rejects undefined externals via LNK2019, and Microsoft's `.obj` DEFAULTLIB directives resolve standard C/C++ symbols outside the source-visible `-l<name>` graph in ways the nm model can't faithfully represent. Also skipped per-target when `check_undefined = False` or `allow_undefined = True`.
+
+**When `generate_dynamic` is True.** The check still runs. The final shared link's `-Wl,--no-undefined` is the authoritative answer, but nm catches the same misses *per-library, before any link runs*, which is faster and points at the specific dep that needs to change.
+
+**Controlling the check.**
+
+- Per-target — set [`check_undefined`](#cc_library) or [`allow_undefined`](#cc_library) on the `cc_library` rule.
+- Per-invocation — `--cc-check-undefined` to force-enable, `--no-cc-check-undefined` to force-disable. These override the project default but per-target `check_undefined = False` still wins.
+- Project-wide — [`cc_library_config.check_undefined`](../config.md#cc_library_config) and the global regex allowlist [`cc_library_config.allow_undefined`](../config.md#cc_library_config).
+
+**Legitimate undefined-symbol cases.** A plugin loaded into a host process needs symbols that only the host's binary provides; setting `allow_undefined = True` opts that library out of both the static check and the link-time `--no-undefined`. For a narrower exception — say a single symbol the toolchain emits but doesn't link — use the list form `allow_undefined = [r'__some_symbol']` so the rest of the closure is still enforced.
 
 ## prebuilt_cc_library
 
