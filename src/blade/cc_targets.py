@@ -832,6 +832,15 @@ class CcTarget(Target):
         self.generate_build('ar', output, inputs=objs,
                             order_only_deps=inclusion_check_result)
         self._add_default_target_file(tc.STATIC_LIB_LABEL, output)
+        # `_static_cc_library` is gated by `if objs:` in CcLibrary.generate(),
+        # so header-only libs never reach here -- they have no objects, hence
+        # no `.a`, no `.syms`, and no undefined-symbol check. Consumers that
+        # look up STATIC_LIB_SYMS_LABEL on a header-only dep get None and
+        # naturally exclude it from their own check inputs. The guard below
+        # is a defensive belt-and-suspenders for any future call path that
+        # might land here with an empty `objs`.
+        if not objs:
+            return
         self._emit_archive_syms(output)
         self._generate_check_undefined(output, inclusion_check_result)
 
