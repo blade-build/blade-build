@@ -35,7 +35,7 @@ from blade import console
 from blade.util import mkdir_p
 
 
-_CACHE_FORMAT_VERSION = 1
+_CACHE_FORMAT_VERSION = 2  # bumped: v2 strips @VERSION from ELF symbols
 _CACHE_HEADER_LINES = 5  # version, alias, source, mtime, size
 
 
