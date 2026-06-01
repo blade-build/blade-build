@@ -15,6 +15,7 @@ This is the util module which provides command functions.
 
 import atexit
 import datetime
+import enum
 import os
 import shutil
 import sys
@@ -170,20 +171,33 @@ def log(msg):
 ##############################################################################
 
 
-# Output verbosity control, valid values:
-# verbose: verbose mode, show more details
-# normal: normal mode, show infos, warnings and errors
-# quiet: quiet mode, only show warnings and errors
-_VERBOSITIES = ('quiet', 'normal', 'verbose')
+class Verbosity(enum.IntEnum):
+    """Output verbosity, ordered low to high.
 
-_verbosity = 'normal'
+    - QUIET: only show warnings and errors
+    - NORMAL: show infos, warnings and errors
+    - VERBOSE: show more details
+    """
+    QUIET = 0
+    NORMAL = 1
+    VERBOSE = 2
+
+
+_verbosity = Verbosity.NORMAL
+
+
+def _to_verbosity(value):
+    """Coerce a Verbosity or a case-insensitive name to a Verbosity."""
+    if isinstance(value, Verbosity):
+        return value
+    return Verbosity[value.upper()]
 
 
 def set_verbosity(value):
-    """Set the global verbosity."""
+    """Set the global verbosity. Accepts a Verbosity or a string name
+    ('quiet' / 'normal' / 'verbose', case-insensitive)."""
     global _verbosity
-    assert value in _VERBOSITIES
-    _verbosity = value
+    _verbosity = _to_verbosity(value)
 
 
 def get_verbosity():
@@ -191,20 +205,20 @@ def get_verbosity():
 
 
 def verbosity_compare(lhs, rhs):
-    """Return -1, 0, 1 according to their order"""
-    a = _VERBOSITIES.index(lhs)
-    b = _VERBOSITIES.index(rhs)
+    """Return -1, 0, 1 according to their order."""
+    a = _to_verbosity(lhs)
+    b = _to_verbosity(rhs)
     return (a > b) - (a < b)
 
 
 def verbosity_le(expected):
-    """Current verbosity less than or equal to expected"""
-    return verbosity_compare(_verbosity, expected) <= 0
+    """Current verbosity less than or equal to expected."""
+    return _verbosity <= _to_verbosity(expected)
 
 
 def verbosity_ge(expected):
-    """Current verbosity greater than or equal to expected"""
-    return verbosity_compare(_verbosity, expected) >= 0
+    """Current verbosity greater than or equal to expected."""
+    return _verbosity >= _to_verbosity(expected)
 
 
 ##############################################################################

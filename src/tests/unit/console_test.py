@@ -371,5 +371,67 @@ class LogFileLifecycleTest(_ConsoleStateMixin, unittest.TestCase):
                 'the atexit callable must close the current log file')
 
 
+class VerbosityTest(unittest.TestCase):
+    """The verbosity ladder used to be a tuple + ``.index()`` lookup; it's now an
+    ``IntEnum``. Pin down: the ordering, that the public API still accepts string
+    names (the CLI parses ``--verbose`` / ``--quiet`` into raw strings), and that
+    the comparison helpers behave under every (string, enum) input pairing.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._saved_verbosity = console._verbosity
+
+    def tearDown(self):
+        console._verbosity = self._saved_verbosity
+        super().tearDown()
+
+    def test_enum_order_is_quiet_normal_verbose(self):
+        # The semantics of verbosity_le / verbosity_ge depend on this ordering.
+        self.assertLess(console.Verbosity.QUIET, console.Verbosity.NORMAL)
+        self.assertLess(console.Verbosity.NORMAL, console.Verbosity.VERBOSE)
+
+    def test_set_verbosity_accepts_string_name(self):
+        # CLI gives us a raw string; we must accept it.
+        console.set_verbosity('quiet')
+        self.assertEqual(console.get_verbosity(), console.Verbosity.QUIET)
+        console.set_verbosity('NORMAL')         # case-insensitive
+        self.assertEqual(console.get_verbosity(), console.Verbosity.NORMAL)
+
+    def test_set_verbosity_accepts_enum_directly(self):
+        # Internal callers can skip the string round-trip.
+        console.set_verbosity(console.Verbosity.VERBOSE)
+        self.assertEqual(console.get_verbosity(), console.Verbosity.VERBOSE)
+
+    def test_set_verbosity_rejects_unknown_name(self):
+        # Bad input fails loud, not silent. The exact exception type is less
+        # important than the fact that something is raised.
+        with self.assertRaises((KeyError, ValueError)):
+            console.set_verbosity('shouting')
+
+    def test_verbosity_le_and_ge(self):
+        console.set_verbosity('normal')
+        self.assertTrue(console.verbosity_le('normal'))
+        self.assertTrue(console.verbosity_le('verbose'))   # normal <= verbose
+        self.assertFalse(console.verbosity_le('quiet'))    # normal > quiet
+        self.assertTrue(console.verbosity_ge('normal'))
+        self.assertTrue(console.verbosity_ge('quiet'))     # normal >= quiet
+        self.assertFalse(console.verbosity_ge('verbose'))  # normal < verbose
+
+    def test_verbosity_compare_returns_minus_one_zero_one(self):
+        # The signature predates the refactor; preserve it so callers like
+        # ninja_runner.py keep working.
+        self.assertEqual(console.verbosity_compare('quiet', 'verbose'), -1)
+        self.assertEqual(console.verbosity_compare('normal', 'normal'), 0)
+        self.assertEqual(console.verbosity_compare('verbose', 'quiet'), 1)
+
+    def test_compare_accepts_mixed_string_and_enum(self):
+        # The coercion layer must handle either form on either side.
+        self.assertEqual(
+            console.verbosity_compare('quiet', console.Verbosity.VERBOSE), -1)
+        self.assertEqual(
+            console.verbosity_compare(console.Verbosity.VERBOSE, 'quiet'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
