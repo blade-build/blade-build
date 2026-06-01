@@ -696,17 +696,40 @@ class _NinjaFileHeaderGenerator:
                            description='CC INCLUSION CHECK ${in}')
 
     def _generate_cc_check_undefined_rule(self):
-        # Static dep-completeness check via nm. See builtin_tools.generate_cc_check_undefined
-        # and issue #1225. ${in} is the target archive followed by the
-        # transitive cc_library dep archives (first is the target). ${out}
-        # is the .unchk.result marker. ${allow_file} and ${target_label} are
-        # supplied per-target by CcLibrary._generate_check_undefined.
-        self.generate_rule(name='ccchkund',
+        # Two cooperating rules implement the static dep-completeness check
+        # (issue #1225) and keep its total nm work linear in the dep graph,
+        # not quadratic:
+        #
+        # 1. ``ccsyms`` runs ``nm`` on a single archive once and emits a
+        #    sidecar ``<archive>.syms`` file with two sections (#U undefined
+        #    externals, #D defined externals). One node per archive, ninja
+        #    fans them out alongside the corresponding ``ar`` rules. Each
+        #    archive is nm'd exactly once per build regardless of how many
+        #    cc_libraries depend on it.
+        # 2. ``ccchkund`` consumes the ``.syms`` files (target's own + each
+        #    transitive dep's + the system-symbols caches) and decides if
+        #    the target's undefined set is closed. Pure file reads and set
+        #    arithmetic; no ``nm`` at check time.
+        #
+        # Previously this was a single ``ccchkund`` rule that took raw
+        # ``.a`` archives and re-ran ``nm`` on every dep for every target's
+        # check, making the total cost O(targets × deps) and scaling badly
+        # on diamond-shaped dep graphs.
+        self.generate_rule(name='ccsyms',
                            command=self._builtin_command(
-                               'cc_check_undefined',
-                               '--allow-file=${allow_file} '
-                               '--target-label=${target_label} ${out} ${in}'),
-                           description='CC CHECK UNDEFINED ${target_label}')
+                               'cc_emit_syms', '${out} ${in}'),
+                           description='CC SYMS ${in}')
+        # Single batch rule: ``${in}`` is the manifest JSON (built by
+        # BuildManager after all cc_libraries have generated), ``${out}``
+        # is the project-wide stamp file. The ``.syms`` files referenced
+        # by the manifest are pulled in as implicit deps by the rule the
+        # batch emitter registers (each .syms is also an explicit input
+        # there, so ninja still re-runs the batch when any archive's
+        # symbol set changes).
+        self.generate_rule(name='ccchkund_batch',
+                           command=self._builtin_command(
+                               'cc_check_undefined_batch', '${out} ${in}'),
+                           description='CC CHECK UNDEFINED [batch]')
 
     def _generate_cc_ar_rules(self):
         cc_lib = config.get_section('cc_library_config')
@@ -1363,8 +1386,80 @@ class NinjaFileGenerator:
             self.blade)
         code = ninja_script_header_generator.generate()
         code += self.blade.generate_targets_build_code()
+        # cc_library targets have accumulated their undefined-symbol check
+        # specs on the BuildManager; emit the single ``ccchkund_batch``
+        # ninja rule now that all targets are generated and the spec list
+        # is complete.
+        code += self._emit_cc_check_undefined_batch()
         self.__all_rule_names = ninja_script_header_generator.get_all_rule_names()
         return code
+
+    def _emit_cc_check_undefined_batch(self):
+        """Emit the project-wide ``ccchkund_batch`` ninja rule + write the
+        manifest JSON for it. Returns the ninja-file fragment to append.
+
+        Two regen modes:
+          * **Fresh** -- at least one cc_library went through ``generate()``
+            this run and registered a spec. Write the manifest from the
+            current spec list (write-if-changed), then emit the directive.
+          * **Cached** -- every cc_library's sub-ninja was reused, so no
+            specs were registered this run, but a manifest from the
+            previous run exists on disk. Re-emit the directive against
+            that manifest so the main ``build.ninja`` regen stays
+            idempotent.
+
+        Returns an empty list when there is genuinely nothing to check
+        (no registered specs *and* no manifest from a prior run -- MSVC
+        toolchain, or every lib opted out via ``check_undefined = False``
+        / ``allow_undefined = True``).
+        """
+        import json  # pylint: disable=import-outside-toplevel
+        manifest_dir = os.path.join(self.build_dir, '.cache')
+        manifest_path = os.path.join(manifest_dir, 'cc_check_undefined.manifest.json')
+        stamp_path = os.path.join(manifest_dir, 'cc_check_undefined.stamp')
+        specs = self.blade.cc_check_undefined_specs()
+        if specs:
+            os.makedirs(manifest_dir, exist_ok=True)
+            # Stable ordering so the manifest is byte-stable across
+            # rebuilds (deterministic ninja inputs => no spurious re-runs).
+            specs = sorted(specs, key=lambda s: s['target_label'])
+            new_payload = json.dumps(specs, indent=2, sort_keys=True)
+            old_payload = None
+            if os.path.exists(manifest_path):
+                with open(manifest_path, encoding='utf-8') as f:
+                    old_payload = f.read()
+            if old_payload != new_payload:
+                with open(manifest_path, 'w', encoding='utf-8') as f:
+                    f.write(new_payload)
+        elif os.path.exists(manifest_path):
+            with open(manifest_path, encoding='utf-8') as f:
+                specs = json.load(f)
+        else:
+            return []
+        # Gather every distinct .syms / .allow path so ninja can re-run
+        # the batch precisely when any input changes.
+        syms = set()
+        allow_files = set()
+        for spec in specs:
+            syms.add(spec['target_syms'])
+            syms.update(spec['dep_syms'])
+            syms.update(spec['sys_caches'])
+            allow_files.add(spec['allow_file'])
+        # Emit a single ninja `build` directive. inputs[0] = manifest;
+        # the .syms files are the data inputs (any change triggers a
+        # re-run); the .allow files are implicit deps (regex allowlists).
+        inputs = ' '.join([manifest_path] + sorted(syms))
+        implicit = ' '.join(sorted(allow_files))
+        # Don't emit a `default` declaration -- ninja already builds every
+        # "leaf" target when no default is declared, so the stamp gets
+        # picked up. Adding a default would *override* ninja's leaf
+        # auto-discovery and limit `ninja` (no args) to just this one
+        # target, breaking the "blade build //some:target" path that
+        # relies on every produced output being reachable.
+        return [
+            '\n# Project-wide cc_check_undefined batch (see builtin_tools.py)\n',
+            'build %s: ccchkund_batch %s | %s\n' % (stamp_path, inputs, implicit),
+        ]
 
     def generate_build_script(self):
         """Generate build script for underlying build system."""
