@@ -204,21 +204,9 @@ def get_verbosity():
     return _verbosity
 
 
-def verbosity_compare(lhs, rhs):
-    """Return -1, 0, 1 according to their order."""
-    a = _to_verbosity(lhs)
-    b = _to_verbosity(rhs)
-    return (a > b) - (a < b)
-
-
-def verbosity_le(expected):
-    """Current verbosity less than or equal to expected."""
-    return _verbosity <= _to_verbosity(expected)
-
-
-def verbosity_ge(expected):
-    """Current verbosity greater than or equal to expected."""
-    return _verbosity >= _to_verbosity(expected)
+def is_quiet():
+    """True iff the current verbosity is QUIET (only warnings and errors)."""
+    return _verbosity == Verbosity.QUIET
 
 
 ##############################################################################
@@ -350,8 +338,9 @@ def _do_print(msg, file=sys.stdout):
         print(msg, file=file)
 
 
-def _print(msg, verbosity):
-    if verbosity_ge(verbosity):
+def _print(msg, min_verbosity):
+    """Print msg only when the current verbosity is at least ``min_verbosity``."""
+    if _verbosity >= min_verbosity:
         _do_print(msg)
 
 
@@ -401,7 +390,7 @@ def notice(msg, prefix=True):
     if prefix:
         msg = 'Blade(notice): ' + msg
     log(msg)
-    _print(colored(msg, 'blue'), 'quiet')
+    _print(colored(msg, 'blue'), Verbosity.QUIET)
 
 
 def info(msg, prefix=True):
@@ -409,7 +398,7 @@ def info(msg, prefix=True):
     if prefix:
         msg = 'Blade(info): ' + msg
     log(msg)
-    _print(colored(msg, 'cyan'), 'normal')
+    _print(colored(msg, 'cyan'), Verbosity.NORMAL)
 
 
 def debug(msg, prefix=True):
@@ -417,7 +406,7 @@ def debug(msg, prefix=True):
     if prefix:
         msg = 'Blade(debug): ' + msg
     log(msg)
-    _print(msg, 'verbose')
+    _print(msg, Verbosity.VERBOSE)
 
 
 def diagnose(source_location, severity, message):

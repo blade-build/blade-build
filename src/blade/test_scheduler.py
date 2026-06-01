@@ -163,7 +163,7 @@ class TestScheduler:
 
     def _show_progress(self, cmd):
         console.info(f'{self._progress()} Start {cmd}')
-        if console.verbosity_le('quiet'):
+        if console.is_quiet():
             console.show_progress_bar(self.num_of_finished_tests, len(self.tests_list))
 
     def _run_job_redirect(self, job, job_thread):
@@ -187,7 +187,7 @@ class TestScheduler:
         stdout = p.communicate()[0]
         result = self._get_result(p.returncode)
         msg = f'Output of //{test_name}:\n{stdout}{self._progress(done=1)} Test //{test_name} finished: {result}\n'
-        if console.verbosity_le('quiet') and p.returncode != 0:
+        if console.is_quiet() and p.returncode != 0:
             console.error(msg, prefix=False)
         else:
             console.info(msg)
@@ -296,7 +296,7 @@ class TestScheduler:
             else:
                 self.job_queue.put(i)
 
-        quiet = console.verbosity_le('quiet')
+        quiet = console.is_quiet()
 
         num_of_workers = self._get_workers_num()
         if not self.job_queue.empty():

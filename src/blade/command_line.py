@@ -387,10 +387,12 @@ class CommandLineParser:
                 action='store_false',
                 help='Do not load BLADE_ROOT.local')
             parser.add_argument(
-                '--verbose', dest='verbosity', action='store_const', const='verbose',
-                default='normal', help='Show all details')
+                '--verbose', dest='verbosity', action='store_const',
+                const=console.Verbosity.VERBOSE,
+                default=console.Verbosity.NORMAL, help='Show all details')
             parser.add_argument(
-                '--quiet', dest='verbosity', action='store_const', const='quiet',
+                '--quiet', dest='verbosity', action='store_const',
+                const=console.Verbosity.QUIET,
                 help='Only show warnings and errors')
             parser.add_argument(
                 '--exclude-targets', dest='exclude_targets', type=str, default='',

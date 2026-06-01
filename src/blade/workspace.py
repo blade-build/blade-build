@@ -100,7 +100,7 @@ class Workspace:
         if self.__root_dir != self.__working_dir:
             # This message is required by vim quickfix mode if pwd is changed during
             # the building, DO NOT change the pattern of this message.
-            if self.__options.verbosity != 'quiet':
+            if self.__options.verbosity > console.Verbosity.QUIET:
                 print("Blade: Entering directory `%s'" % self.__root_dir)
             os.chdir(self.__root_dir)
 

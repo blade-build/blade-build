@@ -24,7 +24,7 @@ def build(build_dir, build_script, jobs_num, targets, options):
     cmd.append('-j%s' % jobs_num)
     if options.keep_going:
         cmd.append('-k0')
-    if console.verbosity_compare(options.verbosity, 'verbose') >= 0:
+    if options.verbosity >= console.Verbosity.VERBOSE:
         cmd.append('-v')
     if targets:
         cmd.append(targets)
@@ -58,7 +58,7 @@ def _build_options(options):
 def _run_ninja_build(cmd, options):
     """Run the "ninja" program with interactive."""
     cmdstr = ' '.join(cmd)
-    if console.verbosity_compare(options.verbosity, 'quiet') > 0:
+    if options.verbosity > console.Verbosity.QUIET:
         return _run_ninja_command(cmdstr)
     # In quiet mode, redirect ninja output to the file
     ninja_output = 'blade-bin/ninja_output.log'
