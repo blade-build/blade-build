@@ -832,6 +832,71 @@ class CcTarget(Target):
         self.generate_build('ar', output, inputs=objs,
                             order_only_deps=inclusion_check_result)
         self._add_default_target_file(tc.STATIC_LIB_LABEL, output)
+        self._generate_check_undefined(output, inclusion_check_result)
+
+    def _generate_check_undefined(self, static_lib, inclusion_check_result):
+        """Emit the nm-based dep-completeness check rule for this cc_library.
+
+        Skipped only when check_undefined is False (per target / CLI / config).
+        Keeps running when generate_dynamic is True as an early, cheaper
+        cross-check — the dynamic link's `-Wl,--no-undefined` is the final
+        word, but nm catches the same misses per-library, before any link
+        runs, with faster feedback. See issue #1225.
+        """
+        if not self.attr.get('check_undefined', True):
+            return None
+        targets = self.blade.get_build_targets()
+        tc = self.blade.get_build_toolchain()
+        # Collect transitive cc_library static archives. expanded_deps is
+        # already the transitive closure. Skip system libs (path == '#') and
+        # anything that didn't produce a static archive (header-only libs).
+        dep_archives = []
+        assert self.expanded_deps is not None, 'expanded_deps not expanded'
+        for key in self.expanded_deps:
+            dep = targets[key]
+            if dep.path == '#':
+                continue
+            lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
+            if lib:
+                dep_archives.append(lib)
+        # Materialize the per-target + global allow_undefined patterns into a
+        # sidecar file so they survive shell quoting and ninja's variable
+        # substitution intact.
+        patterns = []
+        target_allow = self.attr.get('allow_undefined')
+        if isinstance(target_allow, list):
+            patterns.extend(target_allow)
+        global_allow = config.get_item('cc_library_config', 'allow_undefined')
+        if isinstance(global_allow, (list, tuple, set)):
+            patterns.extend(global_allow)
+        allow_file = static_lib + '.allow'
+        # Written at generate time. blade runs with CWD == workspace root, so
+        # the relative path resolves correctly both here and in the ninja rule.
+        mkdir_p(os.path.dirname(allow_file))
+        with open(allow_file, 'w', encoding='utf-8') as f:
+            for p in patterns:
+                f.write(p)
+                f.write('\n')
+        result_file = static_lib + '.unchk.result'
+        order_only = []
+        if inclusion_check_result:
+            order_only.append(inclusion_check_result)
+        # static_lib must come first in `inputs`; the builtin tool reads
+        # args[0] as the target archive and args[1:] as deps.
+        self.generate_build(
+            'ccchkund',
+            outputs=result_file,
+            inputs=[static_lib] + dep_archives,
+            implicit_deps=[allow_file],
+            order_only_deps=order_only,
+            variables={
+                'allow_file': allow_file,
+                'target_label': '%s:%s' % (self.path, self.name),
+            })
+        # Tag with a label so downstream consumers (e.g. cc_binary linking
+        # this lib) can pull the check result into their order-only dep set.
+        self._add_target_file('unchk.result', result_file)
+        return result_file
 
     def _dynamic_cc_library(self, objs, inclusion_check_result):
         tc = self.blade.get_build_toolchain()

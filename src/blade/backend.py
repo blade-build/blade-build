@@ -441,6 +441,7 @@ class _NinjaFileHeaderGenerator:
             cppflags, linkflags = self._get_intrinsic_cc_flags()
             self._generate_cc_compile_rules(cc, cxx, cppflags)
             self._generate_cc_inclusion_check_rule()
+            self._generate_cc_check_undefined_rule()
             self._generate_cc_ar_rules()
             self._generate_cc_link_rules(ld, linkflags)
             self.generate_rule(name='strip',
@@ -453,6 +454,7 @@ class _NinjaFileHeaderGenerator:
         self._generate_windows_cc_vars()
         self._generate_windows_cc_compile_rules(cc, cxx)
         self._generate_cc_inclusion_check_rule()
+        self._generate_cc_check_undefined_rule()
         self._generate_windows_ar_rules()
         self._generate_windows_link_rules()
 
@@ -692,6 +694,19 @@ class _NinjaFileHeaderGenerator:
         self.generate_rule(name='ccincchk',
                            command=self._builtin_command('cc_inclusion_check'),
                            description='CC INCLUSION CHECK ${in}')
+
+    def _generate_cc_check_undefined_rule(self):
+        # Static dep-completeness check via nm. See builtin_tools.generate_cc_check_undefined
+        # and issue #1225. ${in} is the target archive followed by the
+        # transitive cc_library dep archives (first is the target). ${out}
+        # is the .unchk.result marker. ${allow_file} and ${target_label} are
+        # supplied per-target by CcLibrary._generate_check_undefined.
+        self.generate_rule(name='ccchkund',
+                           command=self._builtin_command(
+                               'cc_check_undefined',
+                               '--allow-file=${allow_file} '
+                               '--target-label=${target_label} ${out} ${in}'),
+                           description='CC CHECK UNDEFINED ${target_label}')
 
     def _generate_cc_ar_rules(self):
         cc_lib = config.get_section('cc_library_config')
