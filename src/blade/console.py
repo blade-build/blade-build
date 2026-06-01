@@ -13,10 +13,12 @@ This is the util module which provides command functions.
 """
 
 
+import atexit
 import datetime
 import os
-import subprocess
+import shutil
 import sys
+import threading
 import time
 from typing import TYPE_CHECKING
 
@@ -33,8 +35,9 @@ def _windows_console_support_ansi_color():
     from ctypes import byref, windll, wintypes
     ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
     INVALID_HANDLE_VALUE = -1
+    STD_OUTPUT_HANDLE = -11  # Win32 GetStdHandle id; defined locally so we don't depend on subprocess internals.
 
-    handle = windll.kernel32.GetStdHandle(subprocess.STD_OUTPUT_HANDLE)
+    handle = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
     if handle == INVALID_HANDLE_VALUE:
         return False
 
@@ -57,8 +60,23 @@ def _console_support_ansi_color():
     return sys.stdout.isatty() and os.environ.get('TERM') not in ('emacs', 'dumb')
 
 
+def _console_support_cursor_control():
+    """Whether the stream that carries the progress bar can interpret \\r and cursor escapes."""
+    if os.name == 'nt':
+        # On Windows, VTP gates both color and cursor escapes; if it's off, neither works.
+        return _windows_console_support_ansi_color() and sys.stderr.isatty()
+    return sys.stderr.isatty() and os.environ.get('TERM') not in ('emacs', 'dumb', '')
+
+
 # Global color enabled or not
 _color_enabled = _console_support_ansi_color()
+
+# Whether the terminal supports cursor control (\r, \033[K, ...).
+# Conceptually independent from color support, even if they coincide on most terminals.
+_cursor_control = _console_support_cursor_control()
+
+# Serializes writes to stdout/stderr so the progress bar and messages don't interleave.
+_print_lock = threading.Lock()
 
 # See http://en.wikipedia.org/wiki/ANSI_escape_code
 # colors
@@ -77,8 +95,17 @@ _COLORS = {
     'end': '\033[0m',
 }
 
-# cursor movement
-_CLEAR_LINE = '\033[2K'
+# Clears from the cursor to end of line. Always emit \r first so the cursor is at
+# column 0 and the whole visible line is wiped, including any tail left by a
+# previous, longer frame (e.g. "99/100 99%" -> "1/100 1%").
+_CLEAR_TO_EOL = '\033[K'
+
+# Cursor visibility. Hide while the progress bar owns the last line so the
+# blinking block at the end of the bar doesn't sit there looking sloppy.
+# The matching show MUST run no matter how the process exits — see the atexit
+# and signal hooks at the bottom of this section.
+_HIDE_CURSOR = '\033[?25l'
+_SHOW_CURSOR = '\033[?25h'
 
 
 def color_enabled():
@@ -116,7 +143,13 @@ _log = None
 def set_log_file(log_file):
     """Set the global log file."""
     global _log
-    _log = open(log_file, 'w', 1)  # kept open for process lifetime
+    if _log is not None:
+        # Close any previously opened log to avoid leaking the file descriptor.
+        _log.close()
+    _log = open(log_file, 'w', 1)
+    # Make sure the tail of the log is flushed and the fd released even when the
+    # process exits abnormally (uncaught exception, sys.exit, etc.).
+    atexit.register(_log.close)
 
 
 def get_log_file():
@@ -178,53 +211,125 @@ def verbosity_ge(expected):
 # Progress bar
 ##############################################################################
 
-# Fit with the 80 columns terminal, leave some spaces for other parts such as the numbers.
-_PROGRESS_BAR_WIDTH = 60
-_PROGRESS_REFRESH_INTERVAL = 1 if sys.stdout.isatty() else 3
+# Sane bounds for the bar's filled-area width. Narrow terminals would otherwise
+# get a wrap-around (which kills cursor-based redraw); very wide terminals would
+# get a uselessly stretched bar.
+_MIN_PROGRESS_BAR_WIDTH = 10
+_MAX_PROGRESS_BAR_WIDTH = 60
+# Throttle progress bar refresh. Short enough that the bar feels alive; long enough
+# to avoid flooding the terminal when actions complete in bursts.
+_PROGRESS_REFRESH_INTERVAL = 0.2
 
-# TODO(chen3feng): Add lock
 _need_clear_line = False  # Whether the last output is progress bar
 _last_progress_value = -1  # The last progress bar value, -1 means none
 _last_progress_time = 0
+_cursor_hidden = False  # Whether we've emitted _HIDE_CURSOR and still owe a _SHOW_CURSOR.
+
+
+def _compute_progress_bar_width(total):
+    """Pick a bar width that fits the current terminal, bounded by [MIN, MAX]."""
+    cols = shutil.get_terminal_size((80, 24)).columns
+    # Layout: "[<bar>] <current>/<total> <p>%". len(current) <= len(total) and
+    # p ranges 0..100 (<=3 chars). Non-bar chars = 5 fixed + 2*len(total) + 3 = 8 + 2*len(total).
+    # Add 1 column of margin so the line stays strictly under `cols`; hitting the
+    # right edge would auto-wrap and break the single-line \r redraw.
+    overhead = 9 + 2 * len(str(total))
+    return max(_MIN_PROGRESS_BAR_WIDTH, min(_MAX_PROGRESS_BAR_WIDTH, cols - overhead - 1))
 
 
 def _progress_bar(progress, current, total):
     """Progress bar drawing text, like this:
     [===========================================================----] 46/50 92%
     """
-    width = progress * _PROGRESS_BAR_WIDTH // 100
-    return '[{}{}] {}/{} {:g}%'.format('=' * width, '-' * (_PROGRESS_BAR_WIDTH - width),
+    bar_width = _compute_progress_bar_width(total)
+    filled = progress * bar_width // 100
+    return '[{}{}] {}/{} {:g}%'.format('=' * filled, '-' * (bar_width - filled),
                                   current, total, progress)
 
 
-def _need_refresh_pgogress_bar(progress, current, now):
-    return (now - _last_progress_time >= _PROGRESS_REFRESH_INTERVAL and
-            _last_progress_value != current)
+def _need_refresh_progress_bar(current, total, now):
+    if _last_progress_value == current:
+        return False
+    if current == total:
+        # Always paint the final 100% frame, even if it would otherwise be throttled away.
+        return True
+    return now - _last_progress_time >= _PROGRESS_REFRESH_INTERVAL
+
+
+def _hide_cursor_locked():
+    """Emit _HIDE_CURSOR exactly once per hide/show cycle. Caller holds _print_lock."""
+    global _cursor_hidden
+    if not _cursor_hidden:
+        sys.stderr.write(_HIDE_CURSOR)
+        _cursor_hidden = True
+
+
+def _show_cursor_locked():
+    """Reverse a prior _hide_cursor_locked. Caller holds _print_lock."""
+    global _cursor_hidden
+    if _cursor_hidden:
+        sys.stderr.write(_SHOW_CURSOR)
+        _cursor_hidden = False
 
 
 def show_progress_bar(current, total):
     global _need_clear_line, _last_progress_value, _last_progress_time
+    if total <= 0 or not _cursor_control:
+        # No real terminal -> don't dump repeated bar lines into a log file or pipe.
+        return
     progress = current * 100 // total
     now = time.time()
-    if _need_refresh_pgogress_bar(progress, current, now):
-        line = _progress_bar(progress, current, total)
-        line += '\r' if _color_enabled else '\n'
-        print(line, end='')
-        sys.stdout.flush()
+    with _print_lock:
+        if not _need_refresh_progress_bar(current, total, now):
+            return
+        _hide_cursor_locked()
+        sys.stderr.write('\r' + _progress_bar(progress, current, total) + _CLEAR_TO_EOL)
+        sys.stderr.flush()
         _last_progress_value = current
         _last_progress_time = now
         _need_clear_line = True
 
 
-def clear_progress_bar():
+def _clear_progress_bar_locked():
+    """Erase the progress bar in place. Caller must hold _print_lock."""
     global _need_clear_line, _last_progress_value, _last_progress_time
-    if _need_clear_line:
-        if _color_enabled:
-            print(_CLEAR_LINE, end='')
-        _need_clear_line = False
-        _last_progress_value = -1
-        _last_progress_time = 0
-        sys.stdout.flush()
+    if _need_clear_line and _cursor_control:
+        sys.stderr.write('\r' + _CLEAR_TO_EOL)
+    # Hand the cursor back to the foreground stream before any non-progress
+    # output appears, otherwise a normal printed message would land where the
+    # cursor is invisible.
+    _show_cursor_locked()
+    if _need_clear_line and _cursor_control:
+        sys.stderr.flush()
+    _need_clear_line = False
+    _last_progress_value = -1
+    _last_progress_time = 0
+
+
+def clear_progress_bar():
+    with _print_lock:
+        _clear_progress_bar_locked()
+
+
+def _restore_cursor_at_exit():
+    """Ensure the cursor is visible no matter how the process exits.
+
+    atexit covers normal exit, sys.exit, and exceptions propagating to the
+    top of the stack (including KeyboardInterrupt from Ctrl+C). Without this
+    hook, an interrupted Blade build would leave the user's terminal with no
+    visible cursor until they ran ``reset`` or ``stty echo``.
+    """
+    if _cursor_hidden:
+        try:
+            sys.stderr.write(_SHOW_CURSOR)
+            sys.stderr.flush()
+        except (OSError, ValueError):
+            # stderr may already be closed during interpreter shutdown.
+            pass
+
+
+if _cursor_control:
+    atexit.register(_restore_cursor_at_exit)
 
 
 ##############################################################################
@@ -233,8 +338,11 @@ def clear_progress_bar():
 
 
 def _do_print(msg, file=sys.stdout):
-    clear_progress_bar()
-    print(msg, file=file)
+    # Hold the lock across "clear" and "print" so the progress refresh path can't
+    # squeeze a redraw between them and split the message.
+    with _print_lock:
+        _clear_progress_bar_locked()
+        print(msg, file=file)
 
 
 def _print(msg, verbosity):
