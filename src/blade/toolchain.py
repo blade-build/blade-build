@@ -186,13 +186,18 @@ class ToolChain:
     @property
     def target_arch(self) -> str:
         """Target CPU architecture, e.g. ``'x86_64'`` or ``'aarch64'``."""
+        cached = getattr(self, '_cached_target_arch', None)
+        if cached is not None:
+            return cached
         import re
         triple = self.get_cc_target_arch()
+        result = ''
         if triple:
             m = re.match(r'^([^-]+)', triple)
             if m:
-                return BuildArchitecture.get_canonical_architecture(m.group(1)) or m.group(1)
-        return ''
+                result = BuildArchitecture.get_canonical_architecture(m.group(1)) or m.group(1)
+        self._cached_target_arch = result
+        return result
 
     def tool(self, key):
         """Return tool path for *key*, or ``None`` if not available.
@@ -240,15 +245,24 @@ class ToolChain:
             return 'gcc'
         return 'unknown'
 
-    @staticmethod
-    def get_cc_target_arch():
-        """Get the cc target architecture (auto-detect from system compiler)."""
+    _cc_target_arch_cache = None
+
+    @classmethod
+    def get_cc_target_arch(cls):
+        """Get the cc target architecture (auto-detect from system compiler).
+
+        The result is cached at the class level — ``gcc -dumpmachine`` is
+        invariant for the lifetime of the process and forking the compiler
+        per call was the dominant cost during BUILD-file loading.
+        """
+        if cls._cc_target_arch_cache is not None:
+            return cls._cc_target_arch_cache
         import shutil
         cc = shutil.which('gcc') or 'gcc'
         returncode, stdout, stderr = run_command([cc, '-dumpmachine'])
-        if returncode == 0:
-            return stdout.strip()
-        return ''
+        result = stdout.strip() if returncode == 0 else ''
+        cls._cc_target_arch_cache = result
+        return result
 
     def get_cc_commands(self):
         return self.cc, self.cxx, self.ld
