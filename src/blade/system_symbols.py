@@ -35,7 +35,7 @@ from blade import console
 from blade.util import mkdir_p
 
 
-_CACHE_FORMAT_VERSION = 4  # bumped: v4 accepts lowercase types (IFUNC etc.)
+_CACHE_FORMAT_VERSION = 5  # bumped: v5 keeps weak-defined V/W (typeinfo, vtables)
 _CACHE_HEADER_LINES = 5  # version, alias, source, mtime, size
 
 
@@ -298,13 +298,16 @@ def _nm_defined_externals(lib_path):
             if len(parts) < 2:
                 continue
             name, ty = parts[0], parts[1]
-            # Defined external: anything except U / W (undefined /
-            # weak-undefined). `nm -g` / `--extern-only` already filtered
-            # out non-globals, so case here distinguishes export visibility
-            # variants (e.g. uppercase T vs lowercase t, or i / I for IFUNC),
-            # not local vs global -- both forms still resolve at link time
-            # and both should land in the baseline.
-            if ty in ('U', 'u', 'W', 'w', 'V', 'v'):
+            # Skip undefined references only. Per nm(1):
+            #   U  — undefined
+            #   w  — weak undefined  (uppercase W is weak DEFINED, keep)
+            #   v  — weak undefined object  (uppercase V is weak DEFINED, keep)
+            # Everything else is some flavor of defined: T/t text, D/d data,
+            # B/b bss, R/r rodata, A absolute, N debug, C common, S/s
+            # section, V/W weak defined, i/I IFUNC, u unique global. With
+            # nm -g / --extern-only already filtering to globals, both case
+            # variants are link-time-resolvable and belong in the baseline.
+            if ty in ('U', 'w', 'v'):
                 continue
             # ELF symbol versioning: nm prints `foo@@GLIBCXX_3.4.21` for
             # the default version, `foo@GLIBCXX_3.4.21` for non-default.
