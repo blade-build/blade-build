@@ -37,6 +37,34 @@ from blade.util import (cpu_count, md5sum_file)
 instance = None
 
 
+def _log_system_symbol_resolution(alias, cache):
+    """Emit a one-line diagnostic per resolved alias.
+
+    Failing aliases land as warnings (silent baseline gaps look like false-
+    positive undefined symbols later); successful ones land as info with
+    the symbol count and source library path so CI logs make it easy to
+    spot when ``cc -print-file-name`` resolved a library to the wrong file.
+    """
+    if cache is None:
+        console.warning(
+            'system_symbols: could not resolve "%s" -- check rule will treat '
+            'its symbols as undefined' % alias)
+        return
+    n = 0
+    src = '?'
+    try:
+        with open(cache, encoding='utf-8') as f:
+            for line in f:
+                if line.startswith('# source: '):
+                    src = line[len('# source: '):].rstrip()
+                elif line.strip() and not line.startswith('#'):
+                    n += 1
+    except OSError:
+        pass
+    console.info('system_symbols: %s -> %s (%d symbols from %s)'
+                 % (alias, cache, n, src))
+
+
 # Start of fingerprint line in each per-target ninja file
 _NINJA_FILE_FINGERPRINT_START = '#Fingerprint='
 
@@ -206,20 +234,9 @@ class Blade:
         self._system_symbol_default_aliases = tuple(tc.default_linked_libs)
         # Surface the resolution result for diagnosability: missing aliases
         # become silent baseline gaps that look like false-positive undefined
-        # symbols at check time. Logging at info level keeps it visible in
-        # CI without spamming interactive runs.
+        # symbols at check time.
         for alias, cache in resolved.items():
-            if cache is None:
-                console.warning(
-                    'system_symbols: could not resolve "%s" -- check rule will treat '
-                    'its symbols as undefined' % alias)
-            else:
-                try:
-                    n = sum(1 for line in open(cache, encoding='utf-8')
-                            if line.strip() and not line.startswith('#'))
-                except OSError:
-                    n = -1
-                console.info('system_symbols: %s -> %s (%d symbols)' % (alias, cache, n))
+            _log_system_symbol_resolution(alias, cache)
 
     def get_system_symbol_cache(self, alias):
         """Return the cache file path for system library ``alias``, or None
