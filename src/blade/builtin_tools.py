@@ -173,6 +173,10 @@ _CHECK_UNDEFINED_RESIDUAL_BASELINE = (
     # ---- Compiler / linker injected names not exported by any lib ----
     r'_?__dso_handle',
     r'_?__cxx_global_(?:array|var)_init\w*',
+    # ELF position-independent code: each PIC object references the GOT
+    # via this magic symbol, which the static linker fills in per-binary
+    # (it lives in no library's export table).
+    r'_GLOBAL_OFFSET_TABLE_',
     # macOS Mach-O thread-local-variable bootstrap stubs (emitted into
     # objects but resolved by dyld at load time)
     r'_?_tlv_\w+',
