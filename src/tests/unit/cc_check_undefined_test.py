@@ -302,6 +302,79 @@ class TbdParserTest(unittest.TestCase):
         self.assertEqual(syms, {'_foo', '_bar with weird $name'})
 
 
+class ResolveLibPathLinkerScriptTest(unittest.TestCase):
+    """Linux glibc ships libc.so / libpthread.so etc. as GNU-ld linker
+    scripts rather than real ELFs; ``cc -print-file-name`` happily returns
+    them. resolve_lib_path must sniff and follow them to the real .so."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp()
+        self.addCleanup(self._cleanup)
+
+    def _cleanup(self):
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _write(self, name, content, mode='w'):
+        path = os.path.join(self._tmpdir, name)
+        with open(path, mode) as f:
+            f.write(content)
+        return path
+
+    def test_looks_like_binary_lib_elf(self):
+        path = self._write('lib.so', b'\x7fELF\x02\x01\x01\x00', mode='wb')
+        self.assertTrue(system_symbols._looks_like_binary_lib(path))
+
+    def test_looks_like_binary_lib_macho(self):
+        path = self._write('lib.dylib', b'\xcf\xfa\xed\xfe\x00\x00\x00\x00', mode='wb')
+        self.assertTrue(system_symbols._looks_like_binary_lib(path))
+
+    def test_looks_like_binary_lib_ar(self):
+        path = self._write('lib.a', b'!<arch>\n', mode='wb')
+        self.assertTrue(system_symbols._looks_like_binary_lib(path))
+
+    def test_looks_like_binary_lib_pe(self):
+        path = self._write('lib.lib', b'MZ\x90\x00', mode='wb')
+        self.assertTrue(system_symbols._looks_like_binary_lib(path))
+
+    def test_looks_like_binary_lib_tbd_accepted(self):
+        # .tbd is YAML text but our caller handles it specially.
+        path = self._write('libSystem.tbd', '--- !tapi-tbd\n')
+        self.assertTrue(system_symbols._looks_like_binary_lib(path))
+
+    def test_looks_like_binary_lib_rejects_linker_script(self):
+        path = self._write('libc.so',
+                           'GROUP ( /lib/libc.so.6 AS_NEEDED ( /lib/ld.so ) )\n')
+        self.assertFalse(system_symbols._looks_like_binary_lib(path))
+
+    def test_follow_linker_script_returns_first_so(self):
+        # Make a real .so.6 file so the script's target actually resolves.
+        # Realpath on both sides to handle systems where /tmp is a symlink
+        # (macOS resolves /tmp -> /private/tmp).
+        target = self._write('libc.so.6', b'\x7fELF\x02\x01\x01\x00', mode='wb')
+        script = self._write('libc.so',
+                             'GROUP ( %s /usr/lib/libc_nonshared.a AS_NEEDED ( /lib/ld.so ) )\n' % target)
+        self.assertEqual(system_symbols._follow_linker_script(script),
+                         os.path.realpath(target))
+
+    def test_follow_linker_script_returns_first_archive(self):
+        target = self._write('libfoo.a', b'!<arch>\n', mode='wb')
+        script = self._write('libfoo.so', 'INPUT ( %s )\n' % target)
+        self.assertEqual(system_symbols._follow_linker_script(script),
+                         os.path.realpath(target))
+
+    def test_follow_linker_script_returns_none_for_non_script(self):
+        # A real .so should not match -- caller would have used it as-is.
+        path = self._write('libfoo.so', b'\x7fELF\x02\x01\x01\x00', mode='wb')
+        self.assertIsNone(system_symbols._follow_linker_script(path))
+
+    def test_follow_linker_script_ignores_relative_paths(self):
+        # Linker scripts only ever reference absolute paths; reject the
+        # relative form to avoid CWD-dependent resolution.
+        script = self._write('libfoo.so', 'GROUP ( ./libfoo.so.6 )\n')
+        self.assertIsNone(system_symbols._follow_linker_script(script))
+
+
 class EnsureCacheTest(unittest.TestCase):
     """End-to-end ensure_cache: resolves a fake .tbd via the macOS SDK
     fallback path (mocked) and writes a valid cache file."""

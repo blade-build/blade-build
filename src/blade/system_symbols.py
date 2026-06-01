@@ -81,6 +81,70 @@ def _candidate_filenames(toolchain, alias):
 _macos_sdk_path_cache = None
 
 
+def _looks_like_binary_lib(path):
+    """Sniff the file header. True for ELF / Mach-O / PE / .a / .tbd; False
+    for GNU-ld linker scripts ('GROUP ( ... )', 'INPUT ( ... )', 'OUTPUT_FORMAT')
+    that ``gcc -print-file-name`` happily returns instead of the real library."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(8)
+    except OSError:
+        return False
+    if not head:
+        return False
+    # ELF, Mach-O (all 4 magics), PE / DOS stub ('MZ'), ar archive ('!<arch>')
+    binary_prefixes = (
+        b'\x7fELF',                 # ELF
+        b'\xfe\xed\xfa\xce',         # Mach-O 32 BE
+        b'\xfe\xed\xfa\xcf',         # Mach-O 64 BE
+        b'\xce\xfa\xed\xfe',         # Mach-O 32 LE
+        b'\xcf\xfa\xed\xfe',         # Mach-O 64 LE
+        b'\xca\xfe\xba\xbe',         # universal Mach-O ('fat')
+        b'MZ',                       # PE / .lib (COFF)
+        b'!<arch>\n',                # Unix ar archive (.a)
+    )
+    if any(head.startswith(p) for p in binary_prefixes):
+        return True
+    # Apple .tbd is YAML text; our caller handles it via _tbd_extract_symbols.
+    if path.endswith('.tbd'):
+        return True
+    return False
+
+
+def _follow_linker_script(path):
+    """Resolve a GNU-ld linker script to its first real .so / .a input.
+
+    Linker scripts that ``gcc -print-file-name`` returns for ``libc.so`` /
+    ``libpthread.so`` look like::
+
+        GROUP ( /lib/x86_64-linux-gnu/libc.so.6
+                /usr/lib/x86_64-linux-gnu/libc_nonshared.a
+                AS_NEEDED ( /lib64/ld-linux-x86-64.so.2 ) )
+
+    We pull out the first ``.so.<N>`` / ``.so`` / ``.a`` token, ignoring
+    ``AS_NEEDED`` wrappers and comments. Returns ``None`` if the file
+    isn't a recognizable script or contains no usable input.
+    """
+    try:
+        with open(path, encoding='utf-8', errors='ignore') as f:
+            text = f.read(8192)  # scripts are tiny; cap to avoid surprises
+    except OSError:
+        return None
+    if not any(kw in text for kw in ('GROUP', 'INPUT', 'OUTPUT_FORMAT', 'AS_NEEDED')):
+        return None
+    # Strip /* ... */ comments and #-comments to keep tokenization simple.
+    import re as _re
+    text = _re.sub(r'/\*.*?\*/', ' ', text, flags=_re.S)
+    text = _re.sub(r'#.*', ' ', text)
+    for tok in _re.findall(r'[\w./+-]+', text):
+        if tok in ('GROUP', 'INPUT', 'OUTPUT_FORMAT', 'AS_NEEDED', 'STARTUP'):
+            continue
+        if tok.endswith('.a') or '.so' in tok:
+            if os.path.isabs(tok) and os.path.isfile(tok):
+                return os.path.realpath(tok)
+    return None
+
+
 def _macos_sdk_path():
     """Return the active macOS SDK root, or ``None`` if Xcode is unavailable.
 
@@ -128,8 +192,17 @@ def resolve_lib_path(toolchain, alias):
             ).strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             continue
-        if out and os.path.isfile(out):
+        if not out or not os.path.isfile(out):
+            continue
+        # On Linux glibc, the unversioned .so is often a GNU-ld linker script
+        # rather than a real ELF -- follow it to the real .so / .a. If the
+        # file is already a real binary, return as-is.
+        if _looks_like_binary_lib(out):
             return os.path.realpath(out)
+        real = _follow_linker_script(out)
+        if real:
+            return real
+        # Neither binary nor a parseable linker script. Skip to next candidate.
 
     # macOS SDK fallback. Try lib<name>.tbd and lib<name>.B.tbd (versioned
     # form -- libSystem ships as libSystem.B.tbd alongside libSystem.tbd
