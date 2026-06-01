@@ -188,6 +188,21 @@ class CommandLineParser:
             action='store_true', default=False,
             help='Generate dynamic libraries')
 
+        # Tri-state (None / True / False). None means "no CLI override given,
+        # fall through to cc_library_config.check_undefined". The two flags
+        # share the same dest so the last one on the command line wins.
+        parser.add_argument(
+            '--cc-check-undefined', dest='cc_check_undefined',
+            action='store_const', const=True, default=None,
+            help='Force-enable the cc_library undefined-symbol check for this '
+                 'invocation (overrides cc_library_config.check_undefined; '
+                 'per-target check_undefined=False still wins)')
+        parser.add_argument(
+            '--no-cc-check-undefined', dest='cc_check_undefined',
+            action='store_const', const=False,
+            help='Force-disable the cc_library undefined-symbol check for '
+                 'this invocation (overrides cc_library_config.check_undefined)')
+
         parser.add_argument(
             '--generate-package', dest='generate_package',
             action='store_true', default=False,

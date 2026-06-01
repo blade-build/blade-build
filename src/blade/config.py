@@ -127,6 +127,20 @@ _CONFIG_TEMPLATE = {
         'thin': False,
         'hdrs_missing_severity': 'error',
         'hdrs_missing_suppress': set(),
+        # Validate that a cc_library's declared deps cover every undefined
+        # symbol it references, without requiring a shared-library link.
+        # See issue #1225.
+        'check_undefined': True,
+        'check_undefined__help__': 'Whether to statically validate that declared deps '
+            'cover every undefined symbol referenced by each cc_library. Default True.',
+        # Global allowlist of symbols permitted to remain undefined. Each entry
+        # is a Python regex matched with re.fullmatch against the mangled name
+        # (what `nm -u` prints). System symbols (libc, libstdc++, weak refs)
+        # are handled by an internal baseline; this list is for project-specific
+        # symbols that are legitimately provided at final link time.
+        'allow_undefined': [],
+        'allow_undefined__help__': 'Global allowlist (regex patterns) of mangled symbol '
+            'names permitted to remain undefined by the check_undefined static check.',
     },
 
     'cc_binary_config': {
@@ -781,7 +795,32 @@ def cc_library_config(append=None, **kwargs):
     elif has_arflags:
         _blade_config.warning(
             'cc_library_config: "arflags" is deprecated, use "deterministic" and/or "thin" instead')
+    if 'allow_undefined' in kwargs:
+        _validate_allow_undefined(
+            kwargs['allow_undefined'], 'cc_library_config.allow_undefined')
     _blade_config.update_config('cc_library_config', append, kwargs)
+
+
+def _validate_allow_undefined(value, where):
+    """Validate allow_undefined is a list of compilable regex patterns.
+
+    The list form is only meaningful in cc_library_config (global) and on
+    cc_library targets; bool form has its own meaning at the linker level
+    and is not validated here. Patterns are compiled now so invalid regexes
+    fail at config time, not at check time.
+    """
+    import re as _re
+    if not isinstance(value, (list, tuple, set)):
+        _blade_config.error('%s must be a list of regex patterns, got %r' % (where, type(value).__name__))
+        return
+    for p in value:
+        if not isinstance(p, str):
+            _blade_config.error('%s contains non-string entry: %r' % (where, p))
+            continue
+        try:
+            _re.compile(p)
+        except _re.error as e:
+            _blade_config.error('%s contains invalid regex %r: %s' % (where, p, e))
 
 
 @config_rule

@@ -311,6 +311,15 @@ class CcTarget(Target):
         options = self.blade.get_options()
         self.attr['generate_dynamic'] = (getattr(options, 'generate_dynamic', False) or
                                          config.get_item('cc_library_config', 'generate_dynamic'))
+        # `check_undefined` default: CLI override (if --cc-check-undefined or
+        # --no-cc-check-undefined was given) wins over the global config.
+        # CcLibrary.__init__ then overrides this default if the target sets
+        # check_undefined explicitly (tri-state: None inherits this default).
+        cli_check_undefined = getattr(options, 'cc_check_undefined', None)
+        if cli_check_undefined is not None:
+            self.attr['check_undefined'] = cli_check_undefined
+        else:
+            self.attr['check_undefined'] = config.get_item('cc_library_config', 'check_undefined')
         self.attr['expanded_srcs'] = self._expand_sources(srcs)
         self.attr['expanded_hdrs'] = self._expand_sources(private_hdrs)
         declare_private_hdrs(self, private_hdrs)
@@ -1146,10 +1155,11 @@ class CcLibrary(CcTarget):
                  extra_cxxflags: StrOrListOpt,
                  extra_asflags: StrOrListOpt,
                  extra_linkflags: StrOrListOpt,
-                 allow_undefined: bool,
+                 allow_undefined: 'bool | list[str]',
                  secret: bool,
                  secret_revision_file: str | None,
                  generate_dynamic: bool | None,
+                 check_undefined: bool | None,
                  export_map: str | None,
                  kwargs: dict[str, object]):
         """Init method.
@@ -1195,7 +1205,14 @@ class CcLibrary(CcTarget):
         self.attr['binary_link_only'] = binary_link_only
         self.attr['always_optimize'] = always_optimize
         self.attr['deprecated'] = deprecated
-        self.attr['allow_undefined'] = allow_undefined
+        # `allow_undefined` is bool | list[str]:
+        #   bool  -> legacy linker control: False emits -Wl,--no-undefined,
+        #            True permits any undefined symbol at link time.
+        #   list  -> regex patterns whitelisting specific mangled symbols for
+        #            the static check_undefined pass. The linker side falls
+        #            back to True (allow all) since GNU ld lacks a clean
+        #            per-symbol allowlist. See issue #1225.
+        self.attr['allow_undefined'] = self._validate_allow_undefined(allow_undefined)
         # `export_map` (a single linker version script) controls which symbols
         # the shared library exports; passed to `--version-script` on Linux when
         # the dynamic library is built (see `_dynamic_cc_library`). No deprecated
@@ -1212,9 +1229,39 @@ class CcLibrary(CcTarget):
         if generate_dynamic is not None:
             self.attr['generate_dynamic'] = generate_dynamic
             self.attr['generate_dynamic_forced_off'] = generate_dynamic is False
+        # `check_undefined` is tri-state. None inherits the default already
+        # computed in CcTarget.__init__ from --[no-]cc-check-undefined /
+        # cc_library_config.check_undefined. Explicit True/False overrides.
+        if check_undefined is not None:
+            self.attr['check_undefined'] = check_undefined
         self._add_tags('lang:cc', 'type:library')
         self._set_secret(secret, secret_revision_file)
         self._set_hdrs(hdrs)
+
+    def _validate_allow_undefined(self, allow_undefined):
+        """Normalize and validate the target's allow_undefined attribute.
+
+        Accepts bool (legacy linker control) or list of regex patterns. Lists
+        are pre-compiled here to surface invalid regexes at parse time. The
+        compiled patterns ride on `attr['allow_undefined_compiled']` so the
+        check tool can re-hydrate them without re-parsing.
+        """
+        if isinstance(allow_undefined, bool):
+            return allow_undefined
+        if isinstance(allow_undefined, (list, tuple, set)):
+            import re as _re
+            patterns = list(allow_undefined)
+            for p in patterns:
+                if not isinstance(p, str):
+                    self.error('allow_undefined contains non-string entry: %r' % p)
+                    continue
+                try:
+                    _re.compile(p)
+                except _re.error as e:
+                    self.error('allow_undefined contains invalid regex %r: %s' % (p, e))
+            return patterns
+        self.error('allow_undefined must be bool or list[str], got %r' % type(allow_undefined).__name__)
+        return False
 
     def _set_secret(self, secret, secret_revision_file):
         self.attr['secret'] = secret
@@ -1448,11 +1495,12 @@ def cc_library(
         extra_cxxflags: StrOrListOpt = None,
         extra_asflags: StrOrListOpt = None,
         extra_linkflags: StrOrListOpt = None,
-        allow_undefined: bool = False,
+        allow_undefined: 'bool | list[str]' = False,
         secret: bool = False,
         secret_revision_file: str | None = None,
         secure: bool = False,
         generate_dynamic: bool | None = None,
+        check_undefined: bool | None = None,
         export_map: str | None = None,
         **kwargs: object):
     """cc_library target.
@@ -1514,6 +1562,7 @@ def cc_library(
             secret=secret or secure,
             secret_revision_file=secret_revision_file,
             generate_dynamic=generate_dynamic,
+            check_undefined=check_undefined,
             export_map=export_map,
             kwargs=kwargs)
     target.attr['keep_deps'] = [target._unify_dep(d) for d in keep_deps]
