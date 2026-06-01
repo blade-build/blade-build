@@ -69,13 +69,36 @@ def declare_hdrs(target, hdrs):
     Args:
         target: the target which owns the hdrs
         hdrs:list, the full path (based in workspace troot) of hdrs
+
+    Also registers virtual paths relative to the target's `export_incs`.
+    A library that ships its public headers under a private subdirectory
+    and exposes them via `-Iexport_inc_path` (e.g. protobuf-3.4.1 with
+    `src/google/protobuf/message.h` + `export_incs = ['src']`) needs its
+    headers to be reachable both by the full path and by the consumer-
+    visible relative path `google/protobuf/message.h`. Without the
+    second registration, the unused-deps check can never match
+    `#include "google/protobuf/message.h"` back to the owning target,
+    and every consumer of such a library gets a spurious "unused
+    dependency" notice. See blade-build#1227.
     """
+    export_incs = target.attr.get('export_incs') or []
     for hdr in hdrs:
         assert not hdr.startswith(target.build_dir)
         hdr = target._source_file_path(hdr)
         if hdr not in _hdr_targets_map:
             _hdr_targets_map[hdr] = set()
         _hdr_targets_map[hdr].add(target.key)
+        # Also register the include-search-path-relative form. Use os.sep-
+        # normalised comparisons; `_hdr_targets_map` keys are kept as written
+        # and normalised on lookup.
+        for inc in export_incs:
+            prefix = inc.rstrip('/').rstrip(os.sep) + '/'
+            if hdr.startswith(prefix):
+                rel = hdr[len(prefix):]
+                if rel and rel != hdr:
+                    if rel not in _hdr_targets_map:
+                        _hdr_targets_map[rel] = set()
+                    _hdr_targets_map[rel].add(target.key)
 
 
 def declare_hdr_dir(target, inc):
@@ -336,6 +359,16 @@ class CcTarget(Target):
                 getattr(self, severity)(
                         'Missing "hdrs" declaration. The public header files should be declared '
                         'explicitly, if no public header file, set "hdrs" to empty (hdrs = [])')
+            else:
+                # The user has intentionally suppressed the hdrs-missing warning for
+                # this target, meaning it has no public header for consumers to
+                # `#include`. Treat it the same as an explicit `hdrs = []`: the
+                # unused-deps check has no possible way to "see" any use of it
+                # (its symbols are reached purely at link time, e.g. gtest_main's
+                # `main`, protoc's plugin entrypoints), so exempt it. Without
+                # this, every consumer of such a target gets a spurious "unused"
+                # notice. See blade-build#1228.
+                declare_header_less(self)
         elif not hdrs:
             # Explicit `hdrs = []`: the library declares it has no public interface,
             # so the unused-deps check exempts it. See `_header_less_target_keys`.
@@ -1551,6 +1584,18 @@ class ForeignCcLibrary(CcTarget):
             declare_hdr_dir(self, hdr_dir)
             hdr_dir = self._target_file_path(hdr_dir)
             self.attr['generated_incs'] = [hdr_dir]
+            # The hdr_dir we just registered is the *source-tree* layout of the
+            # foreign package (e.g. `thirdparty/gflags/gflags`), but consumers
+            # only ever #include from the *installed* layout via `-I<build>/...
+            # /include` (e.g. `#include <gflags/gflags.h>`). `find_libs_by_header`
+            # walks up directories starting at the include string, so the source
+            # path it stored will never match, and every consumer of a
+            # foreign_cc_library that didn't enumerate explicit `hdrs` would get
+            # spurious "unused dependency" notices. Treat such targets as
+            # header-less for the unused-deps check, mirroring the behaviour of
+            # `hdrs = []` and the implicit-no-hdrs branch in `_set_hdrs`. See
+            # blade-build#1228.
+            declare_header_less(self)
 
     def _library_full_path(self, suffix):
         """Return full path of the library file with specified suffix"""

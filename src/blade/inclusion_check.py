@@ -533,11 +533,31 @@ class Checker:
             would be platform- and distro-specific), so a header-based check
             has nothing to consult -- flagging would always be a false
             positive.
+          * Header re-export: a dep is exempt if any of THIS target's own
+            `hdrs` is ALSO declared as a public header by that dep. The
+            shared declaration is blade's only structural signal that the
+            current target is acting as an umbrella facade around the dep
+            (`fiber:fiber` redeclaring `async.h` from `fiber:async`, etc.).
+            Without this exemption, an umbrella's own srcs/hdrs almost
+            never `#include` its own re-exported headers (it would be
+            self-inclusion), so every umbrella -> sub-target dep would
+            be flagged.
         """
         used = set()
         for hdr in all_direct_hdrs:
             used |= self.find_libs_by_header(hdr)
-        candidates = set(self.deps) - used - self.keep_deps - self.unused_deps_suppress
+        # Header re-export: any OTHER target that co-owns one of THIS target's
+        # own public headers is implicitly "used" -- we're republishing its
+        # interface as our own. Use `expanded_hdrs` (this target's own hdrs)
+        # NOT `declared_hdrs`, which is the union of self.hdrs and the hdrs
+        # of every declared dep -- using that would treat any dep whose hdrs
+        # happen to overlap with another dep's hdrs as a re-export, which is
+        # not the pattern we want to recognise.
+        reexported = set()
+        for _hdr, full_hdr in self.expanded_hdrs:
+            reexported |= self.find_libs_by_header(full_hdr)
+        reexported.discard(self.key)
+        candidates = set(self.deps) - used - reexported - self.keep_deps - self.unused_deps_suppress
         candidates.discard(self.key)
         return {dep for dep in candidates
                 if not dep.startswith('#:')
@@ -558,6 +578,15 @@ class Checker:
         direct_check_msg = []
         generated_check_msg = []
 
+        # Track how many files we actually inspect for #includes. If zero,
+        # the target has no scannable C/C++ source (e.g. cc_library that
+        # only re-exports sub-libraries, cc_flare_library wrapping a .proto
+        # whose generated sources live under build_dir, foreign_cc_library
+        # consuming a tarball, ...) and an "unused dependency" verdict would
+        # be vacuous: blade hasn't seen a single #include from this target.
+        # See blade-build#1226.
+        scanned_count = [0]  # list to mutate from the closure below
+
         def check_file(src, full_src):
             if path_under_dir(full_src, self.build_dir):  # Don't check generated files.
                 return
@@ -565,6 +594,7 @@ class Checker:
             if not path:
                 console.warning('No inclusion file found for %s' % full_src)
                 return
+            scanned_count[0] += 1
             direct_hdrs, stacks = _parse_inclusion_stacks(path, self.build_dir)
             # `-H` silently elides direct `#include`s already pulled in by an
             # earlier transitive chain (multiple-include-guard optimization),
@@ -609,7 +639,12 @@ class Checker:
                 '{}: Missing indirect dependency declaration:\n{}'.format(self.name, '\n'.join(generated_check_msg)))
 
         unused_deps = set()
-        if self.unused_deps_severity != 'debug':  # 'debug' == effectively off
+        # Only run the unused-deps check when we actually scanned at least one
+        # source/header for this target. With zero scanned files (umbrella libs,
+        # generated-source-only targets, foreign_cc_library wrappers, ...) blade
+        # has no #include corpus to compare deps against, so every dep would be
+        # flagged "unused" -- always a false positive. See blade-build#1226.
+        if self.unused_deps_severity != 'debug' and scanned_count[0] > 0:
             unused_deps = self._check_unused_deps(all_direct_hdrs)
             if unused_deps:
                 console.diagnose(self.source_location, self.unused_deps_severity,
