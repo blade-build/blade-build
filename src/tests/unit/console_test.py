@@ -52,7 +52,6 @@ class _ConsoleStateMixin:
         self._saved = {
             '_cursor_control': console._cursor_control,
             '_color_enabled': console._color_enabled,
-            '_need_clear_line': console._need_clear_line,
             '_last_progress_value': console._last_progress_value,
             '_last_progress_time': console._last_progress_time,
             '_cursor_hidden': console._cursor_hidden,
@@ -60,7 +59,6 @@ class _ConsoleStateMixin:
         }
         console._cursor_control = True
         console._color_enabled = True
-        console._need_clear_line = False
         console._last_progress_value = -1
         console._last_progress_time = 0
         console._cursor_hidden = False
@@ -200,7 +198,6 @@ class ClearProgressBarTest(_ConsoleStateMixin, unittest.TestCase):
         # Minimal clear sequence: cursor to col 0, then EOL clear, then show
         # cursor (cursor was hidden while the bar was on screen).
         self.assertEqual(self.stderr.getvalue(), '\r\x1b[K\x1b[?25h')
-        self.assertFalse(console._need_clear_line)
         self.assertEqual(console._last_progress_value, -1)
         self.assertFalse(console._cursor_hidden)
 
@@ -209,10 +206,11 @@ class ClearProgressBarTest(_ConsoleStateMixin, unittest.TestCase):
         self.assertEqual(self.stderr.getvalue(), '')
 
     def test_noop_when_cursor_control_disabled(self):
-        # Even if _need_clear_line gets stuck at True somehow, we must not
-        # emit escape codes into a non-tty stream.
+        # Even if _cursor_hidden gets stuck at True somehow (e.g. cursor
+        # control was toggled off mid-build), we must not emit escape codes
+        # into what is now a non-tty stream.
         console._cursor_control = False
-        console._need_clear_line = True
+        console._cursor_hidden = True
         console.clear_progress_bar()
         self.assertEqual(self.stderr.getvalue(), '')
 

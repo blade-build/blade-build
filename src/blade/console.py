@@ -146,9 +146,9 @@ def set_log_file(log_file):
     if _log is not None:
         # Close any previously opened log to avoid leaking the file descriptor.
         _log.close()
-    _log = open(log_file, 'w', 1)
-    # Make sure the tail of the log is flushed and the fd released even when the
-    # process exits abnormally (uncaught exception, sys.exit, etc.).
+    # File lifetime is process-wide on purpose; close is performed by the
+    # atexit hook below (and by the re-set guard above on a subsequent call).
+    _log = open(log_file, 'w', 1)  # lgtm[py/file-not-closed]
     atexit.register(_log.close)
 
 
@@ -220,10 +220,13 @@ _MAX_PROGRESS_BAR_WIDTH = 60
 # to avoid flooding the terminal when actions complete in bursts.
 _PROGRESS_REFRESH_INTERVAL = 0.2
 
-_need_clear_line = False  # Whether the last output is progress bar
 _last_progress_value = -1  # The last progress bar value, -1 means none
 _last_progress_time = 0
-_cursor_hidden = False  # Whether we've emitted _HIDE_CURSOR and still owe a _SHOW_CURSOR.
+# True iff a progress frame is currently on screen and we owe both a clear
+# (\r + \033[K) and a show-cursor (\033[?25h). Tracks "there's a frame to wipe"
+# and "we hid the cursor" together because those two facts are flipped in
+# lockstep — see show_progress_bar.
+_cursor_hidden = False
 
 
 def _compute_progress_bar_width(total):
@@ -264,16 +267,8 @@ def _hide_cursor_locked():
         _cursor_hidden = True
 
 
-def _show_cursor_locked():
-    """Reverse a prior _hide_cursor_locked. Caller holds _print_lock."""
-    global _cursor_hidden
-    if _cursor_hidden:
-        sys.stderr.write(_SHOW_CURSOR)
-        _cursor_hidden = False
-
-
 def show_progress_bar(current, total):
-    global _need_clear_line, _last_progress_value, _last_progress_time
+    global _last_progress_value, _last_progress_time
     if total <= 0 or not _cursor_control:
         # No real terminal -> don't dump repeated bar lines into a log file or pipe.
         return
@@ -287,21 +282,17 @@ def show_progress_bar(current, total):
         sys.stderr.flush()
         _last_progress_value = current
         _last_progress_time = now
-        _need_clear_line = True
 
 
 def _clear_progress_bar_locked():
     """Erase the progress bar in place. Caller must hold _print_lock."""
-    global _need_clear_line, _last_progress_value, _last_progress_time
-    if _need_clear_line and _cursor_control:
-        sys.stderr.write('\r' + _CLEAR_TO_EOL)
-    # Hand the cursor back to the foreground stream before any non-progress
-    # output appears, otherwise a normal printed message would land where the
-    # cursor is invisible.
-    _show_cursor_locked()
-    if _need_clear_line and _cursor_control:
+    global _cursor_hidden, _last_progress_value, _last_progress_time
+    if _cursor_hidden and _cursor_control:
+        # Wipe the frame and hand the cursor back, in a single flush so that
+        # any subsequent message lands on a clean line with a visible cursor.
+        sys.stderr.write('\r' + _CLEAR_TO_EOL + _SHOW_CURSOR)
         sys.stderr.flush()
-    _need_clear_line = False
+    _cursor_hidden = False
     _last_progress_value = -1
     _last_progress_time = 0
 
