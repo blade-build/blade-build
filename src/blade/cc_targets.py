@@ -910,12 +910,33 @@ class CcTarget(Target):
         extra_linkflags += self.attr.get('extra_linkflags')  # pyright: ignore[reportOperatorIssue]
         if implicit_deps is None:
             implicit_deps = []
+        # `linker_script` (-T) and `export_map` (--version-script) are GNU-ld
+        # spellings. Apple's ld64 understands neither and fails the link with
+        # a cryptic "unknown options" error. Strip them on Darwin with a clear
+        # warning so users can either guard the attribute with a platform
+        # select() or move the visibility control into source attributes
+        # (__attribute__((visibility("hidden"))) etc.). MSVC has its own
+        # export_map path (see _dynamic_cc_library_windows) and never reaches
+        # this branch.
+        is_darwin = self.blade.get_build_toolchain().target_os == 'darwin'
         if linker_scripts:
-            extra_linkflags += ['-T %s' % lds for lds in linker_scripts]
-            implicit_deps += linker_scripts
+            if is_darwin:
+                self.warning(
+                    'linker_script is not supported on macOS '
+                    '(Apple ld64 lacks the GNU-ld -T option); script ignored')
+            else:
+                extra_linkflags += ['-T %s' % lds for lds in linker_scripts]
+                implicit_deps += linker_scripts
         if version_scripts:
-            extra_linkflags += ['-Wl,--version-script=%s' % ver for ver in version_scripts]
-            implicit_deps += version_scripts
+            if is_darwin:
+                self.warning(
+                    'export_map is not supported on macOS yet '
+                    '(Apple ld64 lacks --version-script); map ignored. '
+                    'Use __attribute__((visibility("hidden"))) in source if '
+                    'you need to hide symbols.')
+            else:
+                extra_linkflags += ['-Wl,--version-script=%s' % ver for ver in version_scripts]
+                implicit_deps += version_scripts
         if extra_linkflags:
             vars['extra_linkflags'] = ' '.join(extra_linkflags)
         if extra_vars:

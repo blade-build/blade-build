@@ -208,5 +208,85 @@ class ExtraCompileFlagsForTest(unittest.TestCase):
         self.assertEqual([], t._extra_compile_flags_for('a.c'))
 
 
+class CcLinkPlatformGuardTest(unittest.TestCase):
+    """``_cc_link`` must drop GNU-ld-only flags on Darwin instead of letting
+    them reach ld64 (which fails with a cryptic ``ld: unknown options``).
+
+    The two flags affected are ``--version-script`` (from ``export_map``) and
+    ``-T`` (from ``linker_script``). MSVC has its own path in
+    ``_dynamic_cc_library_windows`` and never reaches ``_cc_link``, so it's
+    excluded here.
+    """
+
+    def _target_with_toolchain(self, target_os):
+        target = _bare_cc_target()
+        # Minimal attrs so ``_cc_link`` doesn't crash. ``linkflags=None``
+        # exercises the "no linkflags" branch; ``extra_linkflags=[]`` lets the
+        # concatenation operator succeed.
+        target.attr = {'linkflags': None, 'extra_linkflags': []}
+        # Layer that ``_cc_link`` consults for the linker family.
+        toolchain = mock.Mock()
+        toolchain.target_os = target_os
+        target.blade = mock.Mock()
+        target.blade.get_build_toolchain.return_value = toolchain
+        # Capture warnings; ``self.warning`` in CcTarget normally prefixes the
+        # target name, but we only care about the message text here.
+        target.warnings = []
+        target.warning = target.warnings.append
+        # Capture the call to ``generate_build`` so we can inspect the
+        # ``variables['extra_linkflags']`` blob that would land in ninja.
+        target.generate_build_calls = []
+
+        def fake_generate_build(rule, output, **kwargs):
+            target.generate_build_calls.append(
+                {'rule': rule, 'output': output, **kwargs})
+
+        target.generate_build = fake_generate_build
+        return target
+
+    def _extra_linkflags(self, target):
+        # Single ``_cc_link`` call -> single generate_build call.
+        self.assertEqual(1, len(target.generate_build_calls))
+        return target.generate_build_calls[0].get(
+            'variables', {}).get('extra_linkflags', '')
+
+    def test_version_script_dropped_on_darwin(self):
+        target = self._target_with_toolchain('darwin')
+        target._cc_link('libfoo.dylib', 'solink', objs=[], deps=[], sys_libs=[],
+                        version_scripts=['libfoo.map'])
+        self.assertNotIn('--version-script', self._extra_linkflags(target))
+        # A warning must surface so the user knows the map was ignored.
+        self.assertTrue(
+            any('macOS' in w and 'export_map' in w for w in target.warnings),
+            f'expected an export_map/macOS warning, got: {target.warnings!r}')
+
+    def test_version_script_emitted_on_linux(self):
+        target = self._target_with_toolchain('linux')
+        target._cc_link('libfoo.so', 'solink', objs=[], deps=[], sys_libs=[],
+                        version_scripts=['libfoo.map'])
+        self.assertIn('--version-script=libfoo.map',
+                      self._extra_linkflags(target))
+        self.assertEqual([], target.warnings)
+
+    def test_linker_script_dropped_on_darwin(self):
+        target = self._target_with_toolchain('darwin')
+        target._cc_link('foo', 'link', objs=[], deps=[], sys_libs=[],
+                        linker_scripts=['layout.lds'])
+        flags = self._extra_linkflags(target)
+        self.assertNotIn('-T', flags)
+        self.assertNotIn('layout.lds', flags)
+        self.assertTrue(
+            any('macOS' in w and 'linker_script' in w
+                for w in target.warnings),
+            f'expected a linker_script/macOS warning, got: {target.warnings!r}')
+
+    def test_linker_script_emitted_on_linux(self):
+        target = self._target_with_toolchain('linux')
+        target._cc_link('foo', 'link', objs=[], deps=[], sys_libs=[],
+                        linker_scripts=['layout.lds'])
+        self.assertIn('-T layout.lds', self._extra_linkflags(target))
+        self.assertEqual([], target.warnings)
+
+
 if __name__ == '__main__':
     unittest.main()

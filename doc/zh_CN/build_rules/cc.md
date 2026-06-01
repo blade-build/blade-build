@@ -501,12 +501,12 @@ cc_plugin(
   链接器脚本文件的扩展名一般为 `.ld` 或者 `.lds`。
   只接受单个文件：SECTIONS 脚本会替换默认脚本，多个 `-T` 脚本无法有意义地组合。
   链接器脚本通常相当复杂，如果只是想控制符号的可见性，请使用下面的 `export_map` 选项。
-  > **GNU ld 特性。** `linker_script` 就是 GNU ld 的 `-T` 选项，需要 GNU ld 兼容的链接器：ELF（Linux）上的 GNU `ld` / `ld.lld`，以及面向 Windows 时 **MinGW 的 GNU `ld`**。MSVC `link.exe` 和 Apple `ld64` **不支持**（传给它们会导致链接失败）。
+  > **GNU ld 特性。** `linker_script` 就是 GNU ld 的 `-T` 选项，需要 GNU ld 兼容的链接器：ELF（Linux）上的 GNU `ld` / `ld.lld`，以及面向 Windows 时 **MinGW 的 GNU `ld`**。MSVC `link.exe` 和 Apple `ld64` **不支持**：在 macOS 上 Blade 会发出 warning 并跳过该脚本(以前会让链接以晦涩的 "unknown options" 失败);MSVC 上会在 `_cc_link` 这一层走不到。
   > 复数形式 `linker_scripts`（列表）是**已废弃的别名**，使用时会告警，且只取第一个文件。
 - `export_map`: str，单个[链接器“版本”脚本](https://sourceware.org/binutils/docs/ld/VERSION.html)，用来控制共享库导出哪些符号。
   虽然链接器术语叫“版本脚本”，但这里的机制是*导出过滤*而非 ABI 版本管理，因此命名为 `export_map`（业界对符号导出控制文件的通称）。使用匿名版本形式（不指定版本号）即可只控制可见性。
   只接受单个文件（GNU ld 不允许多于一个匿名版本节点）。可用于 `cc_library`、`cc_binary` 和 `cc_plugin`。会传给 GNU ld 的 `--version-script`；导出映射文件的扩展名一般为 `.exp`、`.sym`、`.ver` 或者 `.map`。参见[下文的 C++ 示例](#控制共享库导出哪些符号)。
-  > **跨平台。** 在 Linux 上直接传给 GNU ld。在 **MSVC** 上没有 `--version-script`，Blade 会自行应用该映射：它把每个符号的**反修饰名**（`UnDecorateSymbolName`）与 `global`/`local` 模式匹配，据此过滤自动生成的 `.def`（参见 [Windows DLL 支持](#windows-dll-支持)）。由于反修饰是*仅名字*的，MSVC 上有两点限制：**重载会合并**（一个名字要么连同其所有重载一起导出、要么都不导出），以及带签名的引号模式（`"f(int)"`）只按其**名字部分**匹配（并给出一次性告警）。完整的 ELF 符号版本管理（版本节点）仅限 Linux。
+  > **跨平台。** 在 Linux 上直接传给 GNU ld。在 **MSVC** 上没有 `--version-script`，Blade 会自行应用该映射：它把每个符号的**反修饰名**（`UnDecorateSymbolName`）与 `global`/`local` 模式匹配，据此过滤自动生成的 `.def`（参见 [Windows DLL 支持](#windows-dll-支持)）。由于反修饰是*仅名字*的，MSVC 上有两点限制：**重载会合并**（一个名字要么连同其所有重载一起导出、要么都不导出），以及带签名的引号模式（`"f(int)"`）只按其**名字部分**匹配（并给出一次性告警）。完整的 ELF 符号版本管理（版本节点）仅限 Linux。在 **macOS（Apple ld64）** 上，因为 ld64 不支持 `--version-script`、其原生替代品 `-exported_symbols_list` 又是另一种文件格式，**`export_map` 暂不生效**：Blade 会给出 warning 并忽略该映射，库回退到默认的全量导出。如果确实需要在 macOS 隐藏符号，请在源码里使用 `__attribute__((visibility("hidden")))` 或与编译选项 `-fvisibility=hidden` 搭配。
   > 复数形式 `version_scripts`（列表）是 `export_map` 的**已废弃别名**，使用时会告警，且只取第一个文件。
 
 `prefix` 和 `suffix` 控制生成的动态库的文件名。假设 `name='file'`，在 Linux 工具链上默认生成 `libfile.so`；设置 `prefix=''` 则变为 `file.so`。传入已带共享库后缀的 `name`（如 `name='file.so'`）不再被隐式识别为"输出文件全名"，如需完全自定义输出文件名，请改用 `prefix=''` 与 `suffix='.so'` 显式表达。
