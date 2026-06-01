@@ -337,18 +337,21 @@ def _filter_exports_by_map(seen, export_map):
 # * Quoted signature patterns (`"f(int)"`) match by their name part only;
 #   a one-time warning is emitted when such patterns are present.
 
-_macos_cxa_demangle_fn = False  # False = uninitialized; None = unavailable.
+# Split into "probed?" + "result of probing" so the function-pointer slot
+# only ever holds None or the loaded callable -- pyright can then narrow it
+# correctly after the `is None` check below.
+_macos_cxa_demangle_fn = None
+_macos_cxa_demangle_probed = False
 
 
 def _macos_cxa_demangle(symbol):
     """Demangle an Itanium C++ symbol via libc++abi. Returns None if not C++."""
-    global _macos_cxa_demangle_fn  # pylint: disable=global-statement
-    if _macos_cxa_demangle_fn is False:
+    global _macos_cxa_demangle_fn, _macos_cxa_demangle_probed  # pylint: disable=global-statement
+    if not _macos_cxa_demangle_probed:
         import ctypes  # pylint: disable=import-outside-toplevel
         # libc++abi is part of every macOS install since 10.7. Try the
         # canonical name first; fall back through likely aliases. If none
-        # are loadable, cache `None` and degrade to raw symbols.
-        loaded = None
+        # are loadable, leave _fn as None and degrade to raw symbols.
         for libname in ('libc++abi.dylib', 'libc++.1.dylib'):
             try:
                 lib = ctypes.CDLL(libname)
@@ -359,9 +362,9 @@ def _macos_cxa_demangle(symbol):
                            ctypes.POINTER(ctypes.c_size_t),
                            ctypes.POINTER(ctypes.c_int)]
             fn.restype = ctypes.c_void_p
-            loaded = fn
+            _macos_cxa_demangle_fn = fn
             break
-        _macos_cxa_demangle_fn = loaded
+        _macos_cxa_demangle_probed = True
     if _macos_cxa_demangle_fn is None:
         return None
 

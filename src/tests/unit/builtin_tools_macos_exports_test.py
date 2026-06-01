@@ -224,7 +224,8 @@ class CxaDemangleSmokeTest(unittest.TestCase):
     def setUp(self):
         # Force reload of the cached function pointer so this test is
         # independent of test-ordering.
-        builtin_tools._macos_cxa_demangle_fn = False
+        builtin_tools._macos_cxa_demangle_fn = None
+        builtin_tools._macos_cxa_demangle_probed = False
 
     def test_demangles_simple_c_plus_plus_symbol(self):
         # `void mylib::Greet()` mangles to _ZN5mylib5GreetEv (no leading
