@@ -47,6 +47,13 @@ def _candidate_filenames(toolchain, alias):
     installed (e.g. ``libc.so.6``). On macOS ``.dylib`` is the dynamic form;
     we also accept ``.tbd`` text-based dylib stubs because that's what Xcode
     ships for SDK libs.
+
+    On Linux glibc, ``/usr/lib/.../libc.so`` is typically a GNU-ld linker
+    script (``GROUP ( libc.so.6 libc_nonshared.a AS_NEEDED ... )``), not
+    an ELF -- so we try the versioned forms FIRST, falling back to ``.so``
+    only if no versioned variant is present. ``.so.6`` is libc/libm/libdl
+    on glibc; ``.so.0`` for libdl on some distros; ``.so.1``/``.so.2`` for
+    libgcc_s / various utility libs.
     """
     target = toolchain.target_os
     if target == 'darwin':
@@ -60,12 +67,13 @@ def _candidate_filenames(toolchain, alias):
             f'{alias}.lib',
             f'lib{alias}.a',
         ]
-    # Linux / other ELF
+    # Linux / other ELF: versioned forms first to skip glibc linker scripts.
     return [
-        f'lib{alias}.so',
-        f'lib{alias}.so.1',
+        f'lib{alias}.so.6',     # libc/libm/libdl on modern glibc
+        f'lib{alias}.so.1',     # libgcc_s, libstdc++ (.so.6 is libstdc++)
         f'lib{alias}.so.2',
-        f'lib{alias}.so.6',     # libc on glibc
+        f'lib{alias}.so.0',
+        f'lib{alias}.so',       # last: usually a linker script on glibc
         f'lib{alias}.a',
     ]
 
