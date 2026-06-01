@@ -760,6 +760,17 @@ class _NinjaFileHeaderGenerator:
                            rspfile_content='${in}',
                            description='DWP ${out}',
                            pool=pool)
+        # macOS-only: translate a GNU-ld export_map (--version-script) into
+        # ld64's native -exported_symbols_list. See the `cc_macos_exports`
+        # builtin tool. restat=True so that an unchanged exports list prunes
+        # the dependent dylib relink, matching the cc_windef pattern.
+        if self.build_toolchain.target_os == 'darwin':
+            self.generate_rule(
+                name='cc_macos_exports',
+                command=self._builtin_command(
+                    'cc_macos_exports', '${out} ${export_map} ${in}'),
+                description='MAC EXPORTS ${out}',
+                restat=True)
 
     def _cc_compile_command_wrapper_template(self, inclusion_stack_file, cuda=False):
         """Calculate the cc compile command wrapper template.

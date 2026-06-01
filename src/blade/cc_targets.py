@@ -911,13 +911,14 @@ class CcTarget(Target):
         if implicit_deps is None:
             implicit_deps = []
         # `linker_script` (-T) and `export_map` (--version-script) are GNU-ld
-        # spellings. Apple's ld64 understands neither and fails the link with
-        # a cryptic "unknown options" error. Strip them on Darwin with a clear
-        # warning so users can either guard the attribute with a platform
-        # select() or move the visibility control into source attributes
-        # (__attribute__((visibility("hidden"))) etc.). MSVC has its own
-        # export_map path (see _dynamic_cc_library_windows) and never reaches
-        # this branch.
+        # spellings. Apple's ld64 understands neither.
+        # * linker_script: no native ld64 equivalent. Drop with a warning.
+        # * export_map: translate to ld64's -exported_symbols_list by filtering
+        #   the objs' symbol table through the version script (same approach
+        #   the MSVC path uses to produce a filtered .def). The cc_macos_exports
+        #   builtin tool writes a plain mangled-symbol list that ld64 accepts.
+        # MSVC has its own export_map path in _dynamic_cc_library_windows and
+        # never reaches this branch.
         is_darwin = self.blade.get_build_toolchain().target_os == 'darwin'
         if linker_scripts:
             if is_darwin:
@@ -929,11 +930,17 @@ class CcTarget(Target):
                 implicit_deps += linker_scripts
         if version_scripts:
             if is_darwin:
-                self.warning(
-                    'export_map is not supported on macOS yet '
-                    '(Apple ld64 lacks --version-script); map ignored. '
-                    'Use __attribute__((visibility("hidden"))) in source if '
-                    'you need to hide symbols.')
+                # GNU ld only ever accepts one anonymous version node, so
+                # version_scripts is at most one element here.
+                export_map = version_scripts[0]
+                exports_list = '%s.exported_symbols_list' % output
+                self.generate_build('cc_macos_exports', exports_list,
+                                    inputs=objs,
+                                    implicit_deps=[export_map],
+                                    variables={'export_map': export_map})
+                extra_linkflags.append(
+                    '-Wl,-exported_symbols_list,' + exports_list)
+                implicit_deps.append(exports_list)
             else:
                 extra_linkflags += ['-Wl,--version-script=%s' % ver for ver in version_scripts]
                 implicit_deps += version_scripts

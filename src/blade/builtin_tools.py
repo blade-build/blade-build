@@ -321,6 +321,148 @@ def _filter_exports_by_map(seen, export_map):
     return kept
 
 
+# --- export_map (GNU-ld version script) filtering on macOS ----------------
+#
+# Apple's ld64 understands neither `--version-script` nor a syntactically
+# equivalent option; its native `-exported_symbols_list` takes a plain list
+# of mangled symbol names (one per line, with the Mach-O leading underscore
+# preserved). Translation: enumerate each .o's defined+external symbols via
+# `nm -gU -P`, demangle each via libc++abi's `__cxa_demangle`, match the
+# script's globals/locals against the demangled name-only form (everything
+# before the first `(` -- mirrors the MSVC path's name-only matching), then
+# emit the matching MANGLED symbol names back out.
+#
+# Same limitations as the MSVC path:
+# * Overloads collapse (name-only matching cannot distinguish them).
+# * Quoted signature patterns (`"f(int)"`) match by their name part only;
+#   a one-time warning is emitted when such patterns are present.
+
+_macos_cxa_demangle_fn = False  # False = uninitialized; None = unavailable.
+
+
+def _macos_cxa_demangle(symbol):
+    """Demangle an Itanium C++ symbol via libc++abi. Returns None if not C++."""
+    global _macos_cxa_demangle_fn  # pylint: disable=global-statement
+    if _macos_cxa_demangle_fn is False:
+        import ctypes  # pylint: disable=import-outside-toplevel
+        # libc++abi is part of every macOS install since 10.7. Try the
+        # canonical name first; fall back through likely aliases. If none
+        # are loadable, cache `None` and degrade to raw symbols.
+        loaded = None
+        for libname in ('libc++abi.dylib', 'libc++.1.dylib'):
+            try:
+                lib = ctypes.CDLL(libname)
+                fn = lib.__cxa_demangle  # type: ignore[attr-defined]
+            except (OSError, AttributeError):
+                continue
+            fn.argtypes = [ctypes.c_char_p, ctypes.c_void_p,
+                           ctypes.POINTER(ctypes.c_size_t),
+                           ctypes.POINTER(ctypes.c_int)]
+            fn.restype = ctypes.c_void_p
+            loaded = fn
+            break
+        _macos_cxa_demangle_fn = loaded
+    if _macos_cxa_demangle_fn is None:
+        return None
+
+    import ctypes  # pylint: disable=import-outside-toplevel
+    status = ctypes.c_int(0)
+    length = ctypes.c_size_t(0)
+    result_ptr = _macos_cxa_demangle_fn(
+        symbol.encode('ascii', 'replace'),
+        None, ctypes.byref(length), ctypes.byref(status))
+    if status.value != 0 or not result_ptr:
+        return None
+    try:
+        return ctypes.string_at(result_ptr).decode('utf-8', 'replace')
+    finally:
+        # __cxa_demangle returns a malloc'd buffer; the caller must free it.
+        libc = ctypes.CDLL(None)
+        libc.free.argtypes = [ctypes.c_void_p]
+        libc.free(result_ptr)
+
+
+def _macos_demangle_name_only(stripped_symbol):
+    """Demangle and drop the parameter signature.
+
+    Mirrors MSVC's ``UnDecorateSymbolName(UNDNAME_NAME_ONLY)``: for
+    ``mylib::Greet(int)`` returns ``mylib::Greet`` -- the form that
+    ``ns::class::method`` patterns in the export_map are written against.
+    """
+    dname = _macos_cxa_demangle(stripped_symbol)
+    if dname is None:
+        return stripped_symbol  # Not a C++ mangled name; treat as extern "C".
+    return dname.split('(', 1)[0]
+
+
+def _macos_obj_global_symbols(obj_path):
+    """List defined+external symbols of a Mach-O object via ``nm -gU -P``.
+
+    Output format: ``<name> <type> <value> <size>``. ``-g`` filters to
+    globals, ``-U`` drops undefined imports. We keep only data/text/bss/
+    rodata types -- the things a linker would actually consider exporting.
+    """
+    import subprocess  # pylint: disable=import-outside-toplevel
+    out = subprocess.check_output(['nm', '-gU', '-P', obj_path], text=True)
+    syms = []
+    for line in out.splitlines():
+        parts = line.split()
+        # `-P` lines look like "<name> <type>"; some BSD nm builds may emit
+        # a single-column form when the symbol has no value -- skip those.
+        if len(parts) >= 2 and parts[1] in ('T', 'D', 'S', 'B', 'R'):
+            syms.append(parts[0])
+    return syms
+
+
+def _write_if_changed(path, content):
+    """Write ``content`` to ``path`` only when it differs from the on-disk
+    bytes; preserves mtime for unchanged outputs so ninja's ``restat`` can
+    prune dependent edges (here, the actual link)."""
+    try:
+        with open(path, 'rb') as f:
+            if f.read() == content:
+                return
+    except FileNotFoundError:
+        pass
+    with open(path, 'wb') as f:
+        f.write(content)
+
+
+def generate_macos_exports(args):
+    """Generate an ld64 ``-exported_symbols_list`` from .o + export_map.
+
+    Invoked as ``cc_macos_exports <output> <export_map> <obj>...``. Writes a
+    file with one mangled symbol per line (including the Mach-O ``_`` prefix).
+    A symbol is kept iff it matches the export_map's ``global:`` set (and is
+    not hidden by ``local:`` -- e.g. the usual ``local: *;`` catch-all).
+    """
+    output, export_map_path = args[0], args[1]
+    objs = args[2:]
+    _declare_outputs(output)
+    globals_, locals_ = _parse_export_map(export_map_path)
+    if any(quoted for _, _, quoted in globals_ + locals_):
+        console.warning(
+            'cc_macos_exports: %s: quoted signature patterns are matched by '
+            'name only on macOS (Itanium __cxa_demangle output is split at '
+            'the first "("); overloads collapse.' % export_map_path)
+
+    kept = set()
+    for obj in objs:
+        for raw in _macos_obj_global_symbols(obj):
+            # Mach-O symbols start with `_`; strip for demangling, keep the
+            # original for output (ld64 -exported_symbols_list expects the
+            # underscore form).
+            stripped = raw[1:] if raw.startswith('_') else raw
+            dname = _macos_demangle_name_only(stripped)
+            if _export_map_keeps(stripped, dname, globals_, locals_):
+                kept.add(raw)
+
+    lines = ['# Generated by Blade from %s\n' % os.path.basename(export_map_path)]
+    for sym in sorted(kept):
+        lines.append(sym + '\n')
+    _write_if_changed(output, ''.join(lines).encode('utf-8'))
+
+
 def _parse_coff(data):
     """Parse a COFF object file's symbol table (pure stdlib `struct`).
 
@@ -1036,6 +1178,7 @@ _BUILTIN_TOOLS = {
     'javac_compile': generate_javac_compile,
     'proto_java_srcjar': generate_proto_java_srcjar,
     'cc_inclusion_check': generate_cc_inclusion_check,
+    'cc_macos_exports': generate_macos_exports,
     'cc_windef': generate_cc_windef,
     'resource': generate_resource,
     'resource_index': generate_resource_index,

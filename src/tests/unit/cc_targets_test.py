@@ -244,35 +244,64 @@ class CcLinkPlatformGuardTest(unittest.TestCase):
         target.generate_build = fake_generate_build
         return target
 
-    def _extra_linkflags(self, target):
-        # Single ``_cc_link`` call -> single generate_build call.
-        self.assertEqual(1, len(target.generate_build_calls))
-        return target.generate_build_calls[0].get(
+    def _link_call(self, target, rule):
+        """Return the single generate_build call for the given link rule."""
+        matches = [c for c in target.generate_build_calls if c['rule'] == rule]
+        self.assertEqual(1, len(matches),
+                         f'expected one {rule!r} edge, got: {target.generate_build_calls!r}')
+        return matches[0]
+
+    def _extra_linkflags(self, target, rule):
+        return self._link_call(target, rule).get(
             'variables', {}).get('extra_linkflags', '')
 
-    def test_version_script_dropped_on_darwin(self):
+    def test_version_script_translates_to_exports_list_on_darwin(self):
+        # On Darwin the GNU-ld --version-script doesn't pass through; it gets
+        # filtered through cc_macos_exports into a plain symbol list that ld64
+        # actually understands.
         target = self._target_with_toolchain('darwin')
-        target._cc_link('libfoo.dylib', 'solink', objs=[], deps=[], sys_libs=[],
+        target._cc_link('libfoo.dylib', 'solink',
+                        objs=['a.o', 'b.o'], deps=[], sys_libs=[],
                         version_scripts=['libfoo.map'])
-        self.assertNotIn('--version-script', self._extra_linkflags(target))
-        # A warning must surface so the user knows the map was ignored.
-        self.assertTrue(
-            any('macOS' in w and 'export_map' in w for w in target.warnings),
-            f'expected an export_map/macOS warning, got: {target.warnings!r}')
+        # 1) A cc_macos_exports edge is emitted, fed by the objs and gated by
+        #    the map; its output becomes the link's implicit dep.
+        exports_edge = self._link_call(target, 'cc_macos_exports')
+        self.assertEqual(
+            exports_edge['output'], 'libfoo.dylib.exported_symbols_list')
+        self.assertEqual(['a.o', 'b.o'], exports_edge['inputs'])
+        self.assertEqual(['libfoo.map'], exports_edge['implicit_deps'])
+        self.assertEqual('libfoo.map',
+                         exports_edge['variables']['export_map'])
+        # 2) The link command uses ld64's -exported_symbols_list (the
+        #    --version-script spelling that ld64 rejects is gone).
+        link_flags = self._extra_linkflags(target, 'solink')
+        self.assertIn(
+            '-Wl,-exported_symbols_list,libfoo.dylib.exported_symbols_list',
+            link_flags)
+        self.assertNotIn('--version-script', link_flags)
+        # 3) No warnings: the map is fully honored on Darwin.
+        self.assertEqual([], target.warnings)
 
     def test_version_script_emitted_on_linux(self):
         target = self._target_with_toolchain('linux')
         target._cc_link('libfoo.so', 'solink', objs=[], deps=[], sys_libs=[],
                         version_scripts=['libfoo.map'])
         self.assertIn('--version-script=libfoo.map',
-                      self._extra_linkflags(target))
+                      self._extra_linkflags(target, 'solink'))
         self.assertEqual([], target.warnings)
+        # No cc_macos_exports edge on Linux.
+        self.assertNotIn(
+            'cc_macos_exports',
+            [c['rule'] for c in target.generate_build_calls])
 
     def test_linker_script_dropped_on_darwin(self):
+        # linker_script remains in the "warn and drop" state -- there's no
+        # equivalent in ld64 we can translate to, and users should reach for
+        # __attribute__((section(...))) etc. instead.
         target = self._target_with_toolchain('darwin')
         target._cc_link('foo', 'link', objs=[], deps=[], sys_libs=[],
                         linker_scripts=['layout.lds'])
-        flags = self._extra_linkflags(target)
+        flags = self._extra_linkflags(target, 'link')
         self.assertNotIn('-T', flags)
         self.assertNotIn('layout.lds', flags)
         self.assertTrue(
@@ -284,7 +313,8 @@ class CcLinkPlatformGuardTest(unittest.TestCase):
         target = self._target_with_toolchain('linux')
         target._cc_link('foo', 'link', objs=[], deps=[], sys_libs=[],
                         linker_scripts=['layout.lds'])
-        self.assertIn('-T layout.lds', self._extra_linkflags(target))
+        self.assertIn('-T layout.lds',
+                      self._extra_linkflags(target, 'link'))
         self.assertEqual([], target.warnings)
 
 
