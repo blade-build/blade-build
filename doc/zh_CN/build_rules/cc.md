@@ -223,24 +223,64 @@ Blade 能检查到两种缺失情况：
 
 该检查默认即以 `'warning'`（建议性）开启：会提示但不导致构建失败。通过 [`cc_config.unused_deps_severity`](../config.md#cc_config) 可设为 `'error'` 让构建失败，或设为 `'debug'` 关闭。与 Bazel 的 `unused_deps`、Buck2 一致，默认是建议性的。
 
-以下依赖不会被报告：
+#### `keep_deps` 何时该用、何时不该用
 
-- 以**显式空 `hdrs = []`** 声明的「无公开接口」库——它没有可被使用的公开头文件（典型如仅用于链接、靠静态初始化自注册的库）。注意 `proto_library` 有 `.pb.h`，仍会被检查；`hdrs` 未声明（`None`）的库也仍会被检查。
-- 列在目标 `keep_deps` 属性中的依赖——你**有意保留**的依赖（例如需要链接、但不直接包含其头文件）。`keep_deps` 是真实依赖（和 `deps` 一样会被构建、链接、头文件可见），只是会被合并进依赖图、同时豁免本检查；相比埋在 config 里，写在目标处更自文档化：
+**`keep_deps` 在实践中应当极其少见。** Blade 已经自动豁免了一系列「看起来未用但实际是真依赖」的结构性场景；一个结构合理的 BUILD 几乎不需要任何 `keep_deps`。在添加 `keep_deps` 之前，先确认下面的自动豁免条件是否已经覆盖你的情况，或者问题的真正解法是不是**改结构**而非**抑制告警**。
 
-  ```python
-  cc_library(
-      name = 'foo',
-      srcs = ['foo.cc'],
-      hdrs = ['foo.h'],
-      deps = [':bar'],            # 通过头文件使用
-      keep_deps = [':baz'],       # 有意链接，但不包含其头文件
-  )
-  ```
+#### 自动被豁免的情况
 
-- 在 [`cc_config.unused_deps_suppress`](../config.md#cc_config) 中按 `{target: [deps]}` 列出的依赖（主要用于存量代码的逐步治理——逐个改 BUILD 不现实时）。
+以下任一条满足时，依赖**永远不会**被报告为未使用：
 
-> 提示：有的库是为了链接其副作用（例如靠全局对象自注册）而被依赖、并不包含其头文件。这类库为了不被链接器丢弃，本身应声明 `link_all_symbols = True`；但该检查**不会**因此自动豁免它（很多 `link_all_symbols` 的库其实是多余依赖），所以如果确属有意保留，请将其列入 `unused_deps_suppress`。
+1. **该依赖没有公开头文件** —— 显式 `hdrs = []`，或等价的「header-less」状态。自动适用于：
+   - 显式 `hdrs = []` 的库（无公开接口）。
+   - 名字列在 [`cc_library_config.hdrs_missing_suppress`](../config.md#cc_library_config) 里的库 —— 用户已经声明「此库没有公开头文件」，Blade 视为等同 `hdrs = []`。
+   - 未声明 `hdrs` 的 `foreign_cc_library`。这类目标注册的 `hdr_dir` 是源码树内的目录（如 `thirdparty/gflags/gflags`），而消费者只会从安装后的目录引用头文件（如 `<gflags/gflags.h>`），未使用检查没有任何机会将依赖判定为「已使用」。
+
+2. **目标没有可扫描的 C/C++ 源文件**。当一个目标的 `srcs` 和 `hdrs` 加起来没有任何文件可被 Blade 扫描 `#include` 时（空 srcs 的伞库、`.cc` 落在 `build_dir` 下的 `proto_library` 包装、纯生成代码、外部构建……），本目标直接跳过检查 —— 没有 `#include` 语料可以对照，否则每个 dep 都会变成误报。
+
+3. **头文件再导出（re-export）**。当伞目标声明的某个 `hdrs` 同时被它的某个 dep 也声明为公开头文件时，该 dep 被视为隐式已使用。这是典型的伞门面模式（如 `fiber:fiber` 把 `async.h`、`future.h` 列在自己 `hdrs` 中，而 `fiber:async`、`fiber:future` 也分别声明这些头）。
+
+4. **`export_incs` 虚拟路径**。当一个库的头文件放在私有子目录、通过 `-Iexport_inc_path` 暴露给消费者（例如 `protobuf-3.4.1` 的 `src/google/protobuf/message.h` 配 `export_incs = ['src']`）时，Blade 同时注册完整路径与「消费者可见的相对路径」（`google/protobuf/message.h`），使 `#include <google/protobuf/message.h>` 能解析回 protobuf 目标。
+
+5. **系统库**（形如 `#:NAME` 的依赖，例如 `#:dl`、`#:pthread`）。它们的头文件（`<dlfcn.h>`、`<pthread.h>`）确实存在，但 Blade 没有「系统头 → 系统库」的映射表，本检查无从对照。
+
+6. **`keep_deps` 与 `unused_deps_suppress`** —— 用户显式覆盖。
+
+#### 何时真的需要 `keep_deps`
+
+剔除上面所有自动豁免之后，剩下的是「纯链接时」模式：依赖的符号在 link 时被引用，但消费者并不 `#include` 它的任何公开头文件。即便如此，`keep_deps` 通常仍**不**是正确答案：
+
+- **自注册库** —— 协议实现、NSLB、name resolver、压缩器、工厂插件等通过静态初始化向全局注册表自注册、消费者从不直接 `#include` 它的库 —— 应当**把 `.h` 移到 `srcs`、并声明 `hdrs = []`**。该库通过上面 (1) 自动豁免。**如果某个目标（典型如它对应的 `*_test.cc`）确实需要 `#include` 这个私有头文件，只要测试目标直接依赖该库，Blade 允许它按名引用** —— 私有头文件可以被直接依赖该库的目标按名引用。这意味着你**不需要**为了测试能 include 而把头文件公开。
+
+- **伞门面（umbrella facade）** —— 在自己 `hdrs` 中列出子库的公开头文件，(3) 即可自动豁免，不需要 `keep_deps`。
+
+- **「为了显式」而重复列出的传递依赖** —— 直接删掉。如果 `:hbase_channel` 已经依赖 `:hbase_client_protocol`，那么依赖 `:hbase_channel` 的伞目标 `:hbase_client` 就**不需要**再直接列一遍 `:hbase_client_protocol`。这种冗余直依赖才是触发「未使用」的根源。
+
+为副作用（自注册全局对象等）被链接的库，本身应当声明 `link_all_symbols = True`，以避免链接器丢弃。
+
+只有当以上情况都不适用时，`keep_deps` 才合适 —— 例如，一个伞库聚合了若干个「纯链接注册、自身也没有可再导出的公开头文件」的子目标。
+
+```python
+cc_library(
+    name = 'foo',
+    srcs = ['foo.cc'],
+    hdrs = ['foo.h'],
+    deps = [':bar'],          # 通过头文件使用
+    keep_deps = [':baz'],     # 真正的纯链接、不属于自动豁免的情形
+)
+```
+
+#### 常见的误用模式（看起来像多余依赖、其实不是）
+
+- **私有头文件被错误地列入 `hdrs`**。如果一个库的 `.h` 只被自身 `.cc` 和它的 `*_test.cc` 使用，根本不需要公开头文件。把 `.h` 移到 `srcs`、`hdrs = []`，所有消费者通过 (1) 自动豁免。测试目标仍可按名 `#include` 私有头。
+- **伞门面没有把子库的头文件再列一遍**。如果伞库聚合多个子库，把子库的公开头文件也加入伞库自己的 `hdrs`，(3) 即可自动豁免「伞 → 子库」的依赖。
+- **未显式声明 `hdrs` 的 `foreign_cc_library`**。这种情况下 hdr_dir 注册的是源码树路径，永远无法匹配消费者的 `#include`；(1) 已自动处理，但如果你还想要缺失依赖检查也生效，建议把公开头显式列入 `hdrs`。
+- **通过 `export_incs` 路径访问的库**。(4) 已自动处理 —— 如果检查仍触发，确认 `export_incs` 配置的是实际的根（如 `src`，不是 `.` 或完整路径）。
+- **`proto_library` 当成「纯链接」依赖**。`proto_library` 生成的 `.pb.h` 目前还未与 `_hdr_targets_map` 完全打通，可能暂时仍需要保留在 `keep_deps` 中。（已知待修复。）
+
+> 提示：在确定结构性解法（私有细节通过 `hdrs` 泄漏？伞库没再导出？冗余的传递性依赖？）已经不适用之前，不要急于用 `keep_deps` 或 `unused_deps_suppress` 来抑制检查。看起来像「Blade 太烦」的模式，几乎都是检查正确捕捉到的真问题。
+
+在 [`cc_config.unused_deps_suppress`](../config.md#cc_config) 中按 `{target: [deps]}` 列出的依赖也会被豁免（主要用于存量代码的逐步治理——批量改 BUILD 不现实时）。
 
 ## prebuilt_cc_library
 

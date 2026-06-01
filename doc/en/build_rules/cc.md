@@ -252,24 +252,64 @@ The complement of the missing-dependency check above: Blade can also detect **re
 
 This check is **on by default at `'warning'`** (advisory — reported but does not fail the build); via [`cc_config.unused_deps_severity`](../config.md#cc_config) set it to `'error'` to fail the build, or `'debug'` to silence. Advisory by default, like Bazel's `unused_deps` tool and Buck2.
 
-The following deps are never reported:
+#### When `keep_deps` is (and isn't) needed
 
-- Libraries declared with an explicit empty `hdrs = []` (no public interface — e.g. a library depended on only for linking / static-initializer self-registration), since there is no header that could be used. Note `proto_library` has `.pb.h` and is still checked; a library with `hdrs` unset (`None`) is also still checked.
-- Deps listed in a target's `keep_deps` attribute — deps you intentionally keep (e.g. linked but headers not directly used). `keep_deps` are real dependencies (built, linked, header-visible, just like `deps`); they are merged into the dependency graph but exempt from this check, and reading better than burying them in config:
+**`keep_deps` should be very rare in practice.** Blade auto-exempts a number of structural patterns that legitimately show up as "unused" but are real dependencies, and a properly-structured BUILD usually doesn't need any `keep_deps` at all. Before adding a `keep_deps` entry, check whether one of the auto-exemptions below already covers your case, or whether the real fix is restructuring the dep — not silencing it.
 
-  ```python
-  cc_library(
-      name = 'foo',
-      srcs = ['foo.cc'],
-      hdrs = ['foo.h'],
-      deps = [':bar'],            # used via headers
-      keep_deps = [':baz'],       # intentionally linked, headers not included
-  )
-  ```
+#### Cases automatically exempted from the check
 
-- Deps listed in [`cc_config.unused_deps_suppress`](../config.md#cc_config) as a `{target: [deps]}` map (mainly for incrementally cleaning up an existing code base, where editing every BUILD file is impractical).
+A dep is **never** reported as unused if any of these apply:
 
-> Tip: a library depended on for its link-time side effects (e.g. self-registration via global objects) without including its headers should itself declare `link_all_symbols = True` so the linker does not drop it. The check does **not** auto-exempt such libraries (many `link_all_symbols` libraries are in fact redundant deps), so if the dependency is genuinely intentional, list it in `unused_deps_suppress`.
+1. **The dep has no public headers** — `hdrs = []` (explicit) or, equivalently, the dep is configured as header-less. Auto-applied to:
+   - Libraries with an explicit `hdrs = []` (no public interface).
+   - Libraries whose `name` is listed in [`cc_library_config.hdrs_missing_suppress`](../config.md#cc_library_config). The user already declared "this library has no public header"; Blade treats it the same as `hdrs = []`.
+   - `foreign_cc_library` targets that don't enumerate explicit `hdrs`. The `hdr_dir` such a target registers is the in-source build-tree layout (e.g. `thirdparty/gflags/gflags`), but consumers `#include` from the installed layout (e.g. `<gflags/gflags.h>`), so the unused-deps check has no way to ever credit the dep as "used".
+
+2. **The target has no scannable C/C++ source.** If the target's `srcs` and `hdrs` between them contain zero files that Blade can scan for `#include` directives (umbrella libs with empty srcs, `proto_library` wrappers whose generated `.cc` lives under `build_dir`, generated-only or foreign builds, …), the check skips this target — there is no `#include` corpus to compare deps against, so every dep would be a false positive.
+
+3. **Header re-export.** When the umbrella target declares one of its own `hdrs` and at least one dep also declares the same header, the dep is treated as implicitly used. This is the umbrella-facade pattern (`fiber:fiber` listing `async.h`, `future.h`, … which `fiber:async`, `fiber:future`, … also own as their public headers).
+
+4. **`export_incs` virtual paths.** A library that ships its headers under a private subdirectory and exposes them via `-Iexport_inc_path` (e.g. `protobuf-3.4.1` with `src/google/protobuf/message.h` + `export_incs = ['src']`) registers each header under both its full path and the consumer-visible relative path (`google/protobuf/message.h`), so `#include <google/protobuf/message.h>` resolves back to the protobuf target.
+
+5. **System libraries** (deps keyed `#:NAME`, e.g. `#:dl`, `#:pthread`). Their headers (`<dlfcn.h>`, `<pthread.h>`) do exist but Blade has no system-header → system-lib mapping, so a header-based check has nothing to consult.
+
+6. **`keep_deps` and `unused_deps_suppress`** — explicit user overrides.
+
+#### When you genuinely need `keep_deps` (and when you don't)
+
+After the auto-exemptions above, what's left is the "purely link-time" pattern: a dep whose symbols are reached at link time but not via any `#include`. Even here, `keep_deps` is usually NOT the right answer:
+
+- **Self-registration libraries** — protocol implementations, NSLBs, name resolvers, compressors, factory plugins that register themselves with a global registry via static initializers, and are never `#include`d directly by consumers — should move their `.h` into `srcs` and declare `hdrs = []`. The library then auto-exempts via case (1) above. **If a private header is incidentally needed by another target (e.g. its matching `*_test.cc`), Blade allows that consumer to `#include` it as long as the test depends on the library** — private headers from a directly declared dep are reachable by name. This means you do **not** need to make the header public just so the test can include it.
+
+- **Umbrella facades** that re-export a sub-library's interface — list the sub-library's public header in your own `hdrs`. Case (3) covers this without `keep_deps`.
+
+- **Transitive deps you re-list "just to be explicit"** — drop them. If `:hbase_channel` already depends on `:hbase_client_protocol`, an umbrella `:hbase_client` that depends on `:hbase_channel` does **not** need a redundant direct dep on `:hbase_client_protocol`. The redundant dep is what triggers the "unused" notice in the first place.
+
+A library depended on for its link-time side effects (e.g. self-registration via global objects) should declare `link_all_symbols = True` regardless, so the linker does not drop it.
+
+`keep_deps` is appropriate only when none of the above applies — for example, an umbrella that bundles several link-only registrations none of whose headers it owns or re-exports.
+
+```python
+cc_library(
+    name = 'foo',
+    srcs = ['foo.cc'],
+    hdrs = ['foo.h'],
+    deps = [':bar'],          # used via headers
+    keep_deps = [':baz'],     # truly link-only, header-bearing, not auto-exempt
+)
+```
+
+#### Common false-positive patterns (what looks like a redundant dep but isn't)
+
+- **A private header declared as `hdrs`.** A library whose `.h` is consumed only by its own `.cc` and matching `*_test.cc` does not need a public header at all. Move the `.h` into `srcs`, set `hdrs = []`, and case (1) auto-exempts the library for every consumer. The matching test can still `#include` the private header by name.
+- **An umbrella facade not re-declaring the sub-library's hdrs.** If the umbrella aggregates several sub-libraries, listing the sub-libraries' public headers in the umbrella's own `hdrs` lets case (3) auto-exempt the umbrella → sub-library deps.
+- **A `foreign_cc_library` with an undeclared `hdrs` list.** Without explicit `hdrs`, the hdr_dir is registered against the in-source layout and never matches consumer `#include`s; case (1) handles this automatically, but if you want missing-dep detection too, list the public headers explicitly under `hdrs`.
+- **A library reached only through `export_incs` paths.** Case (4) handles this — if you still see the check fire, verify the `export_incs` entry is the actual root (e.g. `src`, not `.` or the full path).
+- **`proto_library` listed as a "link-only" dep.** A `proto_library`'s generated `.pb.h` is currently not unified with `_hdr_targets_map` in every code path; it may need to remain in `keep_deps` for now. (Fix tracked.)
+
+> Tip: don't reach for `keep_deps` or `unused_deps_suppress` to silence the check until you've ruled out the structural fixes above. The patterns that look like "Blade is being annoying" are almost always actual structural smells (a private detail leaking through `hdrs`, an umbrella that doesn't re-export, a redundant transitive dep) that the check is correctly surfacing.
+
+Deps listed in [`cc_config.unused_deps_suppress`](../config.md#cc_config) as a `{target: [deps]}` map are also exempt (mainly for incrementally cleaning up an existing code base, where editing every BUILD file at once is impractical).
 
 ## prebuilt_cc_library
 
