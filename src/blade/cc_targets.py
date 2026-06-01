@@ -868,6 +868,13 @@ class CcTarget(Target):
         tc = self.blade.get_build_toolchain()
         if tc.cc_is('msvc'):
             return None
+        # `allow_undefined=True` is the legacy "this library has unresolved
+        # symbols by design (the consumer provides them at final link)"
+        # signal. It already disables -Wl,--no-undefined at link time; the
+        # static check would otherwise contradict it. Per-symbol allowlists
+        # (list form) continue through the check below.
+        if self.attr.get('allow_undefined') is True:
+            return None
         targets = self.blade.get_build_targets()
         dep_archives = []
         system_caches = []
