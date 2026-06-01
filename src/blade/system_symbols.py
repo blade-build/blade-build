@@ -273,6 +273,16 @@ def _nm_defined_externals(lib_path):
             # Defined external: any uppercase type letter except U / W
             # (undefined / weak-undefined). Lowercase = local, skip.
             if ty.isupper() and ty not in ('U', 'W'):
+                # ELF symbol versioning: nm prints `foo@@GLIBCXX_3.4.21`
+                # for the default version of a versioned defined symbol,
+                # and `foo@GLIBCXX_3.4.21` for non-default versions. The
+                # consumer's .o has plain `foo` as the undefined reference
+                # (resolution happens at link time against the version
+                # definition file). Strip the @VERSION suffix so the two
+                # sides match.
+                at = name.find('@')
+                if at >= 0:
+                    name = name[:at]
                 symbols.add(name)
         if symbols:
             return symbols
