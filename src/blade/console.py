@@ -205,8 +205,13 @@ def get_verbosity():
 
 
 def is_quiet():
-    """True iff the current verbosity is QUIET (only warnings and errors)."""
-    return _verbosity == Verbosity.QUIET
+    """True iff the current verbosity is at most QUIET (only warnings and errors).
+
+    Uses ``<=`` rather than ``==`` to preserve the semantics of the original
+    ``verbosity_le('quiet')`` predicate: if a future level is added below QUIET
+    (e.g. SILENT), it'll be considered "at least as quiet" too.
+    """
+    return _verbosity <= Verbosity.QUIET
 
 
 ##############################################################################

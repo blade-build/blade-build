@@ -414,6 +414,10 @@ class VerbosityTest(unittest.TestCase):
             console.set_verbosity('shouting')
 
     def test_is_quiet(self):
+        # is_quiet() is _verbosity <= QUIET (not ==), matching the original
+        # verbosity_le('quiet') it replaced. Today the two are equivalent because
+        # QUIET is the lowest member; the distinction matters if a future SILENT
+        # level (< QUIET) is ever added.
         console.set_verbosity(console.Verbosity.QUIET)
         self.assertTrue(console.is_quiet())
         console.set_verbosity(console.Verbosity.NORMAL)
