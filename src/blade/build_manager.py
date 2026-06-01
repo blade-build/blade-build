@@ -204,6 +204,22 @@ class Blade:
                 resolved[alias] = None
         self._system_symbol_caches = resolved
         self._system_symbol_default_aliases = tuple(tc.default_linked_libs)
+        # Surface the resolution result for diagnosability: missing aliases
+        # become silent baseline gaps that look like false-positive undefined
+        # symbols at check time. Logging at info level keeps it visible in
+        # CI without spamming interactive runs.
+        for alias, cache in resolved.items():
+            if cache is None:
+                console.warning(
+                    'system_symbols: could not resolve "%s" -- check rule will treat '
+                    'its symbols as undefined' % alias)
+            else:
+                try:
+                    n = sum(1 for line in open(cache, encoding='utf-8')
+                            if line.strip() and not line.startswith('#'))
+                except OSError:
+                    n = -1
+                console.info('system_symbols: %s -> %s (%d symbols)' % (alias, cache, n))
 
     def get_system_symbol_cache(self, alias):
         """Return the cache file path for system library ``alias``, or None

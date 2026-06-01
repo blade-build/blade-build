@@ -171,7 +171,7 @@ def lex_yacc_library(
         incs: StrOrListOpt = None,
         extra_cppflags: StrOrListOpt = None,
         extra_linkflags: StrOrListOpt = None,
-        allow_undefined: bool = False,
+        allow_undefined: bool = True,
         recursive: bool = False,
         prefix: str | None = None,
         lexflags: StrOrListOpt = None,
