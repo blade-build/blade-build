@@ -70,6 +70,7 @@ class LexYaccConfigRuleTest(unittest.TestCase):
     def test_setting_bison_path_takes_effect(self):
         config.lex_yacc_config(bison='/opt/homebrew/opt/bison/bin/bison')
         section = self._bc.get_section('lex_yacc_config')
+        assert section is not None  # get_section returns Optional; narrow for the checker
         self.assertEqual(
             section['bison'], '/opt/homebrew/opt/bison/bin/bison')
         # Other keys are not silently clobbered.
@@ -79,6 +80,7 @@ class LexYaccConfigRuleTest(unittest.TestCase):
         config.lex_yacc_config(flex='/usr/local/bin/flex',
                                bison='/usr/local/bin/bison')
         section = self._bc.get_section('lex_yacc_config')
+        assert section is not None
         self.assertEqual(section['flex'], '/usr/local/bin/flex')
         self.assertEqual(section['bison'], '/usr/local/bin/bison')
 
