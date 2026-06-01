@@ -837,9 +837,16 @@ class CcTarget(Target):
     def _generate_check_undefined(self, static_lib, inclusion_check_result):
         """Emit the nm-based dep-completeness check rule for this cc_library.
 
-        Skipped only when check_undefined is False (per target / CLI / config).
+        Skipped when:
+          * check_undefined is False (per target / CLI / config), or
+          * the toolchain is MSVC -- link.exe already rejects undefined
+            externals (LNK2019), and Microsoft's lib.exe / .obj DEFAULTLIB
+            directives resolve standard C/C++ symbols outside the source-
+            visible ``-l<name>`` graph, which our nm-based model can't
+            represent without significant Windows-specific work.
+
         Keeps running when generate_dynamic is True as an early, cheaper
-        cross-check — the dynamic link's `-Wl,--no-undefined` is the final
+        cross-check -- the dynamic link's `-Wl,--no-undefined` is the final
         word, but nm catches the same misses per-library, before any link
         runs, with faster feedback. See issue #1225.
 
@@ -858,8 +865,10 @@ class CcTarget(Target):
         """
         if not self.attr.get('check_undefined', True):
             return None
-        targets = self.blade.get_build_targets()
         tc = self.blade.get_build_toolchain()
+        if tc.cc_is('msvc'):
+            return None
+        targets = self.blade.get_build_targets()
         dep_archives = []
         system_caches = []
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
