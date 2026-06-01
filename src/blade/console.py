@@ -411,7 +411,7 @@ def debug(msg, prefix=True):
     if prefix:
         msg = 'Blade(debug): ' + msg
     log(msg)
-    _print(msg, Verbosity.VERBOSE)
+    _print(colored(msg, 'dimpurple'), Verbosity.VERBOSE)
 
 
 def diagnose(source_location, severity, message):
