@@ -35,7 +35,7 @@ from blade import console
 from blade.util import mkdir_p
 
 
-_CACHE_FORMAT_VERSION = 3  # bumped: v3 unions over linker-script members
+_CACHE_FORMAT_VERSION = 4  # bumped: v4 accepts lowercase types (IFUNC etc.)
 _CACHE_HEADER_LINES = 5  # version, alias, source, mtime, size
 
 
@@ -298,20 +298,22 @@ def _nm_defined_externals(lib_path):
             if len(parts) < 2:
                 continue
             name, ty = parts[0], parts[1]
-            # Defined external: any uppercase type letter except U / W
-            # (undefined / weak-undefined). Lowercase = local, skip.
-            if ty.isupper() and ty not in ('U', 'W'):
-                # ELF symbol versioning: nm prints `foo@@GLIBCXX_3.4.21`
-                # for the default version of a versioned defined symbol,
-                # and `foo@GLIBCXX_3.4.21` for non-default versions. The
-                # consumer's .o has plain `foo` as the undefined reference
-                # (resolution happens at link time against the version
-                # definition file). Strip the @VERSION suffix so the two
-                # sides match.
-                at = name.find('@')
-                if at >= 0:
-                    name = name[:at]
-                symbols.add(name)
+            # Defined external: anything except U / W (undefined /
+            # weak-undefined). `nm -g` / `--extern-only` already filtered
+            # out non-globals, so case here distinguishes export visibility
+            # variants (e.g. uppercase T vs lowercase t, or i / I for IFUNC),
+            # not local vs global -- both forms still resolve at link time
+            # and both should land in the baseline.
+            if ty in ('U', 'u', 'W', 'w', 'V', 'v'):
+                continue
+            # ELF symbol versioning: nm prints `foo@@GLIBCXX_3.4.21` for
+            # the default version, `foo@GLIBCXX_3.4.21` for non-default.
+            # The consumer's .o records the unversioned undefined `foo`;
+            # strip the @VERSION suffix so both sides match.
+            at = name.find('@')
+            if at >= 0:
+                name = name[:at]
+            symbols.add(name)
         if symbols:
             return symbols
     # Last-ditch: parse .tbd YAML directly (used only if Apple nm can't
