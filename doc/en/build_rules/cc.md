@@ -357,6 +357,20 @@ How it works:
 
 **Legitimate undefined-symbol cases.** A plugin loaded into a host process needs symbols that only the host's binary provides; setting `allow_undefined = True` opts that library out of both the static check and the link-time `--no-undefined`. For a narrower exception — say a single symbol the toolchain emits but doesn't link — use the list form `allow_undefined = [r'__some_symbol']` so the rest of the closure is still enforced.
 
+**Cost vs. `--generate-dynamic`.** Before this check existed, the usual way to validate that every cc_library's deps were complete was to build the whole project with `--generate-dynamic`: each shared link runs through `-Wl,--no-undefined`, which fails the link on a missing dep. That works, but it has to (a) actually link every shared library, even when no dynamic linkage is otherwise wanted, and (b) only fails at link time, so the error message names the binary rather than the offending library. The static check moves the same validation to archive time and per-library.
+
+Measured on a real codebase (Tencent/flare's `flare/rpc/...`, 180 cc targets, macOS arm64, Python 3.14, `-j10`):
+
+| Scenario | Wall-clock | Notes |
+| --- | --- | --- |
+| Cold full build, `--generate-dynamic --no-cc-check-undefined` | 2m56s | static + dynamic, no validation |
+| Cold full build, `--generate-dynamic --cc-check-undefined` | 3m06s | static + dynamic + static check |
+| Static-check overhead on a cold build | **+10s (+5.7%)** | overlaps with link work |
+| Warm pure-check phase (incremental rerun) | **4.2s** | 180 targets, sources cached |
+| Warm dylib-relink phase, `--no-cc-check-undefined` | 3.1s | 91 dylibs, sources cached |
+
+In other words: on a project that doesn't actually need dynamic libraries, `--cc-check-undefined` is the cheap way to validate the dep graph — a few seconds on top of a normal static build — whereas `--generate-dynamic` makes you pay the full cost of every shared link just to find a missing dep. They are complementary, not redundant: keep using `--generate-dynamic` if you want shared libraries; use the static check for graph-completeness alone.
+
 ## prebuilt_cc_library
 
 For libraries without source code, library should be put under the lib{32,64} sub dir accordingly.
