@@ -61,8 +61,8 @@ def _log_system_symbol_resolution(alias, cache):
                     n += 1
     except OSError:
         pass
-    console.info('system_symbols: %s -> %s (%d symbols from %s)'
-                 % (alias, cache, n, src))
+    console.debug('system_symbols: %s -> %s (%d symbols from %s)'
+                  % (alias, cache, n, src))
 
 
 # Start of fingerprint line in each per-target ninja file
