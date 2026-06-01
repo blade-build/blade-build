@@ -318,6 +318,18 @@ class ToolChain:
         """Return system library search paths, or empty list if not applicable."""
         return []
 
+    @property
+    def default_linked_libs(self) -> 'tuple[str, ...]':
+        """Library aliases the C/C++ driver links implicitly into every binary.
+
+        Aliases are the same form blade uses in `#xxx` deps and in `-l<alias>`
+        on the command line (e.g. ``c``, ``stdc++``, ``c++``, ``System``).
+        Used by the ``check_undefined`` static check to seed the baseline of
+        ambient symbols. Override per subclass; default is an empty tuple so
+        toolchains that don't model this don't break callers.
+        """
+        return ()
+
     def filter_cc_flags(self, flag_list, language='c'):
         """Filter out the unrecognized compilation flags."""
         flag_list = var_to_list(flag_list)
@@ -411,6 +423,35 @@ class GccToolChain(ToolChain):
     def exe_suffix(self) -> str:
         return '.exe' if self._target == 'windows' else ''
 
+    @property
+    def default_linked_libs(self) -> 'tuple[str, ...]':
+        """GCC/Clang drivers always pull in libc + the C++ runtime + libgcc-or-
+        compiler-rt helpers + the platform's program-startup objects. macOS
+        bundles libc/libm/libpthread/libdl/libsystem_* into ``libSystem`` and
+        uses ``libc++`` as the C++ runtime; Linux distros expose them
+        individually.
+
+        We don't list ``libpthread``/``libm``/``libdl``/``librt`` for Linux:
+        on glibc those are linked only when explicitly requested
+        (``-lpthread`` etc.), which blade already models via ``#pthread`` /
+        ``#m`` / ``#dl`` deps. Including them in the implicit baseline would
+        hide missing ``#xxx`` deps the check is meant to catch.
+
+        For C-only targets the ``stdc++`` / ``c++`` entries contribute
+        nothing harmful (they're a no-op for pure C undefined refs).
+        """
+        if self._target == 'darwin':
+            # libSystem is the unified Apple libc. libc++ for C++ runtime.
+            # libc++abi is usually re-exported through libc++ but we list it
+            # separately to handle ABI symbols (typeinfo, vtables) that may
+            # live there directly.
+            return ('System', 'c++', 'c++abi')
+        if self._target == 'windows':
+            # GCC on Windows (MinGW): msvcrt is the C runtime.
+            return ('msvcrt', 'stdc++', 'gcc_s')
+        # Linux / other ELF: libgcc_s for unwinder + helpers, libc, libstdc++.
+        return ('c', 'gcc_s', 'stdc++')
+
 
 class MsvcToolChain(ToolChain):
     """MSVC toolchain for Windows builds.
@@ -438,6 +479,17 @@ class MsvcToolChain(ToolChain):
     @property
     def target_arch(self) -> str:
         return self._target_arch
+
+    @property
+    def default_linked_libs(self) -> 'tuple[str, ...]':
+        """MSVC implicitly links the UCRT + VC runtime + Win32 base libs.
+
+        The exact set depends on the runtime selection (/MD vs /MT vs the
+        debug variants); we list the union so the baseline covers all four
+        configurations. lib.exe / link.exe resolves these via LIB env var
+        plus their own search paths.
+        """
+        return ('msvcrt', 'vcruntime', 'ucrt', 'kernel32')
 
     def __init__(self, target_arch='auto', msvc_version='auto'):
         super().__init__()

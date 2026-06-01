@@ -136,121 +136,53 @@ def generate_cc_inclusion_check(args):
 #   undefined externals from its .o files
 #     - defined externals from the same .a (intra-archive)
 #     - defined externals from each transitive cc_library dep's .a
-#     - system symbol baseline (weak undefined, libc/libstdc++/libpthread,
-#       runtime stubs, common compiler-internal names)
+#     - symbols defined by the toolchain's default-linked system libs and any
+#       `#alias` system lib the target's transitive deps declare (read from
+#       pre-generated .syms cache files; see blade.system_symbols)
+#     - a tiny residue of compiler-injected / runtime-startup names not found
+#       in any system library (e.g. the C++ Itanium guard variables emitted
+#       by the compiler itself, or the macOS dyld TLV bootstrap stubs)
 #     - user allow_undefined regex patterns
 #   = unresolved set; non-empty -> error with suggestions.
 #
 # Cheap: one `nm -P -g` per archive, set arithmetic, regex fullmatch. No link.
 # See issue #1225.
 
-# Baseline regex patterns. Symbols matching these are considered ambient and
-# always resolved at final link by libc / libsystem / libpthread / libstdc++
-# (or libc++) / libgcc_s / libunwind / dyld. Patterns admit an optional
-# leading underscore to cover the macOS / BSD symbol mangling convention.
-# Conservative-ish: we prefer a few false negatives (missed real bugs) over
-# false positives that block users on rollout. Project-specific exceptions
-# go in allow_undefined.
-_CHECK_UNDEFINED_BASELINE_PATTERNS = (
-    # ---- libc: memory ----
-    r'_?(?:malloc|free|calloc|realloc|reallocf|posix_memalign|aligned_alloc|valloc|memalign|malloc_size|malloc_usable_size|malloc_good_size|malloc_default_zone|malloc_zone_\w+)',
-    r'_?(?:memcpy|memccpy|memmove|memset|memset_pattern\d*|memcmp|memchr|memmem|memrchr|bcopy|bzero|bcmp|explicit_bzero)',
-    # ---- libc: strings ----
-    r'_?(?:strlen|strnlen|strcmp|strncmp|strcasecmp|strncasecmp|strcoll|strxfrm|strcpy|strncpy|stpcpy|stpncpy|strlcpy|strcat|strncat|strlcat|strchr|strrchr|strchrnul|strstr|strcasestr|strdup|strndup|strerror|strerror_r|strsignal|strpbrk|strspn|strcspn|strtok|strtok_r|strsep|index|rindex)',
-    r'_?(?:strto[a-z]+_?l?l?|atoi|atol|atoll|atof)',
-    # ---- libc: stdio (printf/scanf families, including _chk variants) ----
-    r'_?(?:|v|d|sn|sn?|f|fn?|v?as|v?d?prin)?print[a-z]*(?:_chk)?',
-    r'_?[sd]?n?print?',  # extra-permissive printf shorthand
-    r'_?(?:|v|s|sn|f)?(?:n?print|scan)f(?:_chk|_l|_s)?',
-    r'_?(?:|v|f)?scanf(?:_l|_s|_chk)?',
-    r'_?(?:puts|putws|put[sw]?|gets|fgets|fputs|fputs_unlocked|fwrite|fread|fflush|fclose|fopen|fopen64|freopen|fdopen|setbuf|setvbuf|fileno|fseek|fseeko|ftell|ftello|rewind|clearerr|feof|ferror|fgetc|fgetwc|fputc|fputwc|ungetc|ungetwc|getc|getwc|getchar|getwchar|putc|putwc|putchar|putwchar|fgetpos|fsetpos|tmpfile|tmpnam|tempnam|mkstemp|mkstemps|mktemp|fmemopen|open_memstream|fflush_unlocked)',
-    r'_?(?:vfprintf|vprintf|vsnprintf|vsprintf|vasprintf|asprintf|vdprintf|dprintf|vsscanf|sscanf|vfscanf|fscanf)',
-    # ---- libc: I/O / system calls ----
-    r'_?(?:open|open64|openat|creat|close|close\$\w+|read|write|pread|pwrite|readv|writev|preadv|pwritev|fcntl|ioctl|pipe|pipe2|dup|dup2|dup3|lseek|lseek64|ftruncate|truncate|sync|fsync|fdatasync|posix_fallocate|posix_fadvise|posix_madvise|mmap|munmap|mprotect|madvise|mincore|msync|mlock|munlock|mlockall|munlockall|brk|sbrk)',
-    r'_?(?:stat|stat64|fstat|fstat64|lstat|lstat64|fstatat|access|faccessat|unlink|unlinkat|link|linkat|symlink|symlinkat|readlink|readlinkat|mkdir|mkdirat|rmdir|rename|renameat|chmod|fchmod|fchmodat|chown|fchown|lchown|fchownat|chdir|fchdir|getcwd|getwd|umask|sync|syncfs|chroot|mknod|mknodat|mkfifo|mkfifoat)',
-    r'_?(?:opendir|fdopendir|readdir|readdir_r|readdir64|rewinddir|telldir|seekdir|closedir|scandir|alphasort|dirfd|getdirentries)',
-    # ---- libc: process / signals / time ----
-    r'_?(?:exit|_exit|_Exit|abort|atexit|at_quick_exit|quick_exit|getenv|secure_getenv|setenv|unsetenv|putenv|clearenv|system|getopt|getopt_long|getopt_long_only|optarg|optind|opterr|optopt|getprogname|setprogname|getlogin|getlogin_r|getpwuid|getpwuid_r|getpwnam|getpwnam_r|getgrgid|getgrnam|getuid|geteuid|setuid|seteuid|getgid|getegid|setgid|setegid|setreuid|setregid|setresuid|setresgid|getgroups|setgroups|initgroups|getpid|getppid|getpgid|setpgid|setpgrp|getpgrp|getsid|setsid|getrlimit|setrlimit|getrusage|getpriority|setpriority|nice)',
-    r'_?(?:fork|vfork|execve|execvp|execvpe|execv|execl|execlp|execle|posix_spawn|posix_spawnp|posix_spawnattr_\w+|posix_spawn_file_actions_\w+|waitpid|wait|wait3|wait4|waitid|kill|killpg|tgkill|raise|signal|sigaction|sigprocmask|sigpending|sigsuspend|sigwait|sigwaitinfo|sigtimedwait|sigaltstack|siginterrupt|sigsetjmp|siglongjmp|sigemptyset|sigfillset|sigaddset|sigdelset|sigismember|psignal|abort|popen|pclose|perror|realpath)(?:\$\w+)?',
-    r'_?(?:alarm|sleep|usleep|nanosleep|pause|getitimer|setitimer|timer_create|timer_settime|timer_gettime|timer_delete|timer_getoverrun|time|clock|times|gettimeofday|settimeofday|clock_gettime|clock_getres|clock_settime|clock_nanosleep|localtime|localtime_r|gmtime|gmtime_r|mktime|timegm|strftime|strptime|asctime|asctime_r|ctime|ctime_r|difftime|tzset|tzname)',
-    r'_?(?:errno|__errno_location|__error|__error_l|__h_errno_location|h_errno|sys_errlist|sys_nerr|program_invocation_name|program_invocation_short_name|environ|_environ|__environ|stdin|stdout|stderr|__stdinp|__stdoutp|__stderrp|__sF|__stdoutp\$\w+)',
-    # ---- libc: system info / configuration ----
-    r'_?(?:sysconf|fpathconf|pathconf|confstr|getpagesize|gethostid|sethostid|gethostname|sethostname|getdomainname|setdomainname|uname|sysctl|sysctlbyname|sysctlnametomib|getifaddrs|freeifaddrs|if_nameindex|if_freenameindex|gethostbyname2_r)',
-    # ---- libc: dynamic loading ----
-    r'_?(?:dlopen|dlclose|dlsym|dlvsym|dlerror|dladdr|dladdr1|dlinfo|dlmopen|dlfcn|dl_iterate_phdr)',
-    # ---- libc: networking / sockets ----
-    r'_?(?:socket|socketpair|bind|listen|accept|accept4|connect|shutdown|getsockname|getpeername|getsockopt|setsockopt|recv|recvfrom|recvmsg|recvmmsg|send|sendto|sendmsg|sendmmsg|sendfile|select|pselect|poll|ppoll|epoll_create|epoll_create1|epoll_ctl|epoll_wait|epoll_pwait|kqueue|kevent|kevent64|FD_\w+|gethostbyname|gethostbyname_r|gethostbyname2|gethostbyname2_r|gethostbyaddr|gethostbyaddr_r|gethostent|sethostent|endhostent|gethostname|sethostname|getaddrinfo|freeaddrinfo|getnameinfo|gai_strerror|getservbyname|getservbyport|inet_ntop|inet_pton|inet_addr|inet_aton|inet_lnaof|inet_makeaddr|inet_netof|inet_network|inet_ntoa|inet_ntoa_r|htonl|htons|ntohl|ntohs|if_indextoname|if_nametoindex|if_freenameindex|if_nameindex)',
-    # ---- pthreads / semaphores / sched ----
-    r'_?(?:pthread_|sem_|sched_)\w+',
-    # ---- libm (with float/long-double suffixes) ----
-    r'_?(?:acos|asin|atan|atan2|cbrt|ceil|copysign|cos|cosh|erf|erfc|exp|exp2|expm1|fabs|fdim|floor|fma|fmax|fmin|fmod|frexp|hypot|ilogb|ldexp|lgamma|lgamma_r|llrint|llround|log|log10|log1p|log2|logb|lrint|lround|modf|nan|nearbyint|nextafter|nexttoward|pow|remainder|remquo|rint|round|scalbn|scalbln|signbit|sin|sincos|sinh|sqrt|tan|tanh|tgamma|trunc|fpclassify|isinf|isnan|isnormal|isfinite|isunordered|isgreater|isgreaterequal|isless|islessequal|islessgreater|j0|j1|jn|y0|y1|yn|drem|finite)f?l?',
-    # ---- locale / wide chars / iconv ----
-    r'_?(?:setlocale|localeconv|newlocale|duplocale|freelocale|uselocale|nl_langinfo|nl_langinfo_l|mbtowc|wctomb|mblen|mbsrtowcs|wcsrtombs|mbstowcs|wcstombs|iconv|iconv_open|iconv_close|wcs\w+|wcsto[a-z]+|wcprintf|wcprintf)',
-    # ---- GNU libc / Apple libc internals: anything double-underscored,
-    # but EXCLUDING C++ Itanium mangled names. Mangled names start with _Z;
-    # on macOS / BSD they get an extra leading underscore so they appear as
-    # `__Z...` — the negative lookahead `(?!Z)` excludes those so they fall
-    # through to the dedicated mangled-name patterns / user-symbol check.
-    r'_?__(?!Z)\w+',
-    # ---- C++ runtime / libsupc++ / libcxxabi / libstdc++ / libc++ ----
-    # Mangled std:: / __cxxabi / __gnu_cxx / vtable / typeinfo / typeinfo name
-    # / VTT for / construction vtable for / guard variables (Itanium ABI).
-    # Matches any mangled symbol containing the std::-namespace markers
-    # (`St`, `NSt`, `NKSt` for const members, `NVSt` for virtual; plus
-    # libc++'s inline-namespace `NSt3__1`, libstdc++'s `St7__cxx11`, the
-    # one-letter substitution codes Sa/Sb/Si/So/Sd/Ss/Sg, and the
-    # __cxxabiv1 / __gnu_cxx namespaces). The leading optional `_?` and
-    # the `\w*` either side accommodate macOS's extra underscore and
-    # template / qualified mangled segments.
-    r'_?_Z\w*(?:N[KV]?St|St(?:[0-9]|_)|NS[aibodsg]|9__gnu_cxx|10__cxxabiv1|6__cxxabi)\w*',
-    r'_?_Z\w*S[aibodsgt]_?\w*',  # one-letter std:: substitution codes
-    # Standalone short-form (no nested N prefix): _ZSt...
-    r'_?_ZSt\w*',
-    # Type-info / vtable / VTT / construction-vtable / guard variable /
-    # reference temporary / TLS init function tags (Itanium ABI).
-    # _ZTI = typeinfo, _ZTS = typeinfo name, _ZTV = vtable, _ZTT = VTT,
-    # _ZTC = construction-vtable, _ZTW/_ZTH = TLS init wrappers,
-    # _ZGV = guard variable, _ZGR = reference temporary.
-    r'_?_ZT[ISVTCWHF]\w*',
+# Residual baseline: a tiny set of compiler-/linker-injected names that are
+# NOT exported by any system library and would otherwise need user allowlist
+# entries on every project. Everything else (libc, libm, libstdc++, libsystem,
+# libpthread, libdl, dyld runtime, Objective-C runtime, ...) is enumerated
+# from the actual installed libraries by blade.system_symbols and arrives
+# at the check tool as ``.syms`` files alongside the dep archives.
+_CHECK_UNDEFINED_RESIDUAL_BASELINE = (
+    # ---- C++ Itanium ABI "string" symbols (typeinfo / vtable / VTT /
+    # construction-vtable / guard variable / reference temporary / TLS-init).
+    # These are emitted by the compiler against types that may live entirely
+    # in user code, so they do NOT appear in libstdc++/libc++ exports.
+    # _ZTI = typeinfo,  _ZTS = typeinfo name,  _ZTV = vtable,  _ZTT = VTT,
+    # _ZTC = construction-vtable,  _ZTW/_ZTH = TLS init wrappers,
+    # _ZGV = guard variable,  _ZGR/_ZGr = reference temporary.
+    r'_?_ZT[ISVTCWH]\w*',
     r'_?_ZG[VRr]\w*',
-    r'_?__cxa_\w+',
-    r'_?__gxx_personality_\w+',
-    r'_?__cxx_global_(?:array|var)_init\w*',
-    r'_?_Unwind_\w+',
-    r'_?__unw_\w+',
-    r'_?(?:vtable for|typeinfo for|typeinfo name for|VTT for|construction vtable for|guard variable for|reference temporary for) \w.*',
-    r'_?operator (?:new|delete)\b.*',
-    # Mangled forms of operator new/delete and their array variants
-    # (Itanium ABI): _Znwm/_Znwj/_Znam/_Znaj/_ZdlPv/_ZdaPv/_ZdlPvm/_ZdaPvm
-    # plus aligned (St11align_val_t) and nothrow variants.
+    # ---- Mangled `operator new` / `operator delete` and array variants.
+    # Provided by libstdc++/libc++ on shared platforms; on macOS the
+    # libc++ stub list misses them and they're synthesized by the linker
+    # from libc++abi. Keep them in the baseline so neither codepath needs
+    # an explicit allowlist entry.
     r'_?_Z(?:nw|na|dl|da)[a-zA-Z0-9_]*',
-    # ---- runtime startup / dyld / GCC eh / Mach-O sections ----
-    r'_?(?:__dso_handle|__progname|environ|_environ|__environ|stdin|stdout|stderr|__stdinp|__stdoutp|__stderrp|__sF)',
-    r'_?(?:_Jv_RegisterClasses|register_frame_info|deregister_frame_info|__register_frame_info|__deregister_frame_info|__register_frame|__deregister_frame)',
-    r'_?(?:_init|_fini|__libc_start_main|__libc_csu_init|__libc_csu_fini|_start|__start|__init)',
-    r'_?(?:atexit|__cxa_atexit|__cxa_finalize|__cxa_thread_atexit|__cxa_thread_atexit_impl)',
-    r'_?main',
-    # macOS-only: dyld stubs and Objective-C runtime
-    r'_?dyld_\w+',
-    r'_?_dyld_\w+',
-    r'_?(?:objc|OBJC)_\w+',
-    r'_?_OBJC_\w+',
-    r'_?objc_\w+',
-    # macOS Mach-O TLV
+    # ---- Compiler / linker injected names not exported by any lib ----
+    r'_?__dso_handle',
+    r'_?__cxx_global_(?:array|var)_init\w*',
+    # macOS Mach-O thread-local-variable bootstrap stubs (emitted into
+    # objects but resolved by dyld at load time)
     r'_?_tlv_\w+',
     r'_?__tlv_\w+',
-    # ---- compiler runtime helpers (libgcc / compiler-rt) ----
-    r'_?__(?:div|udiv|mod|umod|mul|shl|shr|ashr|lshr|fix|float|cmp|popcount|clz|ctz|ffs|paritysi|paritydi|ashlsi|ashrsi|lshrsi|ashldi|ashrdi|lshrdi|trunc|extend|umul|neg|abs)[a-z]+\d*',
-    r'_?__(?:eh_personality|gnu_unwind_\w+|deregister_frame_info_bases|register_frame_info_bases)',
-    # ---- ASan / TSan / MSan / UBSan / coverage runtime ----
-    r'_?__(?:asan|tsan|msan|ubsan|hwasan|lsan|sancov|sanitizer)_\w+',
-    r'_?__(?:gcov|llvm_(?:gcov|profile))_\w+',
 )
 
 
 def _check_undefined_compile_baseline():
     import re as _re
-    return [_re.compile(p) for p in _CHECK_UNDEFINED_BASELINE_PATTERNS]
+    return [_re.compile(p) for p in _CHECK_UNDEFINED_RESIDUAL_BASELINE]
 
 
 def _nm_extract_externals(archive):
@@ -313,11 +245,26 @@ def _read_allow_undefined_file(path):
     return patterns
 
 
+def _read_syms_cache(path):
+    """Read symbols from a system-symbols cache file written by
+    blade.system_symbols. Header lines (``#``-prefixed) are skipped."""
+    try:
+        with open(path, encoding='utf-8') as f:
+            return {line.rstrip() for line in f
+                    if line.strip() and not line.startswith('#')}
+    except OSError:
+        return set()
+
+
 def generate_cc_check_undefined(args, **opts):
     """Check that a cc_library's deps cover all its undefined symbols.
 
     Args:
-        args: [<result_file>, <target.a>, <dep1.a>, <dep2.a>, ...]
+        args: [<result_file>, <target.a>, <input>...]
+              Each <input> is either a ``.a`` static archive (transitive
+              cc_library dep, nm'd at check time) or a ``.syms`` cache file
+              (system library symbols, pre-generated by blade.system_symbols
+              and read as plain text). Distinguished by extension.
         opts: --allow-file=<path>  one regex pattern per line (target + global)
               --target-label=<label>  for nicer error messages
 
@@ -328,7 +275,7 @@ def generate_cc_check_undefined(args, **opts):
     import re as _re  # pylint: disable=import-outside-toplevel
     result_file = args[0]
     target_archive = args[1]
-    dep_archives = args[2:]
+    rest = args[2:]
     _declare_outputs(result_file)
 
     allow_file = opts.get('allow-file', '')
@@ -344,17 +291,28 @@ def generate_cc_check_undefined(args, **opts):
                           % (target_label, p, e))
             return 1
 
+    dep_archives = [p for p in rest if p.endswith(('.a', '.lib'))]
+    sym_caches = [p for p in rest if p.endswith('.syms')]
+
     undef, defd = _nm_extract_externals(target_archive)
     unresolved = undef - defd  # intra-archive resolved subtracted
 
-    for dep in dep_archives:
-        _, dep_defined = _nm_extract_externals(dep)
-        unresolved -= dep_defined
+    # Subtract system-library symbols (pre-cached, plain text reads).
+    for cache in sym_caches:
+        unresolved -= _read_syms_cache(cache)
         if not unresolved:
             break
 
+    # Subtract transitive cc_library deps' defined externals.
     if unresolved:
-        # Apply allowlist (baseline + user) last.
+        for dep in dep_archives:
+            _, dep_defined = _nm_extract_externals(dep)
+            unresolved -= dep_defined
+            if not unresolved:
+                break
+
+    if unresolved:
+        # Apply residual baseline + user allowlist regex last.
         unresolved = {s for s in unresolved
                       if not any(p.fullmatch(s) for p in compiled)}
 
@@ -366,8 +324,8 @@ def generate_cc_check_undefined(args, **opts):
             console.error('  %s' % s)
         if len(unresolved) > 50:
             console.error('  ... and %d more' % (len(unresolved) - 50))
-        console.error('Add the providing cc_library to deps, or whitelist with '
-                      'allow_undefined=[regex] / cc_library_config.allow_undefined.')
+        console.error('Add the providing cc_library (or #syslib) to deps, or '
+                      'whitelist with allow_undefined=[regex] / cc_library_config.allow_undefined.')
         return 1
 
     with open(result_file, 'w', encoding='utf-8') as f:

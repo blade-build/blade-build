@@ -158,7 +158,65 @@ class Blade:
         maven_cache = maven.MavenCache.instance(self.__build_dir)
         maven_cache.download_all()
         self._write_inclusion_declaration_file()
+        self._prepare_system_symbol_caches()
         self.generate_build_code()
+
+    def _prepare_system_symbol_caches(self):
+        """Pre-generate sidecar symbol files for every system library the
+        cc_check_undefined static check will need.
+
+        Two sources:
+          - the toolchain's default-linked libs (always-implicit baseline)
+          - every distinct ``#alias`` referenced as a dep across all loaded
+            targets (so e.g. ``#m`` only enumerates libm when some target
+            actually wants it)
+
+        Caches live under ``<build_dir>/.cache/system-symbols/`` and are
+        keyed by alias; their headers store ``(mtime, size)`` of the source
+        library so a toolchain or OS upgrade invalidates them automatically
+        without a separate clean step. Mapping alias -> cache file path is
+        stashed on the BuildManager so cc_targets can look it up at codegen
+        time; aliases that fail to resolve are recorded as ``None`` so the
+        check tool can surface a clear "unknown system lib" message instead
+        of silently dropping the dep.
+        """
+        from blade import system_symbols  # pylint: disable=import-outside-toplevel
+        tc = self.get_build_toolchain()
+        cache_dir = os.path.join(self.__build_dir, '.cache', 'system-symbols')
+
+        # Collect aliases. '#alias' deps have path == '#' and name == alias.
+        aliases = set(tc.default_linked_libs)
+        for target in self.__build_targets.values():
+            for dep_key in getattr(target, 'deps', []) or []:
+                # dep keys look like 'path:name'; '#:alias' is the encoded form.
+                if ':' in dep_key:
+                    path, name = dep_key.split(':', 1)
+                    if path == '#':
+                        aliases.add(name)
+
+        resolved = {}
+        for alias in sorted(aliases):
+            try:
+                resolved[alias] = system_symbols.ensure_cache(tc, alias, cache_dir)
+            except Exception as e:  # pylint: disable=broad-except
+                console.warning(
+                    'system_symbols: failed to enumerate "%s": %s' % (alias, e))
+                resolved[alias] = None
+        self._system_symbol_caches = resolved
+        self._system_symbol_default_aliases = tuple(tc.default_linked_libs)
+
+    def get_system_symbol_cache(self, alias):
+        """Return the cache file path for system library ``alias``, or None
+        if it was not pre-generated (unknown alias or resolution failed)."""
+        caches = getattr(self, '_system_symbol_caches', None) or {}
+        return caches.get(alias)
+
+    def get_default_linked_system_caches(self):
+        """Return the list of cache file paths for the toolchain's default-
+        linked libs, suitable to pass as ambient deps to the cc check rule.
+        Missing entries are skipped."""
+        aliases = getattr(self, '_system_symbol_default_aliases', ())
+        return [cf for cf in (self.get_system_symbol_cache(a) for a in aliases) if cf]
 
     def _write_inclusion_declaration_file(self):
         from blade import cc_targets  # pylint: disable=import-outside-toplevel

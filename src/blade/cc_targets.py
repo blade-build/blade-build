@@ -842,23 +842,50 @@ class CcTarget(Target):
         cross-check — the dynamic link's `-Wl,--no-undefined` is the final
         word, but nm catches the same misses per-library, before any link
         runs, with faster feedback. See issue #1225.
+
+        Inputs handed to the check tool:
+          1. The target's static archive (nm'd at check time, since it
+             changes per build)
+          2. Each transitive cc_library dep's static archive (also nm'd)
+          3. The toolchain's default-linked-libs symbol caches (pre-generated
+             by BuildManager._prepare_system_symbol_caches, plain text reads)
+          4. Per-``#alias`` symbol caches for every system lib declared in
+             the target's transitive deps -- which lets the check enforce
+             that e.g. ``pow()`` consumers actually declare ``'#m'``
+
+        Inputs (1) and (2) are .a archives; (3) and (4) are .syms text
+        files. The check tool distinguishes by extension.
         """
         if not self.attr.get('check_undefined', True):
             return None
         targets = self.blade.get_build_targets()
         tc = self.blade.get_build_toolchain()
-        # Collect transitive cc_library static archives. expanded_deps is
-        # already the transitive closure. Skip system libs (path == '#') and
-        # anything that didn't produce a static archive (header-only libs).
         dep_archives = []
+        system_caches = []
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
         for key in self.expanded_deps:
             dep = targets[key]
             if dep.path == '#':
+                # System library -- e.g. `#pthread`, `#m`. Its symbols come
+                # from the pre-generated cache; if the cache was never made
+                # (resolution failed) skip silently and let the per-target
+                # diagnostic surface any genuine miss.
+                cache = self.blade.get_system_symbol_cache(dep.name)
+                if cache:
+                    system_caches.append(cache)
                 continue
             lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
             if lib:
                 dep_archives.append(lib)
+        # Always include the toolchain's default-linked-libs baseline.
+        system_caches.extend(self.blade.get_default_linked_system_caches())
+        # De-dup (an alias may appear both in defaults and #deps).
+        seen = set()
+        deduped_caches = []
+        for c in system_caches:
+            if c not in seen:
+                seen.add(c)
+                deduped_caches.append(c)
         # Materialize the per-target + global allow_undefined patterns into a
         # sidecar file so they survive shell quoting and ninja's variable
         # substitution intact.
@@ -881,20 +908,21 @@ class CcTarget(Target):
         order_only = []
         if inclusion_check_result:
             order_only.append(inclusion_check_result)
-        # static_lib must come first in `inputs`; the builtin tool reads
-        # args[0] as the target archive and args[1:] as deps.
+        # Inputs layout (consumed by builtin_tools.generate_cc_check_undefined):
+        #   args[0]   = static_lib (.a)         -- the target archive
+        #   args[1:N] = dep archives (.a)       -- transitive cc_library deps
+        #   args[N:]  = system .syms files      -- baseline + #alias caches
+        # Distinguished by extension in the tool.
         self.generate_build(
             'ccchkund',
             outputs=result_file,
-            inputs=[static_lib] + dep_archives,
+            inputs=[static_lib] + dep_archives + deduped_caches,
             implicit_deps=[allow_file],
             order_only_deps=order_only,
             variables={
                 'allow_file': allow_file,
                 'target_label': '%s:%s' % (self.path, self.name),
             })
-        # Tag with a label so downstream consumers (e.g. cc_binary linking
-        # this lib) can pull the check result into their order-only dep set.
         self._add_target_file('unchk.result', result_file)
         return result_file
 
