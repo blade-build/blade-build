@@ -124,6 +124,14 @@ class Blade:
         # Used to generate build code in correct order.
         self.__sorted_targets_keys = []
 
+        # Per-target specs for the project-wide cc_check_undefined batch.
+        # Each cc_library that runs the static undefined-symbol check appends
+        # a dict here at generate time; at the end of build-code generation
+        # they're consolidated into a single ``ccchkund_batch`` ninja rule,
+        # so we pay Python interpreter startup once for the whole project
+        # instead of once per cc_library. See issue #1225.
+        self.__cc_check_undefined_specs = []
+
         # Indicate whether the deps list is expanded by expander or not
         self.__targets_expanded = False
 
@@ -250,6 +258,22 @@ class Blade:
         Missing entries are skipped."""
         aliases = getattr(self, '_system_symbol_default_aliases', ())
         return [cf for cf in (self.get_system_symbol_cache(a) for a in aliases) if cf]
+
+    def register_cc_check_undefined(self, spec):
+        """Record one cc_library's undefined-symbol check spec.
+
+        ``spec`` is a dict carrying everything the batch tool needs to run
+        that target's check: ``target_label``, ``target_syms``, ``dep_syms``
+        (list), ``sys_caches`` (list), ``allow_file``. Called from
+        :meth:`CcTarget._generate_check_undefined` instead of emitting a
+        per-target ``ccchkund`` ninja rule.
+        """
+        self.__cc_check_undefined_specs.append(spec)
+
+    def cc_check_undefined_specs(self):
+        """Return the consolidated list of cc_check_undefined specs collected
+        during target generation."""
+        return self.__cc_check_undefined_specs
 
     def _write_inclusion_declaration_file(self):
         from blade import cc_targets  # pylint: disable=import-outside-toplevel

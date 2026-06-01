@@ -405,6 +405,114 @@ def generate_cc_check_undefined(args, **opts):
     return None
 
 
+def generate_cc_check_undefined_batch(args, **_opts):
+    """Project-wide variant of :func:`generate_cc_check_undefined`.
+
+    Runs the static undefined-symbol check for every cc_library in the
+    project in a single Python process. The previous per-target ninja
+    rule paid one Python-interpreter startup per cc_library (each
+    spawning ``python -m blade.builtin_tools cc_check_undefined ...``);
+    on a real codebase that was the dominant cost of the check phase.
+    Collapsing into one batch eliminates ~N interpreter startups in
+    exchange for losing per-target ninja parallelism -- a win on real
+    workloads because the check is a sidecar (no ninja node depends on
+    each per-target result) and individual checks are tiny once the
+    .syms cache is populated.
+
+    Args:
+        args: ``[<batch_stamp>, <manifest.json>]``
+
+    The manifest is a JSON array of per-target spec dicts written by
+    BuildManager at generate time:
+        {"target_label": str, "target_syms": str, "dep_syms": [str],
+         "sys_caches": [str], "allow_file": str}
+
+    Exits non-zero (and writes nothing) if any spec fails. The stamp
+    file is written only on full success, so a later incremental
+    invocation can short-circuit if no inputs changed.
+    """
+    import json as _json  # pylint: disable=import-outside-toplevel
+    import re as _re  # pylint: disable=import-outside-toplevel
+    stamp_file = args[0]
+    manifest_path = args[1]
+    _declare_outputs(stamp_file)
+
+    with open(manifest_path, encoding='utf-8') as f:
+        specs = _json.load(f)
+
+    # Cache nm output across the whole batch: a typical archive (e.g.
+    # libcommon.a) is a dep of dozens of targets, so reading its .syms
+    # file once and reusing the parsed sets saves substantial work.
+    syms_cache: dict[str, tuple[set[str], set[str]]] = {}
+
+    def _syms(path):
+        cached = syms_cache.get(path)
+        if cached is not None:
+            return cached
+        cached = _read_archive_syms(path)
+        syms_cache[path] = cached
+        return cached
+
+    allow_cache: dict[str, list] = {}
+
+    def _allow(path):
+        compiled = allow_cache.get(path)
+        if compiled is not None:
+            return compiled
+        compiled = _check_undefined_compile_baseline()
+        for p in _read_allow_undefined_file(path):
+            try:
+                compiled.append(_re.compile(p))
+            except _re.error as e:
+                console.error('cc_check_undefined: invalid allow_undefined regex %r in %s: %s'
+                              % (p, path, e))
+                # Don't fail the whole batch on one bad regex; just
+                # skip the offending pattern.
+        allow_cache[path] = compiled
+        return compiled
+
+    failed = 0
+    for spec in specs:
+        target_label = spec['target_label']
+        compiled = _allow(spec['allow_file'])
+        undef, defd = _syms(spec['target_syms'])
+        unresolved = undef - defd
+        for cache in spec['dep_syms']:
+            _, dep_defined = _syms(cache)
+            unresolved -= dep_defined
+            if not unresolved:
+                break
+        if unresolved:
+            for cache in spec['sys_caches']:
+                _, dep_defined = _syms(cache)
+                unresolved -= dep_defined
+                if not unresolved:
+                    break
+        if unresolved:
+            unresolved = {s for s in unresolved
+                          if not any(p.fullmatch(s) for p in compiled)}
+        if unresolved:
+            failed += 1
+            console.error('cc_check_undefined: %s has %d undefined symbol(s) not covered '
+                          'by declared deps:' % (target_label, len(unresolved)))
+            for s in sorted(unresolved)[:50]:
+                console.error('  %s' % s)
+            if len(unresolved) > 50:
+                console.error('  ... and %d more' % (len(unresolved) - 50))
+
+    if failed:
+        console.error('cc_check_undefined: %d target(s) failed; add the providing '
+                      'cc_library (or #syslib) to deps, or whitelist with '
+                      'allow_undefined=[regex] / cc_library_config.allow_undefined.'
+                      % failed)
+        return 1
+
+    os.makedirs(os.path.dirname(stamp_file), exist_ok=True)
+    with open(stamp_file, 'w', encoding='utf-8') as f:
+        f.write('OK\n')
+    return None
+
+
 # --- Windows DLL auto-export: synthesize a .def from object files ----------
 #
 # To make a Windows DLL export its symbols without `__declspec(dllexport)`
@@ -1458,6 +1566,7 @@ _BUILTIN_TOOLS = {
     'proto_java_srcjar': generate_proto_java_srcjar,
     'cc_inclusion_check': generate_cc_inclusion_check,
     'cc_check_undefined': generate_cc_check_undefined,
+    'cc_check_undefined_batch': generate_cc_check_undefined_batch,
     'cc_emit_syms': generate_cc_emit_syms,
     'cc_macos_exports': generate_macos_exports,
     'cc_windef': generate_cc_windef,

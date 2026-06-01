@@ -963,27 +963,22 @@ class CcTarget(Target):
             for p in patterns:
                 f.write(p)
                 f.write('\n')
-        result_file = static_lib + '.unchk.result'
-        order_only = []
-        if inclusion_check_result:
-            order_only.append(inclusion_check_result)
-        # Inputs layout (consumed by builtin_tools.generate_cc_check_undefined):
-        #   args[0]   = <static_lib>.a.syms          -- target's own (#U + #D)
-        #   args[1:N] = <dep>.a.syms                 -- transitive cc_library deps
-        #   args[N:]  = system .syms files           -- baseline + #alias caches
-        # All inputs are .syms text files; the check tool only reads them.
-        self.generate_build(
-            'ccchkund',
-            outputs=result_file,
-            inputs=[own_syms] + dep_syms + deduped_caches,
-            implicit_deps=[allow_file],
-            order_only_deps=order_only,
-            variables={
-                'allow_file': allow_file,
-                'target_label': '%s:%s' % (self.path, self.name),
-            })
-        self._add_target_file('unchk.result', result_file)
-        return result_file
+        # Instead of emitting a per-target ``ccchkund`` ninja rule (which
+        # paid one Python-interpreter startup per cc_library on every
+        # invocation), accumulate the per-target spec into the build
+        # manager. After every target has generated, a single
+        # ``ccchkund_batch`` ninja rule fans them all out in one Python
+        # process. The check is a no-consumers sidecar (no ninja node
+        # depends on the result), so collapsing to one rule has no
+        # impact on parallelism with the rest of the build.
+        self.blade.register_cc_check_undefined({
+            'target_label': '%s:%s' % (self.path, self.name),
+            'target_syms': own_syms,
+            'dep_syms': dep_syms,
+            'sys_caches': deduped_caches,
+            'allow_file': allow_file,
+        })
+        return None
 
     def _dynamic_cc_library(self, objs, inclusion_check_result):
         tc = self.blade.get_build_toolchain()
