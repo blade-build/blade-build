@@ -233,13 +233,46 @@ Blade can detect two kind of missing dependencies:
 
   The header files are included in `srcs` or `hdrs` through the `#include` directive, but the library
   to which they belong is not declared in `deps`, or these header files are not declared in any `hdrs`
-  of `cc_library` at all. Problems and solution:
+  of `cc_library` at all.
 
-  - The library to which the header file belongs is not declared in the `deps` of this target, just follow the instruction to fix it
-  - The header file is a private header file of the library to which it belongs, and direct use is prohibited
-  - The header file should be the public header file of this target, it should be declared in its `hdr`
-  - The header file should be the target's private header file, it should be declared in its `src`
-  - The header file should be a public header file of other libraries, but there is no declaration, just declare it in the corresponding library `hdr`
+  Before mechanically following the "add this dep" suggestion, pause and ask which of the patterns
+  below actually applies — the mechanical fix is right in case (1), but in cases (6) and (7) it
+  either bloats the dep graph for nothing or runs straight into a visibility error on the next build.
+
+  Problems and solutions:
+
+  1. The library to which the header file belongs is not declared in the `deps` of this target, just follow the instruction to fix it.
+  2. The header file is a private header file of the library to which it belongs, and direct use is prohibited. **Exception:** see case (7).
+  3. The header file should be the public header file of this target, it should be declared in its `hdrs`.
+  4. The header file should be the target's private header file, it should be declared in its `srcs`.
+  5. The header file should be a public header file of other libraries, but there is no declaration, just declare it in the corresponding library's `hdrs`.
+  6. **The `#include` is unnecessary; just delete it.** Blade's missing-dep check is content-blind — it only sees that you `#include`-d a header. If your source doesn't actually use any name from that header (the include was copy-pasted, became dead after a refactor, or the type you thought you needed turns out to be re-exported through a header you already include), the right fix is to remove the `#include` line, not to add a dep. A quick check: grep your source for the types / functions defined in the suspicious header; if nothing matches, the include is dead.
+  7. **Legitimate "facade" re-export across a visibility boundary.** When an umbrella target's own public header re-`#include`s a sub-library's header so the umbrella's consumers can use those types, blade will report a Missing-dep notice on the umbrella because the sub-library is locked down via `visibility`. The umbrella IS a legitimate consumer — it's the canonical re-exporter — but case (2)'s "private, direct use prohibited" rule is overly absolute here. Treat the umbrella like a C++ `friend`: add it to the sub-library's `visibility` list (a narrow, named widening) and declare the sub-library in the umbrella's `deps`. Both the visibility entry and the dep declaration should mention the re-export so the relationship is self-documenting.
+
+     ```python
+     # In the inner sub-library:
+     cc_library(
+         name = 'http_filter',
+         hdrs = 'http_filter.h',
+         ...,
+         # `friend`-style allow-list: only the two umbrella facades may
+         # depend on us directly; everyone else must go through them.
+         visibility = ['//flare/rpc:http', '//flare/rpc:rpc'],
+     )
+
+     # In the umbrella whose public `hdrs` re-export the sub-library:
+     cc_library(
+         name = 'rpc',
+         hdrs = ['http_filter.h', ...],  # re-includes inner header
+         deps = [
+             ...,
+             '//flare/rpc/protocol/http:http_filter',  # we re-export it
+         ],
+         visibility = 'PUBLIC',
+     )
+     ```
+
+     If the umbrella consumes the sub-library only for its public surface (not as a re-export through the umbrella's own hdrs), and `unused_deps` flags the dep, that's actually the [Header re-export auto-exemption](#check-unused-dependencies) case in the other direction — declare the sub-library's header in the umbrella's `hdrs` and the unused-deps check stops complaining without any visibility widening.
 
 - `Missing indirect dependency`
 

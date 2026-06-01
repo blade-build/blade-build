@@ -210,13 +210,44 @@ Blade 能检查到两种缺失情况：
 - `Missing dependency` 直接依赖缺失
 
   在 `srcs` 或者 `hdrs` 里的文件通过 `#include` 指令包含了头文件，但是其所属的库没有在 `deps` 里声明，
-  或者这些头文件根本没有在任何 `cc_library` 的 `hdrs` 里声明。具体原因及解决方法：
+  或者这些头文件根本没有在任何 `cc_library` 的 `hdrs` 里声明。
 
-  - 该头文件所属的库没有在本目标的 `deps` 里声明，按提示修复即可
-  - 该头文件是所属的库的私有头文件，禁止直接使用
-  - 该头文件应当是本目标的公有头文件，在其 `hdrs` 里声明即可
-  - 该头文件应当是本目标的私有头文件，在其 `srcs` 里声明即可
-  - 该头文件应当是其他库的公有头文件，但是没有声明，在相应库的 `hdrs` 里声明即可
+  在机械地按提示「加这个 dep」之前，先停一步，对照下面几条确认你属于哪种情形——只有情形 1 适合直接照办；情形 6 是多余的 include 应该直接删；情形 7 在下次构建会撞到 visibility 错误，需要走 `friend`-式扩 visibility。
+
+  具体原因及解决方法：
+
+  1. 该头文件所属的库没有在本目标的 `deps` 里声明，按提示修复即可。
+  2. 该头文件是所属的库的私有头文件，禁止直接使用。**例外见情形 7。**
+  3. 该头文件应当是本目标的公有头文件，在其 `hdrs` 里声明即可。
+  4. 该头文件应当是本目标的私有头文件，在其 `srcs` 里声明即可。
+  5. 该头文件应当是其他库的公有头文件，但是没有声明，在相应库的 `hdrs` 里声明即可。
+  6. **这个 `#include` 本身是多余的，直接删掉就行。** Blade 的 missing-dep 检查不看你的代码内容，只看你 `#include` 了什么。如果你的源文件并没有真的用到那个头里定义的任何名字（include 是早年复制粘贴留下的、重构后变成 dead code、或者你以为需要的类型其实通过你已经 include 的另一个头传递性可达），正确解法是**删掉这一行 `#include`**，而不是加一个 dep。快速判断：在源文件里 grep 一下可疑头里定义的类型/函数名；如果一个都没匹配到，include 就是死的。
+  7. **跨越 visibility 边界的合法 "facade" 再导出场景。** 当一个 umbrella 目标的公共头通过 `#include` 把内层私库的头导出，使得 umbrella 的消费者能用到那些类型时，blade 会对 umbrella 报 missing-dep——因为内层私库的 `visibility` 把 umbrella 锁在外面。但 umbrella 本来就是合法消费者——它是这些类型的规范再导出点——情形 (2) 那条「私头禁止直接用」太绝对，没给这种合法 facade 留口子。把 umbrella 当成 C++ 的 `friend`：在内层私库的 `visibility` 列表里把它加进去（一个窄而具名的开放），然后在 umbrella 的 `deps` 里声明该私库。visibility 行和 deps 行都附上注释说明再导出关系，让意图自文档。
+
+     ```python
+     # 内层私库：
+     cc_library(
+         name = 'http_filter',
+         hdrs = 'http_filter.h',
+         ...,
+         # `friend` 式白名单：只允许下面两个 umbrella facade 直接依赖；
+         # 其它消费者必须走 facade。
+         visibility = ['//flare/rpc:http', '//flare/rpc:rpc'],
+     )
+
+     # 在公共头里再导出该私库的 umbrella：
+     cc_library(
+         name = 'rpc',
+         hdrs = ['http_filter.h', ...],  # 透传 include 内层头
+         deps = [
+             ...,
+             '//flare/rpc/protocol/http:http_filter',  # 我们再导出
+         ],
+         visibility = 'PUBLIC',
+     )
+     ```
+
+     如果 umbrella 只是「消费者」（用了内层库的公共接口，但**不**通过自己的 hdrs 再导出），并且 `unused_deps` 报了这个 dep，那其实是反方向的 [Header re-export 自动豁免](#检查未使用的依赖) 场景——把内层私库的头列入 umbrella 自己的 `hdrs` 即可，无需放开 visibility。
 
 - `Missing indirect dependency` 间接依赖缺失
 
