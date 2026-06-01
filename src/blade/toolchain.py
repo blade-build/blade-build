@@ -136,6 +136,11 @@ class ToolChain:
     # file ends in .dll).
     # ------------------------------------------------------------------
     STATIC_LIB_LABEL = 'a'
+    # Per-archive symbol-set cache. Produced by the ``ccsyms`` ninja rule
+    # alongside ``ar``; consumed by ``ccchkund`` and any other consumer that
+    # needs to subtract the archive's defined externals from an undefined
+    # set without re-running ``nm``. See issue #1225.
+    STATIC_LIB_SYMS_LABEL = 'a.syms'
     DYNAMIC_LIB_LABEL = 'so'
 
     # ------------------------------------------------------------------

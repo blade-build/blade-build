@@ -696,11 +696,29 @@ class _NinjaFileHeaderGenerator:
                            description='CC INCLUSION CHECK ${in}')
 
     def _generate_cc_check_undefined_rule(self):
-        # Static dep-completeness check via nm. See builtin_tools.generate_cc_check_undefined
-        # and issue #1225. ${in} is the target archive followed by the
-        # transitive cc_library dep archives (first is the target). ${out}
-        # is the .unchk.result marker. ${allow_file} and ${target_label} are
-        # supplied per-target by CcLibrary._generate_check_undefined.
+        # Two cooperating rules implement the static dep-completeness check
+        # (issue #1225) and keep its total nm work linear in the dep graph,
+        # not quadratic:
+        #
+        # 1. ``ccsyms`` runs ``nm`` on a single archive once and emits a
+        #    sidecar ``<archive>.syms`` file with two sections (#U undefined
+        #    externals, #D defined externals). One node per archive, ninja
+        #    fans them out alongside the corresponding ``ar`` rules. Each
+        #    archive is nm'd exactly once per build regardless of how many
+        #    cc_libraries depend on it.
+        # 2. ``ccchkund`` consumes the ``.syms`` files (target's own + each
+        #    transitive dep's + the system-symbols caches) and decides if
+        #    the target's undefined set is closed. Pure file reads and set
+        #    arithmetic; no ``nm`` at check time.
+        #
+        # Previously this was a single ``ccchkund`` rule that took raw
+        # ``.a`` archives and re-ran ``nm`` on every dep for every target's
+        # check, making the total cost O(targets × deps) and scaling badly
+        # on diamond-shaped dep graphs.
+        self.generate_rule(name='ccsyms',
+                           command=self._builtin_command(
+                               'cc_emit_syms', '${out} ${in}'),
+                           description='CC SYMS ${in}')
         self.generate_rule(name='ccchkund',
                            command=self._builtin_command(
                                'cc_check_undefined',
