@@ -35,7 +35,7 @@ from blade import console
 from blade.util import mkdir_p
 
 
-_CACHE_FORMAT_VERSION = 2  # bumped: v2 strips @VERSION from ELF symbols
+_CACHE_FORMAT_VERSION = 3  # bumped: v3 unions over linker-script members
 _CACHE_HEADER_LINES = 5  # version, alias, source, mtime, size
 
 
@@ -112,7 +112,7 @@ def _looks_like_binary_lib(path):
 
 
 def _follow_linker_script(path):
-    """Resolve a GNU-ld linker script to its first real .so / .a input.
+    """Resolve a GNU-ld linker script to all of its real .so / .a inputs.
 
     Linker scripts that ``gcc -print-file-name`` returns for ``libc.so`` /
     ``libpthread.so`` look like::
@@ -121,28 +121,39 @@ def _follow_linker_script(path):
                 /usr/lib/x86_64-linux-gnu/libc_nonshared.a
                 AS_NEEDED ( /lib64/ld-linux-x86-64.so.2 ) )
 
-    We pull out the first ``.so.<N>`` / ``.so`` / ``.a`` token, ignoring
-    ``AS_NEEDED`` wrappers and comments. Returns ``None`` if the file
-    isn't a recognizable script or contains no usable input.
+    Glibc splits its API across two members: the shared ``libc.so.6`` plus
+    the static helper ``libc_nonshared.a`` (which holds ``__stack_chk_fail``,
+    a few ``stat`` / ``__libc_csu_*`` wrappers, etc.). We enumerate ALL
+    referenced .so / .a inputs and let the caller union their symbol sets.
+
+    Returns a list of absolute paths (possibly empty). Skips ``AS_NEEDED``
+    keyword and any non-absolute tokens.
     """
     try:
         with open(path, encoding='utf-8', errors='ignore') as f:
             text = f.read(8192)  # scripts are tiny; cap to avoid surprises
     except OSError:
-        return None
+        return []
     if not any(kw in text for kw in ('GROUP', 'INPUT', 'OUTPUT_FORMAT', 'AS_NEEDED')):
-        return None
+        return []
     # Strip /* ... */ comments and #-comments to keep tokenization simple.
     import re as _re
     text = _re.sub(r'/\*.*?\*/', ' ', text, flags=_re.S)
     text = _re.sub(r'#.*', ' ', text)
+    results = []
+    seen = set()
     for tok in _re.findall(r'[\w./+-]+', text):
         if tok in ('GROUP', 'INPUT', 'OUTPUT_FORMAT', 'AS_NEEDED', 'STARTUP'):
             continue
-        if tok.endswith('.a') or '.so' in tok:
-            if os.path.isabs(tok) and os.path.isfile(tok):
-                return os.path.realpath(tok)
-    return None
+        if not (tok.endswith('.a') or '.so' in tok):
+            continue
+        if not os.path.isabs(tok) or not os.path.isfile(tok):
+            continue
+        real = os.path.realpath(tok)
+        if real not in seen:
+            seen.add(real)
+            results.append(real)
+    return results
 
 
 def _macos_sdk_path():
@@ -182,6 +193,24 @@ def resolve_lib_path(toolchain, alias):
 
     Returns ``None`` if no candidate resolves.
     """
+    paths = resolve_lib_paths(toolchain, alias)
+    return paths[0] if paths else None
+
+
+def resolve_lib_paths(toolchain, alias):
+    """Like ``resolve_lib_path`` but returns ALL backing files (a list).
+
+    For most libraries the list is a single ``.so`` / ``.dylib`` / ``.tbd``.
+    On Linux glibc the unversioned ``libc.so`` is a linker script bundling
+    a shared lib and a static helper archive::
+
+        GROUP ( /lib/.../libc.so.6 /usr/lib/.../libc_nonshared.a AS_NEEDED ( ld.so ) )
+
+    Symbols like ``__stack_chk_fail`` live ONLY in the ``_nonshared.a``;
+    we must enumerate every member to get a complete baseline.
+
+    Empty list if the alias can't be resolved.
+    """
     cc = toolchain.cc
     for candidate in _candidate_filenames(toolchain, alias):
         try:
@@ -195,13 +224,12 @@ def resolve_lib_path(toolchain, alias):
         if not out or not os.path.isfile(out):
             continue
         # On Linux glibc, the unversioned .so is often a GNU-ld linker script
-        # rather than a real ELF -- follow it to the real .so / .a. If the
-        # file is already a real binary, return as-is.
+        # rather than a real ELF -- follow it to all real .so / .a members.
         if _looks_like_binary_lib(out):
-            return os.path.realpath(out)
-        real = _follow_linker_script(out)
-        if real:
-            return real
+            return [os.path.realpath(out)]
+        members = _follow_linker_script(out)
+        if members:
+            return members
         # Neither binary nor a parseable linker script. Skip to next candidate.
 
     # macOS SDK fallback. Try lib<name>.tbd and lib<name>.B.tbd (versioned
@@ -217,8 +245,8 @@ def resolve_lib_path(toolchain, alias):
                               f'lib{alias}.a'):
                 path = os.path.join(sdk_libdir, candidate)
                 if os.path.isfile(path):
-                    return os.path.realpath(path)
-    return None
+                    return [os.path.realpath(path)]
+    return []
 
 
 def _nm_defined_externals(lib_path):
@@ -445,15 +473,23 @@ def ensure_cache(toolchain, alias, cache_dir):
     Returns the cache file path, or ``None`` if the library cannot be
     located (caller should treat as missing-from-baseline -- the per-target
     check will then surface real misses pointing at that lib's symbols).
+
+    When the alias resolves to multiple files (e.g. glibc's linker script
+    bundles libc.so.6 + libc_nonshared.a), union symbols from all of them;
+    cache validity is keyed on the first file's (mtime, size) which is
+    sufficient because the bundled members upgrade together.
     """
-    source = resolve_lib_path(toolchain, alias)
-    if source is None:
+    sources = resolve_lib_paths(toolchain, alias)
+    if not sources:
         return None
+    primary = sources[0]
     cache_file = os.path.join(cache_dir, '%s.syms' % alias)
-    if _is_cache_valid(cache_file, alias, source):
+    if _is_cache_valid(cache_file, alias, primary):
         return cache_file
-    symbols = _nm_defined_externals(source)
-    _write_cache(cache_file, alias, source, symbols)
+    symbols = set()
+    for src in sources:
+        symbols |= _nm_defined_externals(src)
+    _write_cache(cache_file, alias, primary, symbols)
     return cache_file
 
 

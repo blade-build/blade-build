@@ -347,32 +347,30 @@ class ResolveLibPathLinkerScriptTest(unittest.TestCase):
                            'GROUP ( /lib/libc.so.6 AS_NEEDED ( /lib/ld.so ) )\n')
         self.assertFalse(system_symbols._looks_like_binary_lib(path))
 
-    def test_follow_linker_script_returns_first_so(self):
-        # Make a real .so.6 file so the script's target actually resolves.
-        # Realpath on both sides to handle systems where /tmp is a symlink
-        # (macOS resolves /tmp -> /private/tmp).
-        target = self._write('libc.so.6', b'\x7fELF\x02\x01\x01\x00', mode='wb')
+    def test_follow_linker_script_returns_all_members(self):
+        # Glibc's linker script bundles libc.so.6 + libc_nonshared.a.
+        # Some symbols (__stack_chk_fail) only live in the .a -- we need
+        # both. Realpath both sides for macOS /tmp -> /private/tmp.
+        target_so = self._write('libc.so.6', b'\x7fELF\x02\x01\x01\x00', mode='wb')
+        target_a = self._write('libc_nonshared.a', b'!<arch>\n', mode='wb')
         script = self._write('libc.so',
-                             'GROUP ( %s /usr/lib/libc_nonshared.a AS_NEEDED ( /lib/ld.so ) )\n' % target)
+                             'GROUP ( %s %s AS_NEEDED ( /lib/ld.so ) )\n' % (target_so, target_a))
         self.assertEqual(system_symbols._follow_linker_script(script),
-                         os.path.realpath(target))
+                         [os.path.realpath(target_so), os.path.realpath(target_a)])
 
-    def test_follow_linker_script_returns_first_archive(self):
+    def test_follow_linker_script_returns_single_archive(self):
         target = self._write('libfoo.a', b'!<arch>\n', mode='wb')
         script = self._write('libfoo.so', 'INPUT ( %s )\n' % target)
         self.assertEqual(system_symbols._follow_linker_script(script),
-                         os.path.realpath(target))
+                         [os.path.realpath(target)])
 
-    def test_follow_linker_script_returns_none_for_non_script(self):
-        # A real .so should not match -- caller would have used it as-is.
+    def test_follow_linker_script_returns_empty_for_non_script(self):
         path = self._write('libfoo.so', b'\x7fELF\x02\x01\x01\x00', mode='wb')
-        self.assertIsNone(system_symbols._follow_linker_script(path))
+        self.assertEqual(system_symbols._follow_linker_script(path), [])
 
     def test_follow_linker_script_ignores_relative_paths(self):
-        # Linker scripts only ever reference absolute paths; reject the
-        # relative form to avoid CWD-dependent resolution.
         script = self._write('libfoo.so', 'GROUP ( ./libfoo.so.6 )\n')
-        self.assertIsNone(system_symbols._follow_linker_script(script))
+        self.assertEqual(system_symbols._follow_linker_script(script), [])
 
 
 class EnsureCacheTest(unittest.TestCase):
@@ -396,8 +394,8 @@ class EnsureCacheTest(unittest.TestCase):
         fake_lib = os.path.join(self._tmpdir, 'libfoo.so')
         with open(fake_lib, 'w', encoding='utf-8') as f:
             f.write('fake')
-        with mock.patch.object(system_symbols, 'resolve_lib_path',
-                               return_value=fake_lib), \
+        with mock.patch.object(system_symbols, 'resolve_lib_paths',
+                               return_value=[fake_lib]), \
              mock.patch.object(system_symbols, '_nm_defined_externals',
                                return_value={'_foo', '_bar'}):
             cache = system_symbols.ensure_cache(self.tc, 'foo', self._tmpdir)
@@ -413,8 +411,8 @@ class EnsureCacheTest(unittest.TestCase):
         fake_lib = os.path.join(self._tmpdir, 'libfoo.so')
         with open(fake_lib, 'w', encoding='utf-8') as f:
             f.write('fake')
-        with mock.patch.object(system_symbols, 'resolve_lib_path',
-                               return_value=fake_lib), \
+        with mock.patch.object(system_symbols, 'resolve_lib_paths',
+                               return_value=[fake_lib]), \
              mock.patch.object(system_symbols, '_nm_defined_externals',
                                return_value={'_foo'}) as nm:
             system_symbols.ensure_cache(self.tc, 'foo', self._tmpdir)
@@ -423,8 +421,8 @@ class EnsureCacheTest(unittest.TestCase):
             self.assertEqual(nm.call_count, 1)
 
     def test_returns_none_when_lib_unresolvable(self):
-        with mock.patch.object(system_symbols, 'resolve_lib_path',
-                               return_value=None):
+        with mock.patch.object(system_symbols, 'resolve_lib_paths',
+                               return_value=[]):
             cache = system_symbols.ensure_cache(self.tc, 'no_such_lib', self._tmpdir)
         self.assertIsNone(cache)
 
