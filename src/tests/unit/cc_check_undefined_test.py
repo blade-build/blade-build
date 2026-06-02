@@ -444,23 +444,37 @@ class CheckUndefinedDiffTest(unittest.TestCase):
 
     def _run(self, target_syms, dep_syms_list=(), sys_sym_sets=(),
              allow_patterns=()):
-        archives = {'target.a': target_syms}
-        for i, ds in enumerate(dep_syms_list):
-            archives['dep%d.a' % i] = ds
-
-        def fake_extract(path):
-            return archives.get(path, (set(), set()))
-
         with tempfile.TemporaryDirectory() as tmp:
+            def write_archive_syms(name, undef, defd):
+                """Write a per-archive .syms file (#U + #D sections).
+
+                Format produced by ``generate_cc_emit_syms``; consumed by
+                ``_read_archive_syms`` inside the check tool.
+                """
+                p = os.path.join(tmp, name + '.syms')
+                with open(p, 'w', encoding='utf-8') as f:
+                    f.write('# blade archive-symbols cache v1\n')
+                    f.write('# archive: %s\n' % name)
+                    f.write('#U\n')
+                    for s in sorted(undef):
+                        f.write(s + '\n')
+                    f.write('#D\n')
+                    for s in sorted(defd):
+                        f.write(s + '\n')
+                return p
+
             result = os.path.join(tmp, 'result')
             allow_file = os.path.join(tmp, 'allow')
             with open(allow_file, 'w', encoding='utf-8') as f:
                 for p in allow_patterns:
                     f.write(p + '\n')
 
-            args = [result, 'target.a']
-            args += ['dep%d.a' % i for i in range(len(dep_syms_list))]
-            # Materialize each system sym set as a real .syms cache file.
+            args = [result, write_archive_syms('target', *target_syms)]
+            for i, ds in enumerate(dep_syms_list):
+                args.append(write_archive_syms('dep%d' % i, *ds))
+            # Materialize each system sym set as a real .syms cache file
+            # (system caches are defined-only; ``_read_archive_syms`` handles
+            # the legacy no-#U-section shape automatically).
             for i, sset in enumerate(sys_sym_sets):
                 p = os.path.join(tmp, 'lib%d.syms' % i)
                 with open(p, 'w', encoding='utf-8') as f:
@@ -473,10 +487,8 @@ class CheckUndefinedDiffTest(unittest.TestCase):
                         f.write(s + '\n')
                 args.append(p)
 
-            with mock.patch.object(builtin_tools, '_nm_extract_externals',
-                                   side_effect=fake_extract):
-                rc = builtin_tools.generate_cc_check_undefined(
-                    args, **{'allow-file': allow_file, 'target-label': 'foo:bar'})
+            rc = builtin_tools.generate_cc_check_undefined(
+                args, **{'allow-file': allow_file, 'target-label': 'foo:bar'})
             exists = os.path.exists(result)
         return rc, exists
 
@@ -511,6 +523,14 @@ class CheckUndefinedDiffTest(unittest.TestCase):
     def test_residual_baseline_resolves_typeinfo(self):
         # _ZTIb (typeinfo for bool) is in the residual baseline (not in any lib).
         rc, _ = self._run(target_syms=({'_ZTIb', '__ZTIb'}, set()))
+        self.assertIsNone(rc)
+
+    def test_residual_baseline_resolves_linker_injected_stubs(self):
+        # ld-linux.so injects __tls_get_addr (dynamic TLS) and macOS dyld
+        # injects _tlv_bootstrap. Both are baselined since user code can't
+        # declare a dep on the runtime loader.
+        rc, _ = self._run(target_syms=(
+            {'__tls_get_addr', '__tls_get_offset', '_tlv_bootstrap'}, set()))
         self.assertIsNone(rc)
 
     def test_user_allow_pattern_resolves(self):
