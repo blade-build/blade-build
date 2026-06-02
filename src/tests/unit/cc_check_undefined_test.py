@@ -145,16 +145,23 @@ class NmExtractTest(unittest.TestCase):
     """Test the per-archive nm output parser used at check time."""
 
     def test_parse_undefined_and_defined(self):
-        fake_nm_output = (b'__ZTV1A T 100 0\n'
-                          b'foo T 200 0\n'
-                          b'bar U 0 0\n'
-                          b'_local t 300 0\n'   # lowercase = local, ignore
-                          b'weak_sym w 0 0\n'    # weak undefined, ignore
-                          b'baz D 400 0\n')
+        fake_nm_output = (
+            b'__ZTV1A T 100 0\n'
+            b'foo T 200 0\n'
+            b'bar U 0 0\n'
+            b'_local t 300 0\n'   # lowercase t = local, ignore
+            b'weak_undef_sym w 0 0\n'   # lowercase w = weak undefined, ignore
+            b'weak_undef_obj v 0 0\n'   # lowercase v = weak undefined, ignore
+            b'weak_def_sym W 500 0\n'   # uppercase W = weak defined, KEEP
+            b'weak_def_obj V 600 0\n'   # uppercase V = weak defined, KEEP
+            b'unique_global u 700 5\n'  # lowercase u = GNU unique global, KEEP
+            b'baz D 400 0\n')
         with mock.patch.object(subprocess, 'check_output', return_value=fake_nm_output):
             undef, defd = builtin_tools._nm_extract_externals('/fake/lib.a')
         self.assertEqual(undef, {'bar'})
-        self.assertEqual(defd, {'__ZTV1A', 'foo', 'baz'})
+        self.assertEqual(defd, {'__ZTV1A', 'foo', 'baz',
+                                'weak_def_sym', 'weak_def_obj',
+                                'unique_global'})
 
     def test_archive_header_lines_skipped(self):
         fake = (b'lib.a[foo.o]:\n'

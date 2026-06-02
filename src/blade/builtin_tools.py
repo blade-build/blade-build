@@ -238,15 +238,23 @@ def _nm_extract_externals(archive):
         if ty == 'U':
             undefined.add(name)
         elif ty in ('w', 'v'):
-            # Lowercase = weak UNDEFINED -- linker is allowed to leave
-            # them unresolved (resolved to 0 at runtime). Treat as ambient.
-            # Note: uppercase 'V' / 'W' are weak DEFINED and fall through
-            # to the next branch.
+            # Lowercase 'w'/'v' = weak UNDEFINED -- linker is allowed to
+            # leave them unresolved (resolved to 0 at runtime). Treat as
+            # ambient. Note: uppercase 'V' / 'W' are weak DEFINED and fall
+            # through to the isupper() / 'u' branches below.
             continue
+        elif ty == 'u':
+            # GNU extension: lowercase 'u' = unique global symbol. Despite
+            # being lowercase (which usually means local in nm), 'u' is the
+            # asymmetric counterpart of 'U' (undefined) -- it is GLOBAL and
+            # DEFINED, used by C++ to guarantee one instance of template
+            # static data across TUs. fmt's basic_data<void> members
+            # (left_padding_shifts etc.) are emitted as 'u' on gcc/Linux.
+            defined.add(name)
         elif ty.isupper():
             # Any other uppercase letter: defined external symbol.
             defined.add(name)
-        # lowercase letters are local, ignore.
+        # Remaining lowercase letters are local, ignore.
     return undefined, defined
 
 
