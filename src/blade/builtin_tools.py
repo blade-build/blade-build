@@ -202,10 +202,13 @@ def _nm_extract_externals(archive):
 
     Runs `nm -P -g <archive>` once. -P selects POSIX format
     (`name type [value [size]]`), -g restricts to external symbols. Type
-    letter encodes section: uppercase = external, U = undefined, w/v =
-    weak/vague undefined (treated as ambient). Intra-archive resolved
-    symbols (defined by some member, used by another) are caller's
-    responsibility to subtract.
+    letter encodes section: uppercase = defined external, U = undefined,
+    w/v = weak undefined (treated as ambient -- linker allowed to leave
+    them unresolved). The uppercase weak-defined variants (V/W) are real
+    definitions emitted with vague linkage -- typically template static
+    data (e.g. fmt's ``basic_data<void>::left_padding_shifts``) -- and
+    must be counted as defined, or downstream cc_libraries that pull
+    them in transitively will fail the undefined-symbol check.
     """
     try:
         out = subprocess.check_output(['nm', '-P', '-g', archive], stderr=subprocess.STDOUT)
@@ -234,9 +237,11 @@ def _nm_extract_externals(archive):
             continue
         if ty == 'U':
             undefined.add(name)
-        elif ty in ('w', 'v', 'V'):
-            # Weak / vague undefined — by ld semantics these may remain
-            # unresolved at link time without error. Treat as ambient.
+        elif ty in ('w', 'v'):
+            # Lowercase = weak UNDEFINED -- linker is allowed to leave
+            # them unresolved (resolved to 0 at runtime). Treat as ambient.
+            # Note: uppercase 'V' / 'W' are weak DEFINED and fall through
+            # to the next branch.
             continue
         elif ty.isupper():
             # Any other uppercase letter: defined external symbol.
