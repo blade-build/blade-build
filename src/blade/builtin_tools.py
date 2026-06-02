@@ -181,6 +181,14 @@ _CHECK_UNDEFINED_RESIDUAL_BASELINE = (
     # objects but resolved by dyld at load time)
     r'_?_tlv_\w+',
     r'_?__tlv_\w+',
+    # Linux ELF: the TLS general-dynamic / local-dynamic models emit calls
+    # to ``__tls_get_addr`` (x86_64/arm64/...) or ``__tls_get_offset``
+    # (s390x). These live in ``ld-linux*.so`` (the dynamic linker), not in
+    # libc/libpthread, so blade.system_symbols does not enumerate them --
+    # ``ld-linux`` is not a `-l<alias>` user code can spell. Always linked
+    # implicitly because every dynamic executable runs through ld-linux.
+    r'__tls_get_addr',
+    r'__tls_get_offset',
 )
 
 
