@@ -1501,7 +1501,6 @@ class PrebuiltCcLibrary(CcTarget):
         if has_static:
             self.attr['static_source'] = static_source
             self._add_target_file(tc.STATIC_LIB_LABEL, static_source)
-            self._emit_archive_syms(static_source)
             if not has_dynamic:
                 # Using static library for dynamic linking
                 self._add_target_file(tc.DYNAMIC_LIB_LABEL, static_source)
@@ -1581,6 +1580,14 @@ class PrebuiltCcLibrary(CcTarget):
         if not self._is_depended():
             return
         objs, inclusion_check_result = self._cc_objects([])
+        # Emit ``ccsyms`` for the prebuilt static archive when present. Has to
+        # happen here in generate() rather than _setup() because _setup() runs
+        # at BUILD-loading time and emitting a build rule that early forces
+        # __build_code initialization, which breaks the
+        # ``assert __build_code is None`` invariant in ``before_generate``.
+        static_source = self.attr.get('static_source')
+        if static_source:
+            self._emit_archive_syms(static_source)
         dynamic_source = self.attr.get('dynamic_source')
         dynamic_target = self.attr.get('dynamic_target')
         if dynamic_source and dynamic_target:
