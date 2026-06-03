@@ -56,10 +56,19 @@ BUILD 文件是一段在严格受控命名空间里跑的 Python 脚本。命名
   - `blade.cc_toolchain`：活动工具链的只读代理（`obj_suffix`、
     `lib_prefix`、`tool('cxx')`、…）。让 BUILD 能按工具链参数化文件名，
     不必导入内部类。
+- **仅配置期可用的句柄**：
+  - `blade.getenv(name, default=None)` —— 在 `BLADE_ROOT` 中读取环境变量。
+    全 blade 唯一被授权的 env 访问入口；BUILD 文件调用会以 `console.fatal`
+    终止并指向 BUILD 期等价物（`blade.cc_toolchain.tool('cc')` 或
+    `blade.config`）。把 env 读取收敛到配置层，所有 env 依赖集中在一个
+    可审计文件里，BUILD 文件保持 hermetic。
 
 其中一部分属性被标为 `_BUILD_ONLY_ATTRS`：在 `BLADE_ROOT`（配置阶段）里
 读它们会触发清晰报错，提示"此时工具链还不存在，若想延后求值请传一个
-lambda"。这是减少用户困惑的诊断之一。
+lambda"。这是减少用户困惑的诊断之一。对称地，`getenv` 在方法体内自己做
+`if not self._config_phase: console.fatal(...)`——`_BUILD_ONLY_ATTRS`
+那套基于 `__getattr__`，对 `_BladeModule` 上的方法不起作用，所以放在方法
+里手判。
 
 ## 3. 沙箱
 
