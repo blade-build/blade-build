@@ -10,6 +10,7 @@ This module use threads to run tests concurrently.
 """
 
 
+import os
 import signal
 import subprocess
 import threading
@@ -167,7 +168,15 @@ class TestScheduler:
             console.show_progress_bar(self.num_of_finished_tests, len(self.tests_list))
 
     def _run_job_redirect(self, job, job_thread):
-        """run job and redirect the output."""
+        """run job, redirect output to ``<run_dir>/blade-test.log``, dump on exit.
+
+        Writing to a file (instead of a pipe consumed only via
+        ``p.communicate()`` after the test exits) keeps the output
+        observable while the test is still running -- ``tail -f`` on the
+        printed path is enough to diagnose a hung/slow test. The contents
+        are still echoed to the console once the test finishes so the
+        scheduler's summary view is unchanged.
+        """
         target, run_dir, test_env, cmd = job
         test_name = target.key
         shell = target.attr.get('run_in_shell', False)
@@ -175,16 +184,21 @@ class TestScheduler:
             cmd = subprocess.list2cmdline(cmd)
         timeout = target.attr.get('test_timeout')
         self._show_progress(cmd)
-        p = subprocess.Popen(cmd,
-                             env=test_env,
-                             cwd=run_dir,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT,
-                             close_fds=True,
-                             shell=shell,
-                             universal_newlines=True)
-        job_thread.set_job_data(p, test_name, timeout)
-        stdout = p.communicate()[0]
+        log_path = os.path.join(run_dir, 'blade-test.log')
+        console.info(f'Live output of //{test_name} -> {log_path}')
+        with open(log_path, 'w', encoding='utf-8', errors='replace') as log:
+            p = subprocess.Popen(cmd,
+                                 env=test_env,
+                                 cwd=run_dir,
+                                 stdout=log,
+                                 stderr=subprocess.STDOUT,
+                                 close_fds=True,
+                                 shell=shell,
+                                 universal_newlines=True)
+            job_thread.set_job_data(p, test_name, timeout)
+            p.wait()
+        with open(log_path, 'r', encoding='utf-8', errors='replace') as log:
+            stdout = log.read()
         result = self._get_result(p.returncode)
         msg = f'Output of //{test_name}:\n{stdout}{self._progress(done=1)} Test //{test_name} finished: {result}\n'
         if console.is_quiet() and p.returncode != 0:
