@@ -47,6 +47,12 @@ These attributes are only available during BUILD file loading. Accessing them du
 - `current_source_dir` property: The directory where the current BUILD file is located (relative to the root directory of the workspace)
 - `current_target_dir` property: The output directory where the current BUILD file is located corresponds to (relative to the root directory of the workspace)
 
+### Config-phase-only Attributes
+
+These attributes are only callable during `BLADE_ROOT` config parsing. Calling them from a BUILD file will abort with an error:
+
+- `getenv(name, default=None)` function: Read an environment variable. See [`blade.getenv`](#bladegetenv) below.
+
 ---
 
 ### `blade.config` Submodule
@@ -87,6 +93,40 @@ Get some information about the current [workspace](workspace.md), including:
 
 - `root_dir` property: Returns the directory of the current root workspace
 - `build_dir` property: Returns the name of the build subdirectory under the workspace, such as `build64_release`
+
+### `blade.getenv`
+
+> **Phase:** `BLADE_ROOT` config only. Calling from a BUILD file aborts with an error.
+
+Read an environment variable from the configuration phase. This is the sanctioned channel for env-driven configuration -- blade does not implicitly read environment variables anywhere else.
+
+```python
+def getenv(name: str, default: str | None = None) -> str | None
+```
+
+**Typical use:** select a toolchain via a CI matrix without committing the matrix shape into BLADE_ROOT.
+
+```python
+# BLADE_ROOT
+cc_toolchain_config(
+    name = 'default',
+    kind = 'gcc',
+    cc = blade.getenv('CC', 'gcc'),
+    cxx = blade.getenv('CXX', 'g++'),
+)
+```
+
+Then a CI workflow's `CC=gcc-10 CXX=g++-10 ./blade build ...` selects the right toolchain. Any string-valued config field can be sourced this way.
+
+**Why config-only?** Restricting env access to the global config layer keeps all env dependencies in one auditable file (BLADE_ROOT) and lets BUILD files stay hermetic -- the same source tree produces the same artifacts at the same target regardless of env. If a BUILD-phase rule needs the env-derived value (e.g. `foreign_cc_library` passing CC/CXX to a Makefile), read it from the resolved toolchain or config instead:
+
+```python
+# BUILD or *.bld file
+cc = blade.cc_toolchain.tool('cc')   # already folded from env at config time
+cxx = blade.cc_toolchain.tool('cxx')
+```
+
+**Limitation:** `blade.getenv()` returns the env value at the moment `BLADE_ROOT` loads. Changing the env between two runs of the same workspace does not by itself invalidate per-target build caches -- if you rely on env-driven config for incremental correctness, list the variable names in `global_config.test_related_envs` or otherwise include them in your configuration fingerprint.
 
 ### `blade.cc_toolchain` Object
 

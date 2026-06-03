@@ -64,12 +64,23 @@ BUILD load. It exposes:
   - `blade.cc_toolchain` — a read-only proxy over the active toolchain
     (`obj_suffix`, `lib_prefix`, `tool('cxx')`, ...). Lets a BUILD file
     parameterize names by toolchain without importing internal classes.
+- **Config-phase-only handles**:
+  - `blade.getenv(name, default=None)` — read an environment variable
+    from `BLADE_ROOT`. The only sanctioned env-access channel; calling it
+    from a BUILD file raises a `console.fatal` pointing at the resolved
+    toolchain (`blade.cc_toolchain.tool('cc')`) or `blade.config` as the
+    BUILD-phase equivalent. Keeping env reads at the config layer puts all
+    env dependencies in one auditable file and lets BUILD files stay
+    hermetic.
 
 A subset of these attributes are marked `_BUILD_ONLY_ATTRS`: accessing
 them from inside `BLADE_ROOT` (config phase) raises a clear error pointing
 out that "the toolchain doesn't exist yet — pass a lambda if you need a
 deferred value." This is one of the friction-reducing diagnostics that
-saves a lot of confused bug reports.
+saves a lot of confused bug reports. `getenv` enforces the symmetric rule
+inside the method body (`if not self._config_phase: console.fatal(...)`),
+since the BUILD-only attribute path is `__getattr__`-based and methods on
+`_BladeModule` don't go through it.
 
 ## 3. Sandbox
 

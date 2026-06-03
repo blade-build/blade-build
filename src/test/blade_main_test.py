@@ -18,6 +18,7 @@ from cc_binary_test import TestCcBinary
 from cc_library_test import TestCcLibrary
 from cc_plugin_test import TestCcPlugin
 from cc_test_test import TestCcTest
+from dsl_api_test import GetenvTest
 from dump_test import TestDump
 from extension_test import TestExtension
 from gen_rule_test import TestGenRule
@@ -44,6 +45,7 @@ def _main():
         unittest.defaultTestLoader.loadTestsFromTestCase(TestCcBinary),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestCcPlugin),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestCcTest),
+        unittest.defaultTestLoader.loadTestsFromTestCase(GetenvTest),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestDump),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestExtension),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestGenRule),

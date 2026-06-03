@@ -48,6 +48,12 @@
 - `current_source_dir` 属性：当前 BUILD 文件所在的目录（相对于 workspace 根目录）
 - `current_target_dir` 属性：当前 BUILD 文件对应的构建输出目录（相对于 workspace 根目录）
 
+### 仅配置阶段可用的属性
+
+以下属性仅在 `BLADE_ROOT` 配置阶段可调用，在 BUILD 文件中调用会报错：
+
+- `getenv(name, default=None)` 函数：读取环境变量。详见下文 [`blade.getenv`](#bladegetenv)。
+
 ---
 
 ### `blade.config` 子模块
@@ -88,6 +94,40 @@
 
 - `root_dir` 属性：返回当前根工作空间的目录
 - `build_dir` 属性：返回工作空间下的 build 子目录名，比如 `build64_release`
+
+### `blade.getenv`
+
+> **可用阶段：** 仅 `BLADE_ROOT` 配置阶段。在 BUILD 文件中调用会报错并终止构建。
+
+在配置阶段读取一个环境变量。这是 blade 中**唯一**允许显式读环境变量的入口——blade 在其它任何位置都不会隐式读取 `CC`、`CXX` 等环境变量。
+
+```python
+def getenv(name: str, default: str | None = None) -> str | None
+```
+
+**典型用法**：通过 CI matrix 选择 toolchain，不需要把 matrix 的形状写进 BLADE_ROOT。
+
+```python
+# BLADE_ROOT
+cc_toolchain_config(
+    name = 'default',
+    kind = 'gcc',
+    cc = blade.getenv('CC', 'gcc'),
+    cxx = blade.getenv('CXX', 'g++'),
+)
+```
+
+之后 CI 工作流的 `CC=gcc-10 CXX=g++-10 ./blade build ...` 即可选中对应版本。任何接受字符串的配置字段都可以这样写。
+
+**为什么只在配置阶段？** 把 env 访问收敛到全局配置层，所有 env 依赖都集中在一个可审计的文件（BLADE_ROOT）里，BUILD 文件保持 hermetic——相同源码在相同 target 下产物不随 env 变化。如果 BUILD 阶段需要 env 衍生的值（比如 `foreign_cc_library` 要把 CC/CXX 传给 Makefile），从已解析的 toolchain 或 config 读：
+
+```python
+# BUILD 或 *.bld 文件
+cc = blade.cc_toolchain.tool('cc')   # 配置阶段已经吸收了 env
+cxx = blade.cc_toolchain.tool('cxx')
+```
+
+**限制：** `blade.getenv()` 返回的是加载 `BLADE_ROOT` 那一刻的 env 值。两次 run 之间改变 env 本身不会触发增量缓存失效——若依赖 env 驱动的配置做增量正确性判定，需要把相关变量名加到 `global_config.test_related_envs`，或以其它方式纳入配置指纹。
 
 ### `blade.cc_toolchain` 对象
 

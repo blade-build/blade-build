@@ -209,6 +209,51 @@ class _BladeModule(types.ModuleType):
         """Return ``True`` if the build type is ``'debug'``."""
         return self.build_type == 'debug'
 
+    def getenv(self, name: str, default: str | None = None) -> str | None:
+        """Read an environment variable. **BLADE_ROOT (config phase) only.**
+
+        Blade does not implicitly read environment variables; this is the
+        sanctioned channel for projects that want env-driven configuration.
+        Typical use is selecting a toolchain via the CI matrix without
+        committing the matrix shape into BLADE_ROOT::
+
+            cc_toolchain_config(
+                name = 'default',
+                kind = 'gcc',
+                cc = blade.getenv('CC', 'gcc'),
+                cxx = blade.getenv('CXX', 'g++'),
+            )
+
+        Any field that accepts a string can be sourced this way -- not just
+        the toolchain. Reading env vars stays explicit and traceable: the
+        BLADE_ROOT itself shows exactly which env vars influence the build.
+
+        BUILD files cannot call this method. Env access is restricted to the
+        config phase so that all env dependencies live in one auditable file
+        (BLADE_ROOT) and BUILD files stay hermetic. If BUILD-phase code needs
+        the env-derived value -- e.g. ``foreign_cc_library`` passing CC/CXX to
+        a Makefile -- read it from the resolved toolchain instead:
+
+            cc = blade.cc_toolchain.tool('cc')   # already env-folded at config
+
+        Note: this returns the env value at the moment BLADE_ROOT is loaded.
+        Changing the env between runs does not by itself invalidate cached
+        per-target builds; if you rely on env-driven config for incremental
+        correctness, list the relevant variable names in
+        ``global_config.test_related_envs`` or include the value in your
+        configuration fingerprint another way.
+        """
+        if not self._config_phase:
+            console.fatal(
+                'blade.getenv() is only available during BLADE_ROOT config '
+                'phase. To use env-derived values in BUILD files, fold them '
+                'into config at the BLADE_ROOT level (e.g. via '
+                'cc_toolchain_config(cc=blade.getenv(...))) and read the '
+                'resolved value from blade.cc_toolchain or blade.config in '
+                'BUILD.'
+            )
+        return os.environ.get(name, default)
+
 
 def _safe_blade_module(config_phase: bool = True):
     """Make the safe blade module."""
