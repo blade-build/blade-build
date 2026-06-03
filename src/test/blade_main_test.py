@@ -20,6 +20,7 @@ from cc_plugin_test import TestCcPlugin
 from cc_test_test import TestCcTest
 from dsl_api_test import GetenvTest
 from dump_test import TestDump
+from test_scheduler_test import EffectiveTimeoutTest
 from extension_test import TestExtension
 from gen_rule_test import TestGenRule
 from hdr_dep_check_test import TestHdrDepCheck
@@ -45,6 +46,7 @@ def _main():
         unittest.defaultTestLoader.loadTestsFromTestCase(TestCcBinary),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestCcPlugin),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestCcTest),
+        unittest.defaultTestLoader.loadTestsFromTestCase(EffectiveTimeoutTest),
         unittest.defaultTestLoader.loadTestsFromTestCase(GetenvTest),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestDump),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestExtension),

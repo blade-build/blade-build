@@ -131,10 +131,18 @@ class WorkerThread(threading.Thread):
 class TestScheduler:
     """Schedule specified tests to be ran in multiple test threads"""
 
-    def __init__(self, tests_list, num_jobs):
-        """init method."""
+    def __init__(self, tests_list, num_jobs, test_timeout_multiplier=1.0):
+        """init method.
+
+        ``test_timeout_multiplier`` scales every per-test wall timeout for
+        the current run. Drives the ``--test-timeout-multiplier`` CLI flag
+        for adapting to slow CI machines without committing the slowdown
+        into config. A multiplier of 0 or non-positive ``test_timeout``
+        (the documented "unlimited" sentinel) stays unlimited.
+        """
         self.tests_list = tests_list
         self.num_jobs = num_jobs
+        self.test_timeout_multiplier = test_timeout_multiplier
 
         self.job_queue = queue.Queue(0)
         self.exclusive_job_queue = queue.Queue(0)
@@ -150,6 +158,17 @@ class TestScheduler:
     def _get_workers_num(self):
         """get the number of thread workers."""
         return min(self.job_queue.qsize(), self.num_jobs)
+
+    def _effective_timeout(self, base_timeout):
+        """Apply the run-time multiplier to a per-target timeout.
+
+        ``base_timeout`` of 0 or any non-positive value means *unlimited*
+        (the documented sentinel of ``global_config.test_timeout``) and
+        stays unlimited regardless of the multiplier.
+        """
+        if not base_timeout or base_timeout <= 0:
+            return base_timeout
+        return base_timeout * self.test_timeout_multiplier
 
     def _get_result(self, returncode):
         """translate result from returncode."""
@@ -182,7 +201,7 @@ class TestScheduler:
         shell = target.attr.get('run_in_shell', False)
         if shell:
             cmd = subprocess.list2cmdline(cmd)
-        timeout = target.attr.get('test_timeout')
+        timeout = self._effective_timeout(target.attr.get('test_timeout'))
         self._show_progress(cmd)
         log_path = os.path.join(run_dir, 'blade-test.log')
         console.info(f'Live output of //{test_name} -> {log_path}')
@@ -216,7 +235,7 @@ class TestScheduler:
         shell = target.attr.get('run_in_shell', False)
         if shell:
             cmd = subprocess.list2cmdline(cmd)
-        timeout = target.attr.get('test_timeout')
+        timeout = self._effective_timeout(target.attr.get('test_timeout'))
         self._show_progress(cmd)
         p = subprocess.Popen(cmd, env=test_env, cwd=run_dir, close_fds=True, shell=shell)
         job_thread.set_job_data(p, test_name, timeout)

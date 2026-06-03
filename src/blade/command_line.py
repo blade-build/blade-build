@@ -356,6 +356,14 @@ class CommandLineParser:
             help='Show tests which are slower than specified seconds')
 
         parser.add_argument(
+            '--test-timeout-multiplier', type=float, metavar='FACTOR', default=1.0,
+            dest='test_timeout_multiplier',
+            help=('Multiply every per-test wall timeout by FACTOR. Default 1.0. '
+                  'Use on slower-than-baseline machines (e.g. shared CI runners) '
+                  'where the per-test timeout configured for normal hardware is '
+                  'too tight. Affects only the current run; not stored in config.'))
+
+        parser.add_argument(
             '--no-build', action='store_true',
             dest='no_build', default=False,
             help='Run tests directly without build')

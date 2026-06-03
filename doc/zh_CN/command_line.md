@@ -99,6 +99,7 @@ $ blade dump --all-tags ...
 - `-k`、`--keep-going` —— 遇到非致命错误时继续执行
 - `-j N`、`--jobs=N` —— 并行构建任务数（默认自动并行）
 - `-t N`、`--test-jobs=N` —— 并行测试任务数，适用于多 CPU 机器
+- `--test-timeout-multiplier=FACTOR` —— 将每个测试的 wall timeout 按 `FACTOR` 放缩（默认 `1.0`）。用于在比基线机器慢的机器（如共享 CI runner）上跑测试，避免按"正常硬件"配置的 `global_config.test_timeout` 太紧导致 false-timeout。仅影响当前 run，不写入配置文件。例：`blade test --test-timeout-multiplier=3 ...`
 - `--verbose` —— 显示每条命令的完整命令行
 - `-h`、`--help` —— 显示帮助信息
 - `--color=yes/no/auto` —— 启用或禁用彩色输出

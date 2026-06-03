@@ -461,7 +461,11 @@ class TestRunner(binary_runner.BinaryRunner):
 
         console.notice('%d tests to run' % len(tests_run_list))
         console.flush()
-        scheduler = TestScheduler(tests_run_list, self.__test_jobs_num)
+        scheduler = TestScheduler(
+            tests_run_list,
+            self.__test_jobs_num,
+            test_timeout_multiplier=self.options.test_timeout_multiplier,
+        )
         try:
             scheduler.schedule_jobs()
         except KeyboardInterrupt:

@@ -99,6 +99,7 @@ Different subcommands support different options. Run `blade <subcommand> --help`
 - `-k`, `--keep-going` - Continue execution after non-fatal errors
 - `-j N`, `--jobs=N` - Parallel build jobs (Blade defaults to automatic parallelization)
 - `-t N`, `--test-jobs=N` - Parallel test execution for multi-CPU systems
+- `--test-timeout-multiplier=FACTOR` - Scale every per-test wall timeout by `FACTOR` for the current run (default `1.0`). Use on slower-than-baseline machines (e.g. shared CI runners) where the `global_config.test_timeout` configured for normal hardware is too tight. Affects only the current run; not stored in config. Example: `blade test --test-timeout-multiplier=3 ...`
 - `--verbose` - Display complete command output for each executed command
 - `-h`, `--help` - Display help information
 - `--color=yes/no/auto` - Enable/disable colored output
