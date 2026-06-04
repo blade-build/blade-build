@@ -1083,10 +1083,31 @@ def _generate_resource_index(targets, sources, name, path):
                 }};
                 BLADE_RESOURCE_KEEP
                 const unsigned {0}_len = {1};''').format(index_name, len(sources)))
+        # MSVC analogue of GCC's `retain` -- and strictly stronger, because it
+        # also forces static-archive pull-in. The `#pragma comment(linker,
+        # "/INCLUDE:foo")` directive is embedded into every consumer .obj that
+        # includes this header; the linker then requires `foo` to be defined,
+        # so an unreferenced archive member that defines it gets pulled in.
+        # `retain` on GCC operates after archive selection, so the GCC fallback
+        # for that case is still `link_all_symbols = True`.
+        #
+        # Symbol decoration: C symbols carry a leading underscore on x86
+        # (`__cdecl`); x86_64 / arm64 keep the bare name. The x86 branch is
+        # rarely used these days but is essentially free to retain.
         h.write(textwrap.dedent('''\
                 // Resource index
                 extern const struct BladeResourceEntry {0}[];
                 extern const unsigned {0}_len;
+
+                #ifdef _MSC_VER
+                #  ifdef _M_IX86
+                #    pragma comment(linker, "/INCLUDE:_{0}")
+                #    pragma comment(linker, "/INCLUDE:_{0}_len")
+                #  else
+                #    pragma comment(linker, "/INCLUDE:{0}")
+                #    pragma comment(linker, "/INCLUDE:{0}_len")
+                #  endif
+                #endif
 
                 #ifdef __cplusplus
                 }}  // extern "C"
