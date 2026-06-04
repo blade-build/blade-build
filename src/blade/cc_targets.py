@@ -81,7 +81,15 @@ def declare_hdrs(target, hdrs):
     and every consumer of such a library gets a spurious "unused
     dependency" notice. See blade-build#1227.
     """
-    export_incs = target.attr.get('export_incs') or []
+    # Virtual-path registration must consider BOTH export_incs (-I) and
+    # system_export_incs (-isystem) -- the include-search-path-relative
+    # name is what consumers write in `#include`, irrespective of which
+    # flag exposed the search path. Without this, a target with
+    # system_include=True (or a ForeignCcLibrary whose export_incs got
+    # auto-promoted) would never resolve `#include "foo.h"` back to the
+    # owning target, undoing the #1227 fix for system-include targets.
+    export_incs = (target.attr.get('export_incs') or []) + (
+        target.attr.get('system_export_incs') or [])
     for hdr in hdrs:
         assert not hdr.startswith(target.build_dir)
         hdr = target._source_file_path(hdr)

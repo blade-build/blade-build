@@ -142,5 +142,57 @@ class GetCcFlagsTest(unittest.TestCase):
         self.assertEqual(system, ['sys'])
 
 
+class DeclareHdrsVirtualPathTest(unittest.TestCase):
+    """``declare_hdrs`` must register virtual paths for BOTH export_incs AND
+    system_export_incs -- a system_include=True target with hdrs under a
+    prefix must still resolve the consumer's `#include "foo.h"` back to
+    itself, the same way regular `-I` targets do (see blade-build#1227)."""
+
+    def setUp(self):
+        # The module-level registry is shared across tests; snapshot+restore.
+        from blade import cc_targets
+        self._saved_map = dict(cc_targets._hdr_targets_map)
+
+    def tearDown(self):
+        from blade import cc_targets
+        cc_targets._hdr_targets_map.clear()
+        cc_targets._hdr_targets_map.update(self._saved_map)
+
+    def testRegistersVirtualPathFromSystemExportIncs(self):
+        from blade import cc_targets
+
+        class _FakeTargetWithHdrs:
+            def __init__(self, key, src_dir, export_incs=(), system_export_incs=()):
+                self.key = key
+                self.build_dir = 'build64_release'
+                self._src_dir = src_dir
+                self.attr = {}
+                if export_incs:
+                    self.attr['export_incs'] = list(export_incs)
+                if system_export_incs:
+                    self.attr['system_export_incs'] = list(system_export_incs)
+
+            def _source_file_path(self, hdr):
+                # Mimic Target._source_file_path: prepend the package path.
+                return self._src_dir + '/' + hdr if self._src_dir else hdr
+
+        target = _FakeTargetWithHdrs(
+            key=('thirdparty/foo', 'foo'),
+            src_dir='',
+            system_export_incs=['thirdparty/foo/include'],
+        )
+        cc_targets.declare_hdrs(target, ['thirdparty/foo/include/foo/foo.h'])
+
+        # Full path is always registered.
+        self.assertIn('thirdparty/foo/include/foo/foo.h',
+                      cc_targets._hdr_targets_map)
+        # The include-search-path-relative form ('foo/foo.h') must also be
+        # registered against the same target, even though the search-path
+        # was declared as system_export_incs (not export_incs).
+        self.assertIn('foo/foo.h', cc_targets._hdr_targets_map)
+        self.assertIn(target.key,
+                      cc_targets._hdr_targets_map['foo/foo.h'])
+
+
 if __name__ == '__main__':
     unittest.main()
