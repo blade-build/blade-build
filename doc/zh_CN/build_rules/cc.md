@@ -191,6 +191,10 @@ cc_library(
 
   类似于 `incs`，但是不仅作用于本目标，还会传递给依赖这个库的目标，和 `incs` 一样，建议仅用于不方便改代码的第三方库，自己的项目代码还是建议使用全路径头文件包含。
 
+- `system_include` : bool = False
+
+  设为 `True` 时，消费者编译用 `-isystem <path>` 而不是 `-I <path>` 暴露本库的 `export_incs`。编译器把这些头当作系统头：内部诊断默认抑制（也不会被消费者的 `-Werror` 升级为错误）。适合包裹第三方 / vendored / 生成头文件的薄壳库——它们自己的 warning 不该污染一方代码的构建。`foreign_cc_library` 自动按此处理；`system_include = True` 是手写 wrapper 的 opt-in。
+
 ### 修复 `hdrs` 引发的依赖缺失的检查问题
 
 在大规模 C++ 项目中，依赖管理很重要，而长期以来头文件并未被纳入其中。从 Blade 2.0 开始，头文件也被纳入了依赖管理中。

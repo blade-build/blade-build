@@ -43,6 +43,7 @@ Used to customize your own construction rules, parameters:
   - generating library
   When the header file list is given accurately, after the first stage is generated, other targets can be built without waiting the whole target is built.
 - export\_incs: list, indicates the include path for generated header files, similar to `cc_library.export_incs`, but NOTE its relative to the target dir.
+- system\_export\_incs: list, like `export_incs` but consumers compile with `-isystem` instead of `-I` for these paths. Use when the generated headers come from third-party / vendored code whose own diagnostics should not be promoted to errors by the consumer's `-Werror`. Typical caller: a custom `cmake_build` / `autotools_build` macro that wraps a foreign-language toolchain. Same path semantics (relative to the target dir).
 - cleans: list, specify the additional paths to be deleted when the `clean` command is executed, which can be files or directories, relative to the `$OUT_DIR`.
   The files in `outs` will always be deleted during `clean`. But if some additional files or directories are generated, including them in `cleans` can ensure that they can be deleted during clean.
 - heavy: bool, indicates this a "heavy" target, that is, it will consume a lot of CPU or memory, making it impossible to parallel with other tasks or too much.

@@ -46,6 +46,7 @@ class GenRuleTarget(Target):
                  generated_hdrs: StrOrListOpt,
                  generated_incs: StrOrListOpt,
                  export_incs: StrOrListOpt,
+                 system_export_incs: StrOrListOpt,
                  cleans: StrOrListOpt,
                  heavy: bool,
                  exclude_dep_labels: StrOrListOpt,
@@ -109,6 +110,9 @@ class GenRuleTarget(Target):
 
         if export_incs:
             self.attr['export_incs'] = self._expand_incs(var_to_list(export_incs))
+        if system_export_incs:
+            self.attr['system_export_incs'] = self._expand_incs(
+                var_to_list(system_export_incs))
 
     def _expand_incs(self, incs):
         """Expand incs"""
@@ -204,6 +208,7 @@ def gen_rule(
         generated_hdrs: StrOrListOpt = None,
         generated_incs: StrOrListOpt = None,
         export_incs: StrOrListOpt = None,
+        system_export_incs: StrOrListOpt = None,
         cleans: StrOrListOpt = None,
         heavy: bool = False,
         exclude_dep_labels: StrOrListOpt = None,
@@ -222,6 +227,10 @@ def gen_rule(
             some headers, we should set this argument to True.
         export_incs: List(str), the include dirs to be exported to dependants, NOTE these dirs are
             under the target dir, it's different with cc_library.export_incs.
+        system_export_incs: List(str), like ``export_incs`` but consumers emit ``-isystem`` instead
+            of ``-I`` for these paths. Use for third-party / generated headers whose own diagnostics
+            should not contribute to the consumer's ``-Werror`` budget. Same path semantics
+            (under the target dir).
         cleans: List(str), The paths to be removed in the clean command, relative to the output
             directory.
         exclude_dep_labels: List(str), the dependency labels to be excluded.
@@ -245,6 +254,7 @@ def gen_rule(
             generated_hdrs=generated_hdrs,
             generated_incs=generated_incs,
             export_incs=export_incs,
+            system_export_incs=system_export_incs,
             cleans=cleans,
             heavy=heavy,
             exclude_dep_labels=exclude_dep_labels,

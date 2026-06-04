@@ -250,7 +250,8 @@ class CcTarget(Target):
                  extra_cxxflags: 'StrOrListOpt' = None,
                  extra_asflags: 'StrOrListOpt' = None,
                  src_exts: list[str] | None = None,
-                 cmd: str = ''):
+                 cmd: str = '',
+                 system_export_incs: list[str] | None = None):
         """Init method.
 
         Init the cc target.
@@ -297,6 +298,8 @@ class CcTarget(Target):
         self.attr['defs'] = var_to_list(defs)
         self.attr['incs'] = self._incs_to_fullpath(incs)
         self.attr['export_incs'] = self._incs_to_fullpath(export_incs)
+        self.attr['system_export_incs'] = self._incs_to_fullpath(
+            var_to_list(system_export_incs))
         self.attr['optimize'] = var_to_list_or_none(optimize)
         self.attr['linkflags'] = var_to_list_or_none(linkflags)
         self.attr['extra_cppflags'] = var_to_list(extra_cppflags)
@@ -468,10 +471,12 @@ class CcTarget(Target):
         return None
 
     def _get_cc_flags(self):
-        """_get_cc_flags.
+        """Return ``(cpp_flags, regular_incs, system_incs)``.
 
-        Return the cpp flags according to the BUILD file and other configs.
-
+        ``regular_incs`` get ``-I``; ``system_incs`` get ``-isystem``. The
+        split lets third-party / generated header directories suppress
+        their own diagnostics in the consumer's compilation without
+        affecting the consumer's first-party include paths.
         """
         cpp_flags = []
 
@@ -481,9 +486,9 @@ class CcTarget(Target):
         cpp_flags += self.attr.get('extra_cppflags', [])
 
         # Incs
-        incs = self._get_incs_list()
+        regular_incs, system_incs = self._get_incs_list()
 
-        return (cpp_flags, incs)
+        return cpp_flags, regular_incs, system_incs
 
     def _get_as_flags(self):
         """Return as flags according to the build architecture."""
@@ -495,24 +500,39 @@ class CcTarget(Target):
         return [], []
 
     def _export_incs_list(self):
-        inc_list = []
+        """Return ``(regular_incs, system_incs)`` collected from deps.
+
+        ``system_incs`` come from deps that exported the path via
+        ``system_export_incs`` (gen_rule) or ``system_include=True``
+        (cc_library) or implicitly (foreign_cc_library). Consumers emit
+        ``-isystem`` for those instead of ``-I``, so the dep's own header
+        diagnostics don't propagate into the consumer's ``-Werror`` budget.
+        """
+        regular, system = [], []
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
         for dep in self.expanded_deps:
             # system dep
             if dep[0] == '#':
                 continue
-
             target = self.target_database[dep]
-            inc_list += target.attr.get('export_incs', [])
-        return inc_list
+            regular += target.attr.get('export_incs', [])
+            system += target.attr.get('system_export_incs', [])
+        return regular, system
 
     def _get_incs_list(self):
-        """Get all incs includes export_incs of all depends."""
-        incs = self.attr.get('incs', []) + self.attr.get('export_incs', [])
-        incs += self._export_incs_list()
-        # Remove duplicate items in incs list and keep the order
-        incs = stable_unique(incs)
-        return incs
+        """Get ``(regular_incs, system_incs)`` for ``-I`` / ``-isystem`` emission.
+
+        Regular: ``attr['incs']`` (private include dirs) + ``attr['export_incs']``
+        (advertised to consumers) + transitive non-system ``export_incs`` from deps.
+
+        System: ``attr['system_export_incs']`` (this target's own system-marked
+        export dirs) + transitive ``system_export_incs`` from deps.
+        """
+        own_regular = self.attr.get('incs', []) + self.attr.get('export_incs', [])
+        own_system = self.attr.get('system_export_incs', [])
+        dep_regular, dep_system = self._export_incs_list()
+        # Remove duplicate items in each list while keeping order
+        return stable_unique(own_regular + dep_regular), stable_unique(own_system + dep_system)
 
     def _get_rule_from_suffix(self, src, secret):
         """
@@ -548,11 +568,13 @@ class CcTarget(Target):
             vars['c_warnings'] = '-w'
             vars['cxx_warnings'] = '-w'
 
-        cppflags, includes = self._get_cc_flags()
+        cppflags, regular_incs, system_incs = self._get_cc_flags()
         if cppflags:
             vars['cppflags'] = ' '.join(cppflags)
-        if includes:
-            vars['includes'] = ' '.join(['-I%s' % inc for inc in includes])
+        inc_flags = (['-I%s' % inc for inc in regular_incs]
+                     + ['-isystem%s' % inc for inc in system_incs])
+        if inc_flags:
+            vars['includes'] = ' '.join(inc_flags)
 
         optimize = self._get_optimize_flags()
         if optimize is not None:
@@ -1291,6 +1313,7 @@ class CcLibrary(CcTarget):
                  defs: StrOrListOpt,
                  incs: StrOrListOpt,
                  export_incs: StrOrListOpt,
+                 system_include: bool,
                  optimize: StrOrListOpt,
                  always_optimize: bool,
                  link_all_symbols: bool,
@@ -1329,6 +1352,16 @@ class CcLibrary(CcTarget):
         visibility_list = var_to_list_or_none(visibility)
         optimize_list = var_to_list_or_none(optimize)
         linkflags_list = var_to_list_or_none(linkflags)
+        # system_include=True is a convenience that promotes the user's
+        # export_incs to system_export_incs (consumers get -isystem instead
+        # of -I). Mutually-exclusive in practice: a library either re-exports
+        # first-party headers (-I) or third-party / generated headers
+        # (-isystem). Setting both is fine; the export_incs branch stays
+        # regular and would be the place to add a future system_export_incs
+        # parameter for the rare mixed case.
+        export_incs_arg, system_export_incs_arg = export_incs, []
+        if system_include:
+            export_incs_arg, system_export_incs_arg = [], export_incs
         super().__init__(
                 name=name,
                 type='cc_library',
@@ -1339,7 +1372,8 @@ class CcLibrary(CcTarget):
                 warning=warning,
                 defs=defs,
                 incs=incs,
-                export_incs=export_incs,
+                export_incs=export_incs_arg,
+                system_export_incs=system_export_incs_arg,
                 optimize=optimize_list,
                 linkflags=linkflags_list,
                 extra_cppflags=extra_cppflags,
@@ -1636,6 +1670,7 @@ def cc_library(
         defs: StrOrListOpt = None,
         incs: StrOrListOpt = None,
         export_incs: StrOrListOpt = None,
+        system_include: bool = False,
         optimize: StrOrListOpt = None,
         always_optimize: bool = False,
         pre_build: bool = False,
@@ -1702,6 +1737,7 @@ def cc_library(
             defs=defs,
             incs=incs,
             export_incs=export_incs,
+            system_include=system_include,
             optimize=optimize,
             always_optimize=always_optimize,
             link_all_symbols=link_all_symbols,
@@ -1755,6 +1791,13 @@ class ForeignCcLibrary(CcTarget):
         export_incs = var_to_list(export_incs)
         hdrs = var_to_list(hdrs)
         visibility = var_to_list_or_none(visibility)
+        # ForeignCcLibrary is by definition a wrapper around external code; its
+        # headers' diagnostics aren't the consumer's concern. Promote any
+        # user-supplied `export_incs` to `system_export_incs` so consumers see
+        # `-isystem` instead of `-I` -- gcc/clang suppress warnings raised
+        # inside system headers under `-Werror`. Equivalent in spirit to
+        # Bazel's rules_foreign_cc, which marks its include outputs as
+        # `cc_library(includes=...)` rather than `strip_include_prefix`.
         super().__init__(
                 name=name,
                 type='foreign_cc_library',
@@ -1765,7 +1808,8 @@ class ForeignCcLibrary(CcTarget):
                 warning='no',
                 defs=[],
                 incs=[],
-                export_incs=export_incs,
+                export_incs=[],
+                system_export_incs=export_incs,
                 optimize=None,
                 linkflags=None,
                 extra_cppflags=[],

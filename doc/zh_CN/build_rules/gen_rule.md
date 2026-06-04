@@ -38,6 +38,7 @@
   三个阶段，那么精确给出头文件列表时，在第一阶段的头文件生成后，其他的目标就可以开始构建了，而不用等待
   该目标全部构建完成。
 - export\_incs: list，指示生成的头文件的搜索路径，类似于`cc_library.export_incs`，不过需要注意这里的是相对于目标目录。
+- system\_export\_incs: list，作用与 `export_incs` 相同，但消费者编译时使用 `-isystem` 代替 `-I`。适用于生成的头来自第三方 / vendored 代码、其自身的诊断不应该被消费者的 `-Werror` 升级为错误的场景。典型用户：自定义 `cmake_build` / `autotools_build` 宏。路径语义同 `export_incs`（相对于目标目录）。
 - cleans: list，执行 clean 命令时额外要删除的路径列表，可以是文件或目录，相对于 `OUT_DIR`。`clean` 时 `outs` 里的文件总是会被删除，但是如果会生成一些额外的文件或者目录，将其纳入 `cleans` 里可以保证 clean 时也能被删除。
 - heavy: bool 这是不是一个‘重’目标，也就是会消耗大量的 CPU 或内存，使得不能和其他任务并行或者并行太多。
   开启本选项会降低构建性能，但是有助于减少资源不足导致的构建失败。

@@ -208,6 +208,15 @@ Attributes:
   If you want to build a shared library can be use in the environment, you should use `cc_plugin`,
   which will include the code from it dependencies.
 
+- `system_include`: bool = False
+
+  When `True`, consumers compile with `-isystem <path>` instead of `-I <path>` for this
+  library's `export_incs`. The compiler treats those headers as system headers: diagnostics
+  raised inside them are suppressed by default (and not promoted to errors by the consumer's
+  `-Werror`). Use for thin wrappers around third-party / vendored / generated headers whose
+  own warnings shouldn't bleed into first-party builds. `foreign_cc_library` is automatically
+  treated this way; `system_include = True` is the opt-in for hand-written wrappers.
+
 ### Fix missing dependencies errors caused by `hdrs`
 
 In large-scale C++ projects, dependency management is very important, and header files have not been included in it for a long time.
