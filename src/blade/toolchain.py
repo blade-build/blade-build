@@ -430,31 +430,53 @@ class GccToolChain(ToolChain):
 
     @property
     def default_linked_libs(self) -> 'tuple[str, ...]':
-        """GCC/Clang drivers always pull in libc + the C++ runtime + libgcc-or-
-        compiler-rt helpers + the platform's program-startup objects. macOS
-        bundles libc/libm/libpthread/libdl/libsystem_* into ``libSystem`` and
-        uses ``libc++`` as the C++ runtime; Linux distros expose them
-        individually.
+        """Library aliases the C/C++ driver links implicitly.
 
-        We don't list ``libpthread``/``libm``/``libdl``/``librt`` for Linux:
-        on glibc those are linked only when explicitly requested
-        (``-lpthread`` etc.), which blade already models via ``#pthread`` /
-        ``#m`` / ``#dl`` deps. Including them in the implicit baseline would
-        hide missing ``#xxx`` deps the check is meant to catch.
+        Result is the **union** of:
+          * a hardcoded per-platform minimum (libc / libstdc++ / libgcc_s
+            etc.), so existing workspaces never regress on baseline coverage
+          * what the driver itself reports via ``-###`` parsing, which adds
+            things specific to the host's toolchain (e.g. ``c++`` /
+            ``c++abi`` on macOS, ``stdc++`` on Linux, vendor-specific
+            runtime libs, items introduced by ``-stdlib=libc++`` /
+            cross-compiler / wrapper setups)
+
+        Caching is per-instance: ``-###`` is ~100 ms and the answer is
+        invariant for the toolchain.
+
+        The hardcoded set takes priority on ordering (predictable for
+        link-order-sensitive consumers); auto-detected extras are
+        appended.
+        """
+        cached = getattr(self, '_cached_default_linked_libs', None)
+        if cached is not None:
+            return cached
+        hardcoded = self._hardcoded_default_linked_libs()
+        detected = _detect_default_linked_libs(self.cxx)
+        # Union, preserving hardcoded order and appending novel extras.
+        seen = set(hardcoded)
+        extras = tuple(lib for lib in detected if lib not in seen)
+        result = hardcoded + extras
+        self._cached_default_linked_libs = result
+        return result
+
+    def _hardcoded_default_linked_libs(self) -> 'tuple[str, ...]':
+        """Last-resort defaults when ``-###`` parsing yields nothing.
+
+        We don't list ``libpthread`` / ``libm`` / ``libdl`` / ``librt``
+        for Linux: on glibc those are linked only when explicitly
+        requested (``-lpthread`` etc.), which blade already models via
+        ``#pthread`` / ``#m`` / ``#dl`` deps. Including them in the
+        implicit baseline would hide missing ``#xxx`` deps the check is
+        meant to catch.
 
         For C-only targets the ``stdc++`` / ``c++`` entries contribute
         nothing harmful (they're a no-op for pure C undefined refs).
         """
         if self._target == 'darwin':
-            # libSystem is the unified Apple libc. libc++ for C++ runtime.
-            # libc++abi is usually re-exported through libc++ but we list it
-            # separately to handle ABI symbols (typeinfo, vtables) that may
-            # live there directly.
             return ('System', 'c++', 'c++abi')
         if self._target == 'windows':
-            # GCC on Windows (MinGW): msvcrt is the C runtime.
             return ('msvcrt', 'stdc++', 'gcc_s')
-        # Linux / other ELF: libgcc_s for unwinder + helpers, libc, libstdc++.
         return ('c', 'gcc_s', 'stdc++')
 
 
@@ -1093,6 +1115,99 @@ class MsvcToolChain(ToolChain):
 # ------------------------------------------------------------------
 # Toolchain kind / target helpers
 # ------------------------------------------------------------------
+
+# `-l<name>` tokens that appear on a GCC/Clang link command line but
+# are NOT library names. ld treats these as flags whose syntax happens
+# to start with `-l`. Filter them out of the auto-detected default-
+# linked-libs set.
+_NON_LIB_DASH_L_FLAGS = frozenset({
+    'to_library',   # -lto_library <path>  : selects the LTO plugin (clang on macOS)
+})
+
+
+def _detect_default_linked_libs(cxx: str) -> 'tuple[str, ...]':
+    """Auto-detect default-linked libraries by parsing the driver's link command.
+
+    Runs ``<cxx> -### -x c++ /dev/null -o <tmp>`` -- ``-###`` prints the
+    full command set the driver would execute without running anything,
+    so it's fast and side-effect-free. The link invocation appears as
+    a separate line containing the linker executable (``ld``, ``ld64``,
+    ``ld.lld``, ``lld``, or ``collect2``); we tokenize it (respecting
+    the driver's argument quoting), pull every ``-l<name>``, and filter
+    known non-library flags.
+
+    Returns an empty tuple when:
+      * the driver doesn't accept ``-###`` (very old / non-standard CC)
+      * no link line could be identified
+      * the link line has no ``-l<name>`` tokens
+    -- caller is expected to fall back to a hardcoded per-platform set.
+    """
+    import shlex                # noqa: PLC0415  pulled lazily; cold path
+    import subprocess           # noqa: PLC0415
+    import tempfile             # noqa: PLC0415
+
+    # tempfile path is needed because some drivers refuse to write to
+    # /dev/null when the architecture's linker insists on creating a
+    # mach-o/ELF header structure.
+    with tempfile.NamedTemporaryFile(suffix='.out', delete=False) as f:
+        tmp_out = f.name
+    try:
+        try:
+            proc = subprocess.run(
+                [cxx, '-###', '-x', 'c++', '/dev/null', '-o', tmp_out],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ()
+        # `-###` writes to stderr on both GCC and Clang.
+        output = proc.stderr or proc.stdout
+    finally:
+        try:
+            os.unlink(tmp_out)
+        except OSError:
+            pass
+
+    libs: list[str] = []
+    seen: set[str] = set()
+    # Linker executable markers, ordered roughly by likelihood:
+    #  * ``ld``      : Apple ld64 / classic GNU ld
+    #  * ``collect2``: GCC's link wrapper that calls the real ld
+    #  * ``lld`` /``ld.lld``: LLVM lld
+    #  * ``ld64``   : explicit ld64 invocations (some toolchains)
+    linker_markers = ('/ld ', '/ld"', '/collect2 ', '/collect2"',
+                      '/ld.lld', '/lld ', '/lld"', '/ld64')
+    for raw_line in output.splitlines():
+        if not any(marker in raw_line for marker in linker_markers):
+            continue
+        try:
+            tokens = shlex.split(raw_line, posix=True)
+        except ValueError:
+            # Malformed quoting -- skip this line.
+            continue
+        for tok in tokens:
+            if not tok.startswith('-l') or len(tok) <= 2:
+                continue
+            # ``-l:libfoo.so.1`` is GNU ld's literal-name form (resolves
+            # to a specific filename rather than a library alias). Skip:
+            # we can't represent it as a blade ``#alias``.
+            if tok[2] == ':':
+                continue
+            name = tok[2:]
+            if name in _NON_LIB_DASH_L_FLAGS:
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            libs.append(name)
+        if libs:
+            # First link line with `-l` tokens wins; subsequent lines
+            # would be informational (e.g. echoed copy of the command).
+            break
+    return tuple(libs)
+
 
 _CC_TOOLCHAIN_KINDS = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin'}
 
