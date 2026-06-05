@@ -400,9 +400,6 @@ _BLADE_SKIP_FILE = '.bladeskip'
 # File names should be skipped
 _SKIP_FILES = ['BLADE_ROOT', _BLADE_SKIP_FILE]
 
-# TODO: Eliminate hardcoded
-_BUILD_DIRS = {'build32_debug', 'build32_release', 'build64_debug', 'build64_release'}
-
 
 def _check_under_skipped_dir(dirname):
     """
@@ -443,17 +440,16 @@ def _has_load_excluded_file(root, files):
     return False
 
 
-def _is_load_excluded_dir(root, dir):
-    """Whether exclude the directory when loading BUILD."""
-    # Exclude directories starting with '.', e.g. '.svn', '.git', '.vscode'.
-    if dir.startswith('.'):
-        return True
+def _is_load_excluded_dir(dir):
+    """Whether exclude the directory when loading BUILD.
 
-    # Exclude build dirs
-    if root == '.' and dir in _BUILD_DIRS:
-        return True
-
-    return False
+    Directories starting with '.' (e.g. '.svn', '.git', '.vscode') are
+    always skipped. blade's build output directory is no longer special-
+    cased by name; ``Workspace.setup_build_dir`` drops a ``.bladeskip``
+    sentinel into it on creation, so the regular `_has_load_excluded_file`
+    walk handles it the same as any user-designated skip dir (issue #518).
+    """
+    return dir.startswith('.')
 
 
 def load_targets(target_ids, excluded_targets, blade):
@@ -556,7 +552,7 @@ def _expand_target_patterns(blade, target_ids, excluded_trees):
                 if under_excluded_trees(root) or _has_load_excluded_file(root, files):
                     dirs[:] = []
                     continue
-                dirs[:] = [d for d in dirs if not _is_load_excluded_dir(root, d)]
+                dirs[:] = [d for d in dirs if not _is_load_excluded_dir(d)]
                 if 'BUILD' in files:
                     starting_dirs.add(root)
         elif target_name == '*':
