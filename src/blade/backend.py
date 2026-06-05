@@ -347,7 +347,14 @@ class _NinjaFileHeaderGenerator:
         if os.name == 'nt':
             copy_cmd = 'cmd /c copy /y ${in} ${out} > nul'
         else:
-            copy_cmd = 'cp -f ${in} ${out}'
+            # -L dereferences symbolic-link sources so a prebuilt
+            # `libfoo.so -> libfoo.so.2.2` resolves to a real file in the
+            # build dir rather than a dangling symlink. Both GNU and BSD
+            # cp default to following symlinks in single-file copy mode,
+            # but issue #730 reported a build-1.1.2-era environment that
+            # behaved otherwise; -L makes the intent explicit and
+            # platform-independent.
+            copy_cmd = 'cp -fL ${in} ${out}'
         self.generate_rule(name='copy',
                            command=copy_cmd,
                            description='COPY ${in} ${out}')
