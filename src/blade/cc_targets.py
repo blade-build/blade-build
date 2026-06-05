@@ -1711,7 +1711,13 @@ class PrebuiltCcLibrary(CcTarget):
         """Override"""
         self._write_inclusion_check_info()
         self._check_binary_link_only()
-        self._check_hdrs_existence()
+        # Deliberately not calling _check_hdrs_existence here: a
+        # prebuilt_cc_library's hdrs are descriptive ("these are the
+        # headers consumers will #include"), and the .h files typically
+        # live in an external prebuilt installation root (configured via
+        # `libpath_pattern` + `prebuilt_libpath_pattern`), not the
+        # workspace source tree. The missing-file check would false-
+        # positive on every well-formed prebuilt declaration.
 
     def generate(self):
         """Generate build code for cc object/library."""
