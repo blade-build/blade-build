@@ -596,15 +596,6 @@ class CcTarget(Target):
 
         return cpp_flags, regular_incs, system_incs
 
-    def _get_as_flags(self):
-        """Return as flags according to the build architecture."""
-        options = self.blade.get_options()
-        if options.m:
-            as_flags = ['-g', '--' + options.m]
-            aspp_flags = ['-Wa,--' + options.m]
-            return as_flags, aspp_flags
-        return [], []
-
     def _export_incs_list(self):
         """Return ``(regular_incs, system_incs)`` collected from deps.
 
