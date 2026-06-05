@@ -103,6 +103,59 @@ def _current_source_location():
     return source_location(posixpath.join(str(source_dir), 'BUILD'))
 
 
+def _glob_full_match(path, pattern):
+    """Match ``path`` against ``pattern`` with POSIX-globstar ``**`` semantics
+    (``**`` matches zero or more path components).
+
+    Bridges two stdlib quirks that broke ``glob(exclude=['**/...'])``:
+
+      * ``pathlib.PurePath.match`` is a *right-anchored partial* match -- a
+        trailing ``**`` only expands one path component, so
+        ``PurePath('a/b/c/d.cc').match('**/b/**')`` returns False even
+        though the path clearly contains ``b/`` somewhere. This is the
+        bug from #687 (originally surfaced as fnmatch not handling
+        ``**``; modern Python accepts the syntax but still gives the
+        wrong semantics for the partial match).
+      * ``PurePath.full_match`` has the correct semantics but only exists
+        in Python 3.13+. Blade supports 3.10+.
+
+    Strategy: delegate to ``full_match`` when available; otherwise
+    recurse component-by-component with ``**`` matching zero or more
+    consecutive components. Each non-``**`` component is matched with
+    ``fnmatch.fnmatchcase`` (``*``/``?``/``[...]`` within a single
+    component, no slash crossing).
+    """
+    if hasattr(path, 'full_match'):
+        return path.full_match(pattern)
+    return _match_globstar(str(path).split('/'), pattern.split('/'))
+
+
+def _match_globstar(parts, pat_parts):
+    """Match a list of path components against a list of pattern components.
+
+    ``**`` in pat_parts matches zero or more consecutive components.
+    Other pattern components are matched against a single path component
+    via ``fnmatch.fnmatchcase`` (so ``*`` does not cross ``/``).
+
+    Recursive; pattern lengths are tiny so stack depth is bounded.
+    """
+    import fnmatch  # pylint: disable=import-outside-toplevel
+    if not pat_parts:
+        return not parts
+    head, tail = pat_parts[0], pat_parts[1:]
+    if head == '**':
+        # Try matching zero, one, two, ... leading components.
+        for i in range(len(parts) + 1):
+            if _match_globstar(parts[i:], tail):
+                return True
+        return False
+    if not parts:
+        return False
+    if not fnmatch.fnmatchcase(parts[0], head):
+        return False
+    return _match_globstar(parts[1:], tail)
+
+
 def glob(include, exclude=None, excludes=None, allow_empty=False):
     """This function can be called in BUILD to specify a set of files using patterns.
     Args:
@@ -153,8 +206,7 @@ def glob(include, exclude=None, excludes=None, allow_empty=False):
         if str(path) in non_special_excludes:
             return True
         for pattern in match_excludes:
-            ret = path.match(pattern)
-            if ret:
+            if _glob_full_match(path, pattern):
                 return True
         return False
 
