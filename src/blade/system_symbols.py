@@ -209,8 +209,18 @@ def resolve_lib_paths(toolchain, alias):
     Symbols like ``__stack_chk_fail`` live ONLY in the ``_nonshared.a``;
     we must enumerate every member to get a complete baseline.
 
+    If ``alias`` is an absolute path that already points at a real
+    library file, skip resolution and return ``[alias]`` -- this lets
+    callers feed direct-path entries from the toolchain's auto-detected
+    default-linked-libs list (e.g. macOS clang's compiler-rt archive)
+    through the same code path as alias-based entries.
+
     Empty list if the alias can't be resolved.
     """
+    # Direct-path fast path: an entry that's already an absolute path to
+    # an existing file (.a / .dylib / .so) is consumed verbatim.
+    if os.path.isabs(alias) and os.path.isfile(alias):
+        return [os.path.realpath(alias)]
     cc = toolchain.cc
     for candidate in _candidate_filenames(toolchain, alias):
         try:
@@ -483,12 +493,17 @@ def ensure_cache(toolchain, alias, cache_dir):
     bundles libc.so.6 + libc_nonshared.a), union symbols from all of them;
     cache validity is keyed on the first file's (mtime, size) which is
     sufficient because the bundled members upgrade together.
+
+    ``alias`` may be either a short blade-style name (``c``, ``stdc++``,
+    ``System``) or an absolute path to a library file (e.g. macOS clang's
+    compiler-rt archive, picked up via auto-detected default_linked_libs).
+    The cache filename is derived to avoid path separators in either case.
     """
     sources = resolve_lib_paths(toolchain, alias)
     if not sources:
         return None
     primary = sources[0]
-    cache_file = os.path.join(cache_dir, '%s.syms' % alias)
+    cache_file = os.path.join(cache_dir, '%s.syms' % _cache_filename_for(alias))
     if _is_cache_valid(cache_file, alias, primary):
         return cache_file
     symbols = set()
@@ -496,6 +511,23 @@ def ensure_cache(toolchain, alias, cache_dir):
         symbols |= _nm_defined_externals(src)
     _write_cache(cache_file, alias, primary, symbols)
     return cache_file
+
+
+def _cache_filename_for(alias):
+    """Derive a flat, path-separator-free cache file stem for ``alias``.
+
+    For a short alias (``c``, ``stdc++``, ``System``) return it verbatim.
+    For an absolute path (``/path/to/libclang_rt.osx.a``) use the file's
+    basename plus a short hash of the full path so two different paths
+    with the same basename don't collide (e.g. cross-compile sysroots
+    that ship multiple libgcc.a's under different prefixes).
+    """
+    if not os.path.isabs(alias):
+        return alias
+    import hashlib  # noqa: PLC0415  cold path
+    basename = os.path.basename(alias)
+    short_hash = hashlib.sha1(alias.encode('utf-8')).hexdigest()[:8]
+    return '%s_%s' % (basename, short_hash)
 
 
 def read_symbols(cache_file):

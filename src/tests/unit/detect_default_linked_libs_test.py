@@ -60,9 +60,54 @@ class DetectDefaultLinkedLibsTest(unittest.TestCase):
         self.assertEqual(self._run_with(stderr), ('c++', 'System'))
 
     def test_macos_lto_library_filtered(self):
-        """``-lto_library`` must not leak in as a library name."""
+        """``-lto_library`` must not leak in as a library name, AND its
+        following path argument must not be picked up as a direct-path
+        library entry."""
         stderr = ' "/usr/bin/ld" "-lto_library" "/path/libLTO.dylib" "-lSystem"\n'
         self.assertEqual(self._run_with(stderr), ('System',))
+
+    def test_macos_direct_path_compiler_rt(self):
+        """Apple Clang always links compiler-rt as a direct path, not via
+        ``-l``. Its symbols (compiler builtins, soft-float, atomics) need
+        to land in the baseline. The detector picks it up alongside the
+        ``-l`` aliases."""
+        stderr = (
+            ' "/usr/bin/ld" "-lto_library" "/path/libLTO.dylib" "-arch" '
+            '"arm64" "-o" "/tmp/out" "/tmp/cc.o" "-lc++" "-lSystem" '
+            '"/Applications/Xcode.app/.../libclang_rt.osx.a"\n'
+        )
+        self.assertEqual(
+            self._run_with(stderr),
+            ('c++', 'System',
+             '/Applications/Xcode.app/.../libclang_rt.osx.a'),
+        )
+
+    def test_linux_gcc_plugin_arg_skipped(self):
+        """GCC's link line contains ``-plugin /path/to/liblto_plugin.so``;
+        the path is a tool plugin, NOT a default-linked library. The
+        ``-plugin`` flag is in the skip-next-arg set so the plugin path
+        is consumed without being misclassified."""
+        stderr = (
+            ' /usr/libexec/.../collect2 -plugin '
+            '/usr/libexec/.../liblto_plugin.so -dynamic-linker '
+            '/lib/ld-linux.so.2 /tmp/cc.o -lstdc++ -lm -lc\n'
+        )
+        self.assertEqual(self._run_with(stderr), ('stdc++', 'm', 'c'))
+
+    def test_output_path_after_dash_o_skipped(self):
+        """``-o /tmp/output`` must not pick up ``/tmp/output`` as a
+        library entry (it doesn't end in a lib extension anyway, but
+        the explicit skip is defense in depth)."""
+        stderr = ' /usr/bin/ld -o /tmp/_blade_test.so -lc\n'
+        # /tmp/_blade_test.so contains '.so' but it's the -o argument.
+        self.assertEqual(self._run_with(stderr), ('c',))
+
+    def test_compiled_user_object_not_picked_up(self):
+        """The user's compiled .o (something like ``/tmp/cc<hash>.o``)
+        is on the link line as a positional input. It ends in ``.o``
+        so the direct-path filter excludes it."""
+        stderr = ' /usr/bin/ld /tmp/ccABCDE.o -lc\n'
+        self.assertEqual(self._run_with(stderr), ('c',))
 
     # ---- Linux GCC shape ----
 

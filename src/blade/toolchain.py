@@ -1187,26 +1187,91 @@ def _detect_default_linked_libs(cxx: str) -> 'tuple[str, ...]':
         except ValueError:
             # Malformed quoting -- skip this line.
             continue
+        skip_next = False
         for tok in tokens:
-            if not tok.startswith('-l') or len(tok) <= 2:
+            if skip_next:
+                # Argument of a previous flag (e.g. the path that follows
+                # ``-lto_library``); not a library entry.
+                skip_next = False
                 continue
-            # ``-l:libfoo.so.1`` is GNU ld's literal-name form (resolves
-            # to a specific filename rather than a library alias). Skip:
-            # we can't represent it as a blade ``#alias``.
-            if tok[2] == ':':
+            if tok in _DASH_L_FLAGS_WITH_PATH_ARG:
+                skip_next = True
                 continue
-            name = tok[2:]
-            if name in _NON_LIB_DASH_L_FLAGS:
+            entry = _classify_link_token(tok)
+            if entry is None or entry in seen:
                 continue
-            if name in seen:
-                continue
-            seen.add(name)
-            libs.append(name)
+            seen.add(entry)
+            libs.append(entry)
         if libs:
             # First link line with `-l` tokens wins; subsequent lines
             # would be informational (e.g. echoed copy of the command).
             break
     return tuple(libs)
+
+
+# Link-line flags that consume a following path argument. The path
+# itself must be skipped, otherwise alias-or-direct-path classification
+# would mis-pick it as a default-linked library entry.
+#
+#   -lto_library <plugin.dylib>   : Apple Clang LTO plugin (macOS)
+#   -plugin <liblto_plugin.so>    : GCC's LTO plugin loader (Linux)
+#   -dynamic-linker <ld.so>       : ELF interpreter (Linux ld; ends in .so.N)
+#   -rpath <dir>                  : runtime search path (some flavors take .so)
+#   -rpath-link <dir>             : link-time search path
+#   -T <linker_script>            : GNU ld linker script
+#   -syslibroot <sdk>             : Apple ld64 sysroot
+#   -isysroot <sdk>               : compiler driver sysroot
+#   -o <output>                   : output file
+_DASH_L_FLAGS_WITH_PATH_ARG = frozenset({
+    '-lto_library',
+    '-plugin',
+    '-dynamic-linker',
+    '-rpath',
+    '-rpath-link',
+    '-T',
+    '-syslibroot',
+    '-isysroot',
+    '-o',
+})
+
+
+def _classify_link_token(tok: str) -> 'str | None':
+    """Classify a single link-command token and return the entry to add
+    to ``default_linked_libs``, or ``None`` to skip.
+
+    Two shapes are interesting:
+
+    * ``-l<alias>`` --- a blade-style library alias. We strip the ``-l``
+      and return the alias unchanged. Filter known non-library flags
+      (``-lto_library``) and skip the ``-l:literal-filename`` form
+      (GNU ld extension we can't represent as a blade alias).
+    * Absolute path to a ``.a`` / ``.dylib`` / ``.so`` (or versioned
+      ``.so.N``) --- compiler runtime archives like macOS's
+      ``libclang_rt.osx.a`` arrive this way; their symbols need to land
+      in the baseline too. Return the path verbatim; callers distinguish
+      absolute-path entries from aliases by the leading ``/``.
+
+    Everything else (flags, output paths, the user's compiled .o)
+    returns ``None``.
+    """
+    if tok.startswith('-l') and len(tok) > 2:
+        # ``-l:libfoo.so.1`` is GNU ld's literal-name form; skip.
+        if tok[2] == ':':
+            return None
+        name = tok[2:]
+        if name in _NON_LIB_DASH_L_FLAGS:
+            return None
+        return name
+    # Absolute paths only -- relative paths in the link line are the
+    # user's compiled .o (e.g. ``/tmp/cc<hash>.o``); but we want absolute
+    # toolchain-installed archives, which always come as full paths.
+    if (tok.startswith('/')
+            and (tok.endswith('.a') or tok.endswith('.dylib') or '.so' in tok)
+            # Exclude the user's compiled .o (cleanups), startup object
+            # files, and other non-library outputs from the link line.
+            and not tok.endswith('.o')):
+        return tok
+    return None
 
 
 _CC_TOOLCHAIN_KINDS = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin'}
