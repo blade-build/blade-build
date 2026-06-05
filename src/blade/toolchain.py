@@ -509,11 +509,41 @@ class MsvcToolChain(ToolChain):
 
     @property
     def default_linked_libs(self) -> 'tuple[str, ...]':
-        """MSVC implicitly links the UCRT + VC runtime + Win32 base libs.
+        """Library aliases MSVC links implicitly into every binary.
 
-        The exact set depends on the runtime selection (/MD vs /MT vs the
-        debug variants); we list the union so the baseline covers all four
-        configurations. lib.exe / link.exe resolves these via LIB env var
+        Union of:
+          * a hardcoded baseline (UCRT + VC runtime + Win32 base libs), so the
+            ``check_undefined`` baseline never regresses even when detection
+            fails
+          * what the compiler itself reports via ``/DEFAULTLIB`` directives
+            (read back with ``dumpbin /directives``), which captures the CRT
+            variant actually selected (``/MD`` -> ``msvcrt``, ``/MT`` ->
+            ``libcmt``, debug -> ``*d``) plus ``oldnames``
+
+        Per-instance cached: detection compiles a tiny TU (~100 ms) and the
+        answer is invariant for the toolchain. Mirrors
+        ``GccToolChain.default_linked_libs``; this is the MSVC analog of the
+        ``-###`` link-line parse (cl.exe accepts neither ``-###`` nor ``-l``).
+        """
+        cached = getattr(self, '_cached_default_linked_libs', None)
+        if cached is not None:
+            return cached
+        hardcoded = self._hardcoded_default_linked_libs()
+        detected = _detect_default_linked_libs_msvc(self.cc)
+        # Union, preserving hardcoded order and appending novel extras.
+        seen = set(hardcoded)
+        extras = tuple(lib for lib in detected if lib not in seen)
+        result = hardcoded + extras
+        self._cached_default_linked_libs = result
+        return result
+
+    def _hardcoded_default_linked_libs(self) -> 'tuple[str, ...]':
+        """Baseline when ``/DEFAULTLIB`` detection yields nothing.
+
+        MSVC implicitly links the UCRT + VC runtime + Win32 base libs. The
+        exact CRT depends on the runtime selection (/MD vs /MT vs the debug
+        variants); we list the union so the baseline covers all four
+        configurations. lib.exe / link.exe resolves these via the LIB env var
         plus their own search paths.
         """
         return ('msvcrt', 'vcruntime', 'ucrt', 'kernel32')
@@ -1272,6 +1302,100 @@ def _classify_link_token(tok: str) -> 'str | None':
             and not tok.endswith('.o')):
         return tok
     return None
+
+
+def _detect_default_linked_libs_msvc(cc: str) -> 'tuple[str, ...]':
+    """Auto-detect MSVC default-linked libraries from compiler directives.
+
+    The MSVC analog of ``-###`` link-line parsing: the CRT headers (and the
+    compiler itself) inject ``#pragma comment(lib, ...)`` directives into every
+    object file, naming the runtime libraries link.exe pulls implicitly -- the
+    CRT variant the runtime flag selected (``/MD`` -> ``MSVCRT``, ``/MT`` ->
+    ``LIBCMT``, debug -> ``*D``) plus ``OLDNAMES``. We compile a trivial
+    translation unit and read those ``/DEFAULTLIB`` directives back with
+    ``dumpbin /directives``.
+
+    ``cc`` is the path to ``cl.exe``; ``dumpbin.exe`` is expected alongside it,
+    falling back to PATH. A bare ``int main(){}`` carries the CRT directives
+    without needing any INCLUDE/LIB environment, so this stays fast and
+    self-contained. We compile with ``/MD`` to match blade's default MSVC
+    runtime (``cc.cppflags`` in the builtin config); since the result is unioned
+    with the hardcoded baseline, the exact variant is not critical.
+
+    Returns an empty tuple on any failure (cl/dumpbin missing, compile error,
+    no directives) -- the caller falls back to the hardcoded baseline, so there
+    is no regression risk.
+    """
+    import shutil               # noqa: PLC0415  pulled lazily; cold path
+    import subprocess           # noqa: PLC0415
+    import tempfile             # noqa: PLC0415
+
+    dumpbin = os.path.join(os.path.dirname(cc), 'dumpbin.exe')
+    if not os.path.isfile(dumpbin):
+        found = shutil.which('dumpbin')
+        if not found:
+            return ()
+        dumpbin = found
+
+    tmpdir = tempfile.mkdtemp(prefix='blade_msvc_libs_')
+    try:
+        src = os.path.join(tmpdir, 'probe.cpp')
+        obj = os.path.join(tmpdir, 'probe.obj')
+        with open(src, 'w') as f:
+            f.write('int main() { return 0; }\n')
+        try:
+            proc = subprocess.run(
+                [cc, '/nologo', '/c', '/MD', src, '/Fo' + obj],
+                capture_output=True, text=True, timeout=30, check=False,
+                cwd=tmpdir)
+        except (OSError, subprocess.TimeoutExpired):
+            return ()
+        if proc.returncode != 0 or not os.path.isfile(obj):
+            return ()
+        try:
+            dump = subprocess.run(
+                [dumpbin, '/nologo', '/directives', obj],
+                capture_output=True, text=True, timeout=30, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            return ()
+        output = dump.stdout or ''
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    libs: list[str] = []
+    seen: set[str] = set()
+    for raw_line in output.splitlines():
+        entry = _classify_msvc_directive(raw_line)
+        if entry is None or entry in seen:
+            continue
+        seen.add(entry)
+        libs.append(entry)
+    return tuple(libs)
+
+
+def _classify_msvc_directive(line: str) -> 'str | None':
+    """Extract the library alias from a ``dumpbin /directives`` line.
+
+    Lines of interest carry a linker directive ``/DEFAULTLIB:MSVCRT`` or
+    ``/DEFAULTLIB:"libname.lib"`` (drivers vary on quoting and on the ``.lib``
+    suffix). Returns the normalized blade alias (lowercased, quotes and the
+    ``.lib`` suffix stripped) or ``None`` for any other line (the ``Linker
+    Directives`` banner, ``/FAILIFMISMATCH``, ``/merge``, blanks, ...).
+    """
+    text = line.strip()
+    marker = '/DEFAULTLIB:'
+    idx = text.upper().find(marker)
+    if idx == -1:
+        return None
+    value = text[idx + len(marker):].strip()
+    parts = value.split()
+    value = parts[0] if parts else ''
+    value = value.strip('"').strip()
+    if not value:
+        return None
+    if value.lower().endswith('.lib'):
+        value = value[:-4]
+    return value.lower() or None
 
 
 _CC_TOOLCHAIN_KINDS = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin'}

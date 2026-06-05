@@ -20,6 +20,8 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 
 from blade import toolchain  # noqa: E402
 from blade.toolchain import _detect_default_linked_libs  # noqa: E402
+from blade.toolchain import _classify_msvc_directive  # noqa: E402
+from blade.toolchain import _detect_default_linked_libs_msvc  # noqa: E402
 
 
 def _fake_run(stderr_text):
@@ -245,6 +247,143 @@ class GccToolChainDefaultLinkedLibsTest(unittest.TestCase):
         with mock.patch.object(toolchain, '_detect_default_linked_libs',
                                return_value=('extra1',)) as m:
             _ = tc.default_linked_libs
+            _ = tc.default_linked_libs
+            _ = tc.default_linked_libs
+            self.assertEqual(m.call_count, 1)
+
+
+class ClassifyMsvcDirectiveTest(unittest.TestCase):
+    """The ``dumpbin /directives`` line classifier (MSVC analog of the
+    GCC ``-l`` token classifier). Pure function -- runs on any platform."""
+
+    def test_bare_defaultlib(self):
+        self.assertEqual(_classify_msvc_directive('   /DEFAULTLIB:MSVCRT'), 'msvcrt')
+
+    def test_quoted_with_lib_suffix(self):
+        """Some directives are quoted and carry the ``.lib`` suffix; strip both."""
+        self.assertEqual(_classify_msvc_directive('/DEFAULTLIB:"libcmt.lib"'), 'libcmt')
+
+    def test_oldnames(self):
+        self.assertEqual(_classify_msvc_directive('/DEFAULTLIB:OLDNAMES'), 'oldnames')
+
+    def test_banner_line_ignored(self):
+        self.assertIsNone(_classify_msvc_directive('   Linker Directives'))
+        self.assertIsNone(_classify_msvc_directive('   ------------------'))
+
+    def test_other_directives_ignored(self):
+        """``/FAILIFMISMATCH`` and ``/merge`` are linker directives but not
+        default libraries."""
+        self.assertIsNone(_classify_msvc_directive(
+            '/FAILIFMISMATCH:_MSC_VER=1900'))
+        self.assertIsNone(_classify_msvc_directive('  /merge:.foo=.bar'))
+
+    def test_blank_and_garbage(self):
+        self.assertIsNone(_classify_msvc_directive(''))
+        self.assertIsNone(_classify_msvc_directive('/DEFAULTLIB:'))
+        self.assertIsNone(_classify_msvc_directive('/DEFAULTLIB:""'))
+
+
+def _fake_msvc_run(compile_rc, directives_text):
+    """Build a ``subprocess.run`` replacement: first call is the cl compile,
+    second is ``dumpbin /directives``. (The ``/Fo`` object check is satisfied
+    by patching ``os.path.isfile`` in the caller, so no real file is needed.)"""
+    state = {'calls': 0}
+
+    def runner(argv, *args, **kwargs):
+        state['calls'] += 1
+        m = mock.Mock()
+        m.stderr = ''
+        if state['calls'] == 1:               # cl compile
+            m.returncode = compile_rc
+            m.stdout = ''
+        else:                                  # dumpbin /directives
+            m.returncode = 0
+            m.stdout = directives_text
+        return m
+    return runner
+
+
+class DetectDefaultLinkedLibsMsvcTest(unittest.TestCase):
+    """The end-to-end MSVC detector with cl/dumpbin mocked, so it runs on
+    any platform."""
+
+    _DIRECTIVES = (
+        '\n'
+        'Dump of file probe.obj\n\n'
+        '   Linker Directives\n'
+        '   -----------------\n'
+        '   /DEFAULTLIB:MSVCRT\n'
+        '   /DEFAULTLIB:OLDNAMES\n'
+        '   /FAILIFMISMATCH:_CRT_STDIO_ISO_WIDE_SPECIFIERS=0\n'
+    )
+
+    def _run(self, runner):
+        # Pretend dumpbin.exe sits next to cl.exe so resolution succeeds.
+        with mock.patch('os.path.isfile', return_value=True), \
+             mock.patch.object(subprocess, 'run', side_effect=runner):
+            return _detect_default_linked_libs_msvc(r'C:\msvc\bin\cl.exe')
+
+    def test_parses_defaultlib_directives(self):
+        """Pulls the CRT + oldnames out of the directive dump; ignores the
+        banner and ``/FAILIFMISMATCH``."""
+        self.assertEqual(
+            self._run(_fake_msvc_run(0, self._DIRECTIVES)),
+            ('msvcrt', 'oldnames'))
+
+    def test_compile_failure_returns_empty(self):
+        self.assertEqual(self._run(_fake_msvc_run(2, '')), ())
+
+    def test_no_directives_returns_empty(self):
+        self.assertEqual(
+            self._run(_fake_msvc_run(0, 'Dump of file probe.obj\n\nSummary\n')),
+            ())
+
+    def test_cl_not_found_returns_empty(self):
+        def boom(*args, **kwargs):
+            raise FileNotFoundError(2, 'not found')
+        self.assertEqual(self._run(boom), ())
+
+    def test_timeout_returns_empty(self):
+        def slow(*args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd='cl', timeout=30)
+        self.assertEqual(self._run(slow), ())
+
+    def test_dumpbin_missing_returns_empty(self):
+        """No dumpbin next to cl and none on PATH -> empty (no crash)."""
+        with mock.patch('os.path.isfile', return_value=False), \
+             mock.patch('shutil.which', return_value=None):
+            self.assertEqual(
+                _detect_default_linked_libs_msvc(r'C:\msvc\bin\cl.exe'), ())
+
+
+class MsvcToolChainDefaultLinkedLibsTest(unittest.TestCase):
+    """The union semantic on MSVC: hardcoded floor + detected extras."""
+
+    def _tc(self, cc='cl-stub'):
+        tc = toolchain.MsvcToolChain.__new__(toolchain.MsvcToolChain)
+        tc.cc = cc
+        return tc
+
+    def test_union_appends_oldnames(self):
+        """``oldnames`` (and any /MT ``libcmt``) is appended after the
+        hardcoded prefix; the already-present ``msvcrt`` is not duplicated."""
+        tc = self._tc()
+        with mock.patch.object(toolchain, '_detect_default_linked_libs_msvc',
+                               return_value=('msvcrt', 'oldnames')):
+            self.assertEqual(tc.default_linked_libs,
+                             ('msvcrt', 'vcruntime', 'ucrt', 'kernel32', 'oldnames'))
+
+    def test_detection_empty_uses_hardcoded(self):
+        tc = self._tc()
+        with mock.patch.object(toolchain, '_detect_default_linked_libs_msvc',
+                               return_value=()):
+            self.assertEqual(tc.default_linked_libs,
+                             ('msvcrt', 'vcruntime', 'ucrt', 'kernel32'))
+
+    def test_result_cached(self):
+        tc = self._tc()
+        with mock.patch.object(toolchain, '_detect_default_linked_libs_msvc',
+                               return_value=('oldnames',)) as m:
             _ = tc.default_linked_libs
             _ = tc.default_linked_libs
             self.assertEqual(m.call_count, 1)
