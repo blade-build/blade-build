@@ -194,6 +194,46 @@ def _transitive_declared_generated_includes(target):
     return result
 
 
+def _transitive_declared_output_files(target):
+    """Collect all files declared as outputs by transitive deps.
+
+    Like ``_transitive_declared_generated_includes`` but also pulls
+    ``gen_rule.attr['outputs']``, which lists every file the rule writes
+    -- including ``.cc`` / ``.cpp`` source files that wrapper macros
+    (e.g. flare's ``cc_flare_library``) feed into a downstream cc_library's
+    ``srcs=``. ``generated_hdrs`` alone is insufficient because the
+    header-detection filter in gen_rule keeps non-header outputs out of
+    that set, but they're still legitimately "generated".
+
+    Used by ``CcTarget._check_hdrs_existence`` (issue #886) to validate
+    that any path silently flipped to ``target_file_path(...)`` by
+    ``_expand_sources`` is actually going to be produced by something.
+
+    Returns ``(file_set, dir_set)`` of build-dir-stripped paths.
+    """
+    attr_key = 'transitive_declared_output_files'
+    if attr_key in target.data:
+        return target.data[attr_key]
+
+    file_set = set()
+    dir_set = set()
+    build_targets = target.blade.get_build_targets()
+    for dkey in target.deps:
+        dep = build_targets[dkey]
+        for hdr in dep.attr.get('generated_hdrs', []):
+            file_set.add(target._remove_build_dir_prefix(hdr))
+        for out in dep.attr.get('outputs', []):
+            file_set.add(target._remove_build_dir_prefix(out))
+        for inc in dep.attr.get('generated_incs', []):
+            dir_set.add(target._remove_build_dir_prefix(inc))
+        sub_files, sub_dirs = _transitive_declared_output_files(dep)
+        file_set |= sub_files
+        dir_set |= sub_dirs
+    result = file_set, dir_set
+    target.data[attr_key] = result
+    return result
+
+
 def is_fission():
     """Whether fission is enabled in cc_config."""
     return config.get_item('cc_config', 'fission')
@@ -466,6 +506,64 @@ class CcTarget(Target):
             if dep.attr.get('binary_link_only'):
                 self.error('"%s" is a binary_link_only library, can only be a dependent of '
                            'executable target or another binary_link_only library' % dep.fullname)
+
+    def _check_hdrs_existence(self):
+        """Diagnose ``hdrs``/``srcs`` entries that exist neither in the source
+        tree nor as a declared output of some dep.
+
+        ``_expand_sources`` silently flips any missing source file to
+        ``target_file_path(...)`` on the assumption it'll be generated at
+        build time. If no dep declares it as an output, the assumption is
+        wrong and the path dangles forever -- the typo or missing dep
+        surfaces only as a cryptic "file not found" deep in a downstream
+        compile, or not at all when nobody happens to include the header.
+        Validate up-front. See issue #886.
+
+        Considered "covered" (and skipped):
+
+        * the file exists on disk at the source path (the common case)
+        * its build-dir-stripped path matches a declared output of some
+          transitive dep:
+            * ``generated_hdrs`` (proto / thrift / lex_yacc -- typed header
+              generation)
+            * ``outputs`` (raw ``gen_rule`` outputs, including ``.cc`` /
+              ``.cpp`` source files -- needed for patterns like flare's
+              ``cc_flare_library`` macro that wraps a ``gen_rule``-produced
+              ``.flare.pb.cc`` into a downstream cc_library)
+        * its build-dir-stripped path is under some dep's declared
+          ``generated_incs`` directory (e.g. ``thrift_library`` declares
+          ``gen-cpp/`` as a generated include root)
+
+        Anything else gets diagnosed at error severity with a hint.
+        """
+        declared_files, declared_incs = _transitive_declared_output_files(self)
+        missing = []
+        # Consider both expanded_hdrs and expanded_srcs: a typo'd .cc in
+        # srcs has the same silent-flip problem (and while a missing srcs
+        # entry usually surfaces later as a compile error, getting the
+        # diagnostic at generate time with the BUILD location is strictly
+        # better).
+        candidates = []
+        for entry in self.attr.get('expanded_hdrs', []):
+            candidates.append(('header', entry))
+        for entry in self.attr.get('expanded_srcs', []):
+            candidates.append(('source', entry))
+        for kind, (src, full_path) in candidates:
+            if not path_under_dir(full_path, self.build_dir):
+                continue  # file exists in source tree
+            stripped = self._remove_build_dir_prefix(full_path)
+            if stripped in declared_files:
+                continue  # declared as an output (generated_hdrs or gen_rule outs) by some dep
+            if any(path_under_dir(stripped, inc) for inc in declared_incs):
+                continue  # under some dep's generated_incs root
+            missing.append((kind, src))
+        if not missing:
+            return
+        for kind, src in missing:
+            self.error(
+                '%s file %r does not exist in the source tree and is not declared '
+                'as a generated output by any dep. Did you mistype the filename, '
+                'or forget to add the dep that generates it?' % (kind, src))
 
     def _get_optimize_flags(self):
         """Get optimize flags according to build mode and attributes"""
@@ -1461,6 +1559,7 @@ class CcLibrary(CcTarget):
         """Override"""
         self._write_inclusion_check_info()
         self._check_binary_link_only()
+        self._check_hdrs_existence()
 
 
     def generate(self):
@@ -1612,6 +1711,7 @@ class PrebuiltCcLibrary(CcTarget):
         """Override"""
         self._write_inclusion_check_info()
         self._check_binary_link_only()
+        self._check_hdrs_existence()
 
     def generate(self):
         """Generate build code for cc object/library."""
@@ -1877,6 +1977,7 @@ class ForeignCcLibrary(CcTarget):
         """Override"""
         self._write_inclusion_check_info()
         self._check_binary_link_only()
+        self._check_hdrs_existence()
 
     def _ninja_rules(self):
         tc = self.blade.get_build_toolchain()
@@ -2136,6 +2237,7 @@ class CcBinary(CcTarget):
     def _before_generate(self):  # override
         """Override"""
         self._write_inclusion_check_info()
+        self._check_hdrs_existence()
 
     def generate(self):
         """Generate build code for cc binary/test."""
