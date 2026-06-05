@@ -218,9 +218,18 @@ def resolve_lib_paths(toolchain, alias):
     Empty list if the alias can't be resolved.
     """
     # Direct-path fast path: an entry that's already an absolute path to
-    # an existing file (.a / .dylib / .so) is consumed verbatim.
+    # an existing file (.a / .dylib / .so / .lib) is consumed verbatim.
     if os.path.isabs(alias) and os.path.isfile(alias):
         return [os.path.realpath(alias)]
+    # MSVC: cl.exe has no `-print-file-name`; search the toolchain's library
+    # directories (the equivalent of the LIB env var) for `<alias>.lib`.
+    if toolchain.cc_is('msvc'):
+        for libdir in toolchain.get_system_lib_paths():
+            for candidate in _candidate_filenames(toolchain, alias):
+                path = os.path.join(libdir, candidate)
+                if os.path.isfile(path):
+                    return [os.path.realpath(path)]
+        return []
     cc = toolchain.cc
     for candidate in _candidate_filenames(toolchain, alias):
         try:
@@ -259,8 +268,53 @@ def resolve_lib_paths(toolchain, alias):
     return []
 
 
-def _nm_defined_externals(lib_path):
+def _is_hexoffset(token):
+    """True if ``token`` is a hexadecimal archive offset (dumpbin column)."""
+    try:
+        int(token, 16)
+        return True
+    except ValueError:
+        return False
+
+
+def _dumpbin_defined_symbols(dumpbin, lib_path):
+    """Defined external symbols of an MSVC ``.lib`` via ``dumpbin /linkermember``.
+
+    The first linker member is the archive's symbol index -- exactly the set of
+    names the lib can satisfy at link time (for an import lib, both the ``foo``
+    and ``__imp_foo`` forms). After the ``<N> public symbols`` line each row is
+    ``<hex-offset> <symbol>``; we take the symbol token.
+
+    Empty set on any failure (dumpbin missing, bad lib) -- the caller then
+    treats the lib as contributing no baseline symbols.
+    """
+    try:
+        out = subprocess.check_output(
+            [dumpbin, '/nologo', '/linkermember:1', lib_path],
+            stderr=subprocess.DEVNULL, encoding='utf-8', errors='replace')
+    except (subprocess.CalledProcessError, OSError):  # FileNotFoundError ⊂ OSError
+        return set()
+    symbols = set()
+    started = False
+    for raw in out.splitlines():
+        line = raw.strip()
+        if not started:
+            # The symbol listing begins right after the "<N> public symbols" row.
+            if line.endswith('public symbols'):
+                started = True
+            continue
+        parts = line.split(None, 1)
+        if len(parts) == 2 and _is_hexoffset(parts[0]):
+            symbols.add(parts[1].strip())
+    return symbols
+
+
+def _nm_defined_externals(lib_path, toolchain=None):
     """Return the set of externally-defined symbol names in ``lib_path``.
+
+    On MSVC (``toolchain.cc_is('msvc')``) the libraries are COFF ``.lib``
+    archives and ``nm`` is unavailable, so we read the defined externals with
+    ``dumpbin /linkermember`` instead.
 
     Portable across GNU binutils nm and Apple's nm:
       * GNU nm: ``-D`` (dynamic table), ``--defined-only``, ``--extern-only``
@@ -285,6 +339,8 @@ def _nm_defined_externals(lib_path):
     so for ``.tbd`` inputs we go straight to the text parser, which
     sees the symbols of every embedded document.
     """
+    if toolchain is not None and toolchain.cc_is('msvc'):
+        return _dumpbin_defined_symbols(toolchain.dumpbin, lib_path)
     if lib_path.endswith('.tbd'):
         # Skip nm: Apple's nm only enumerates the first YAML document.
         return _tbd_extract_symbols(lib_path)
@@ -508,7 +564,7 @@ def ensure_cache(toolchain, alias, cache_dir):
         return cache_file
     symbols = set()
     for src in sources:
-        symbols |= _nm_defined_externals(src)
+        symbols |= _nm_defined_externals(src, toolchain)
     _write_cache(cache_file, alias, primary, symbols)
     return cache_file
 

@@ -968,15 +968,14 @@ class CcTarget(Target):
         and writes ``<archive>.syms``. The downstream ``ccchkund`` rule reads
         the cache instead of re-running nm.
 
-        Skipped on MSVC, where the static check is already skipped (link.exe
-        handles undefined externals natively); the cache would be unused.
+        On MSVC the archive is a COFF ``.lib`` and the rule reads symbols with
+        ``dumpbin`` instead of ``nm`` (wired in the backend); the ``.syms``
+        format is identical, so the rest of the check is platform-agnostic.
 
         Idempotent across multiple call sites: re-registering the same
         STATIC_LIB_SYMS_LABEL on a target is a no-op.
         """
         tc = self.blade.get_build_toolchain()
-        if tc.cc_is('msvc'):
-            return None
         if self._get_target_file(tc.STATIC_LIB_SYMS_LABEL):
             return self._get_target_file(tc.STATIC_LIB_SYMS_LABEL)
         syms = archive + '.syms'
@@ -987,13 +986,13 @@ class CcTarget(Target):
     def _generate_check_undefined(self, static_lib, inclusion_check_result):
         """Emit the dep-completeness check rule for this cc_library.
 
-        Skipped when:
-          * check_undefined is False (per target / CLI / config), or
-          * the toolchain is MSVC -- link.exe already rejects undefined
-            externals (LNK2019), and Microsoft's lib.exe / .obj DEFAULTLIB
-            directives resolve standard C/C++ symbols outside the source-
-            visible ``-l<name>`` graph, which our nm-based model can't
-            represent without significant Windows-specific work.
+        Skipped when check_undefined is False (per target / CLI / config).
+
+        Works on MSVC too: symbols are read with ``dumpbin`` (``nm`` analog),
+        and the ``.obj`` ``/DEFAULTLIB`` directives that pull the CRT outside
+        the source-visible ``-l<name>`` graph are covered by the toolchain's
+        auto-detected ``default_linked_libs`` baseline (msvcrt / ucrt /
+        vcruntime / oldnames), so standard C/C++ symbols don't false-positive.
 
         Keeps running when generate_dynamic is True as an early, cheaper
         cross-check -- the dynamic link's `-Wl,--no-undefined` is the final
@@ -1020,8 +1019,6 @@ class CcTarget(Target):
         if not self.attr.get('check_undefined', True):
             return None
         tc = self.blade.get_build_toolchain()
-        if tc.cc_is('msvc'):
-            return None
         # `allow_undefined=True` is the legacy "this library has unresolved
         # symbols by design (the consumer provides them at final link)"
         # signal. It already disables -Wl,--no-undefined at link time; the

@@ -529,7 +529,8 @@ class MsvcToolChain(ToolChain):
         if cached is not None:
             return cached
         hardcoded = self._hardcoded_default_linked_libs()
-        detected = _detect_default_linked_libs_msvc(self.cc)
+        detected = _detect_default_linked_libs_msvc(
+            self.cc, self.get_system_include_paths())
         # Union, preserving hardcoded order and appending novel extras.
         seen = set(hardcoded)
         extras = tuple(lib for lib in detected if lib not in seen)
@@ -545,8 +546,18 @@ class MsvcToolChain(ToolChain):
         variants); we list the union so the baseline covers all four
         configurations. lib.exe / link.exe resolves these via the LIB env var
         plus their own search paths.
+
+        The C++ standard library is included via both its import lib
+        (``msvcprt``, the /MD variant the compiler selects with
+        ``/DEFAULTLIB:msvcprt`` whenever a C++ STL header is used) and the
+        static lib (``libcpmt``). Both are needed: ``msvcprt`` exports most
+        ``std::`` symbols, but a handful of data globals -- ``std::cerr``, the
+        locale facet ``id`` static members -- are referenced by their *plain*
+        name (defined inline in the headers) and only ``libcpmt`` carries that
+        form (``msvcprt`` has only the ``__imp_`` import stub). Together they
+        make the whole C++ stdlib surface ambient, as it is for any C++ binary.
         """
-        return ('msvcrt', 'vcruntime', 'ucrt', 'kernel32')
+        return ('msvcrt', 'msvcprt', 'libcpmt', 'vcruntime', 'ucrt', 'kernel32')
 
     def __init__(self, target_arch='auto', msvc_version='auto'):
         super().__init__()
@@ -824,6 +835,17 @@ class MsvcToolChain(ToolChain):
                 return first_path
 
         return tool  # Let it fail with a clear error later
+
+    @property
+    def dumpbin(self) -> str:
+        """Path to ``dumpbin.exe`` -- MSVC's object/library inspector.
+
+        Used by the cc ``check_undefined`` static check as the MSVC analog of
+        ``nm``: ``dumpbin /linkermember`` enumerates an import lib's defined
+        externals and ``dumpbin /symbols`` separates a static lib's undefined
+        from defined externals. Resolved alongside cl / lib / link.
+        """
+        return self._get_msvc_command('dumpbin')
 
     def get_resource_compiler(self):
         """Return path to Windows Resource Compiler (``rc.exe``).
@@ -1304,23 +1326,28 @@ def _classify_link_token(tok: str) -> 'str | None':
     return None
 
 
-def _detect_default_linked_libs_msvc(cc: str) -> 'tuple[str, ...]':
+def _detect_default_linked_libs_msvc(
+        cc: str, include_paths=None) -> 'tuple[str, ...]':
     """Auto-detect MSVC default-linked libraries from compiler directives.
 
-    The MSVC analog of ``-###`` link-line parsing: the CRT headers (and the
-    compiler itself) inject ``#pragma comment(lib, ...)`` directives into every
-    object file, naming the runtime libraries link.exe pulls implicitly -- the
-    CRT variant the runtime flag selected (``/MD`` -> ``MSVCRT``, ``/MT`` ->
-    ``LIBCMT``, debug -> ``*D``) plus ``OLDNAMES``. We compile a trivial
+    The MSVC analog of ``-###`` link-line parsing: the CRT and STL headers (and
+    the compiler itself) inject ``#pragma comment(lib, ...)`` directives into
+    every object file, naming the runtime libraries link.exe pulls implicitly --
+    the CRT variant the runtime flag selected (``/MD`` -> ``MSVCRT``, ``/MT`` ->
+    ``LIBCMT``, debug -> ``*D``), the matching C++ standard library
+    (``MSVCPRT`` / ``LIBCPMT``), and ``OLDNAMES``. We compile a small
     translation unit and read those ``/DEFAULTLIB`` directives back with
     ``dumpbin /directives``.
 
     ``cc`` is the path to ``cl.exe``; ``dumpbin.exe`` is expected alongside it,
-    falling back to PATH. A bare ``int main(){}`` carries the CRT directives
-    without needing any INCLUDE/LIB environment, so this stays fast and
-    self-contained. We compile with ``/MD`` to match blade's default MSVC
-    runtime (``cc.cppflags`` in the builtin config); since the result is unioned
-    with the hardcoded baseline, the exact variant is not critical.
+    falling back to PATH. ``include_paths`` (the toolchain's system include
+    dirs) is needed because the probe ``#include``s a C++ STL header so the
+    compiler injects the C++ standard library's ``/DEFAULTLIB`` -- that lib
+    (``msvcprt``) defines ``std::`` symbols (``_Xlength_error``, the locale
+    facets, iostream globals) that a bare ``int main(){}`` never references. We
+    compile with ``/MD`` to match blade's default MSVC runtime (``cc.cppflags``
+    in the builtin config); since the result is unioned with the hardcoded
+    baseline, the exact variant is not critical.
 
     Returns an empty tuple on any failure (cl/dumpbin missing, compile error,
     no directives) -- the caller falls back to the hardcoded baseline, so there
@@ -1337,17 +1364,26 @@ def _detect_default_linked_libs_msvc(cc: str) -> 'tuple[str, ...]':
             return ()
         dumpbin = found
 
+    # INCLUDE lets the probe pull STL headers (for the C++ stdlib DEFAULTLIB).
+    env = os.environ.copy()
+    if include_paths:
+        env['INCLUDE'] = os.pathsep.join(include_paths)
+
     tmpdir = tempfile.mkdtemp(prefix='blade_msvc_libs_')
     try:
         src = os.path.join(tmpdir, 'probe.cpp')
         obj = os.path.join(tmpdir, 'probe.obj')
         with open(src, 'w') as f:
-            f.write('int main() { return 0; }\n')
+            # <string> pulls the throw helpers, <iostream> the locale/stream
+            # globals -- together they trigger /DEFAULTLIB:msvcprt.
+            f.write('#include <string>\n#include <iostream>\n'
+                    'int main() { std::string s; std::cout << s; '
+                    'return (int)s.size(); }\n')
         try:
             proc = subprocess.run(
                 [cc, '/nologo', '/c', '/MD', src, '/Fo' + obj],
                 capture_output=True, text=True, timeout=30, check=False,
-                cwd=tmpdir)
+                cwd=tmpdir, env=env)
         except (OSError, subprocess.TimeoutExpired):
             return ()
         if proc.returncode != 0 or not os.path.isfile(obj):

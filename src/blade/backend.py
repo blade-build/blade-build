@@ -722,9 +722,13 @@ class _NinjaFileHeaderGenerator:
         # ``.a`` archives and re-ran ``nm`` on every dep for every target's
         # check, making the total cost O(targets × deps) and scaling badly
         # on diamond-shaped dep graphs.
+        # On MSVC the archives are COFF .lib files and nm is unavailable, so the
+        # emit-syms tool reads symbols with dumpbin instead; pass its path.
+        syms_args = '${out} ${in}'
+        if self.build_toolchain.cc_is('msvc'):
+            syms_args += ' --dumpbin="%s"' % self.build_toolchain.dumpbin
         self.generate_rule(name='ccsyms',
-                           command=self._builtin_command(
-                               'cc_emit_syms', '${out} ${in}'),
+                           command=self._builtin_command('cc_emit_syms', syms_args),
                            description='CC SYMS ${in}')
         # Single batch rule: ``${in}`` is the manifest JSON (built by
         # BuildManager after all cc_libraries have generated), ``${out}``

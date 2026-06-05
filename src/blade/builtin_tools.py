@@ -197,8 +197,53 @@ def _check_undefined_compile_baseline():
     return [_re.compile(p) for p in _CHECK_UNDEFINED_RESIDUAL_BASELINE]
 
 
-def _nm_extract_externals(archive):
+def _dumpbin_extract_externals(dumpbin, archive):
+    """Return (undefined, defined) external symbol sets for an MSVC ``.lib``.
+
+    The MSVC analog of ``nm -P -g``. ``dumpbin /symbols`` prints one row per
+    COFF symbol; the storage-class column reads ``External`` for externals and
+    the section column is ``UNDEF`` for undefined references, anything else
+    (``SECTn``, ``ABS``) for definitions. The raw (decorated) symbol name is the
+    token right after ``|`` -- the trailing ``(demangled)`` comment is dropped,
+    so names match what ``dumpbin /linkermember`` reports for the system libs.
+    """
+    try:
+        out = subprocess.check_output([dumpbin, '/nologo', '/symbols', archive],
+                                      stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        console.warning('dumpbin failed on %s (%s); treating as no symbols' % (archive, e))
+        return set(), set()
+    except OSError:  # FileNotFoundError ⊂ OSError
+        console.error('cc_check_undefined: dumpbin not found')
+        return set(), set()
+
+    undefined, defined = set(), set()
+    text = out.decode('utf-8', errors='replace')
+    for raw in text.splitlines():
+        if '|' not in raw:
+            continue
+        left, _, right = raw.partition('|')
+        cols = left.split()
+        # External symbol rows end the COFF columns with the storage class
+        # 'External'; e.g. "008 00000000 UNDEF notype () External | name".
+        if not cols or cols[-1] != 'External':
+            continue
+        name = right.strip().split(None, 1)[0] if right.strip() else ''
+        if not name:
+            continue
+        section = cols[2] if len(cols) >= 3 else ''
+        if section == 'UNDEF':
+            undefined.add(name)
+        else:
+            defined.add(name)
+    return undefined, defined
+
+
+def _nm_extract_externals(archive, dumpbin=None):
     """Return (undefined_external, defined_external) sets for an archive.
+
+    With ``dumpbin`` set (MSVC), defer to :func:`_dumpbin_extract_externals`
+    since ``nm`` is unavailable and the inputs are COFF ``.lib`` archives.
 
     Runs `nm -P -g <archive>` once. -P selects POSIX format
     (`name type [value [size]]`), -g restricts to external symbols. Type
@@ -210,6 +255,8 @@ def _nm_extract_externals(archive):
     must be counted as defined, or downstream cc_libraries that pull
     them in transitively will fail the undefined-symbol check.
     """
+    if dumpbin:
+        return _dumpbin_extract_externals(dumpbin, archive)
     try:
         out = subprocess.check_output(['nm', '-P', '-g', archive], stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
@@ -319,11 +366,14 @@ def _read_archive_syms(path):
     return undefined, defined
 
 
-def generate_cc_emit_syms(args, **_opts):
+def generate_cc_emit_syms(args, dumpbin=None, **_opts):
     """Run ``nm`` on a static archive once and emit its symbol-set cache.
 
     Args:
         args: ``[<output.syms>, <input.a>]``
+        dumpbin: path to ``dumpbin.exe`` (passed as ``--dumpbin=<path>`` by the
+            ``ccsyms`` rule on MSVC); when set, symbols are read with dumpbin
+            instead of ``nm`` (the archives are COFF ``.lib`` files).
 
     Writes ``output.syms`` with two sections: ``#U`` (undefined externals)
     and ``#D`` (defined externals). This collapses what the check tool used
@@ -334,7 +384,7 @@ def generate_cc_emit_syms(args, **_opts):
     out_path = args[0]
     archive = args[1]
     _declare_outputs(out_path)
-    undef, defd = _nm_extract_externals(archive)
+    undef, defd = _nm_extract_externals(archive, dumpbin=dumpbin)
     tmp = out_path + '.tmp'
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
     with open(tmp, 'w', encoding='utf-8') as f:

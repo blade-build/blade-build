@@ -359,9 +359,18 @@ class DetectDefaultLinkedLibsMsvcTest(unittest.TestCase):
 class MsvcToolChainDefaultLinkedLibsTest(unittest.TestCase):
     """The union semantic on MSVC: hardcoded floor + detected extras."""
 
+    # The hardcoded MSVC floor: C runtime + C++ stdlib (import + static) +
+    # vcruntime + ucrt + kernel32.
+    _FLOOR = ('msvcrt', 'msvcprt', 'libcpmt', 'vcruntime', 'ucrt', 'kernel32')
+
     def _tc(self, cc='cl-stub'):
         tc = toolchain.MsvcToolChain.__new__(toolchain.MsvcToolChain)
         tc.cc = cc
+        # default_linked_libs passes the system include paths to the detector;
+        # stub the installation state so get_system_include_paths() returns [].
+        tc._msvc_path = None
+        tc._sdk_path = None
+        tc._sdk_ver = None
         return tc
 
     def test_union_appends_oldnames(self):
@@ -370,15 +379,13 @@ class MsvcToolChainDefaultLinkedLibsTest(unittest.TestCase):
         tc = self._tc()
         with mock.patch.object(toolchain, '_detect_default_linked_libs_msvc',
                                return_value=('msvcrt', 'oldnames')):
-            self.assertEqual(tc.default_linked_libs,
-                             ('msvcrt', 'vcruntime', 'ucrt', 'kernel32', 'oldnames'))
+            self.assertEqual(tc.default_linked_libs, self._FLOOR + ('oldnames',))
 
     def test_detection_empty_uses_hardcoded(self):
         tc = self._tc()
         with mock.patch.object(toolchain, '_detect_default_linked_libs_msvc',
                                return_value=()):
-            self.assertEqual(tc.default_linked_libs,
-                             ('msvcrt', 'vcruntime', 'ucrt', 'kernel32'))
+            self.assertEqual(tc.default_linked_libs, self._FLOOR)
 
     def test_result_cached(self):
         tc = self._tc()
