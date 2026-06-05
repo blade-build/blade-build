@@ -140,13 +140,13 @@ Attributes:
 
   Setting `generate_dynamic = True` forces the shared library to be generated unconditionally.
 
-- `check_undefined`: bool = True
+- `check_undefined`: bool = True **(EXPERIMENTAL)**
 
-  Whether Blade statically validates — at archive time, before any link — that the target's declared `deps` cover every undefined symbol the library references. If a symbol is left unresolved, the check fails with an error pointing at the missing dep, instead of waiting for a final link to fail (often hundreds of targets later) with an opaque linker error.
+  Whether Blade statically validates — at archive time, before any link — that the target's declared `deps` cover every undefined symbol the library references. If a symbol is left unresolved, the check reports a diagnostic pointing at the missing dep, instead of waiting for a final link to fail (often hundreds of targets later) with an opaque linker error.
 
-  The check uses `nm` on the target's just-built static archive and each transitive `cc_library` dep's archive, plus pre-generated symbol caches for every `#alias` system library (so e.g. consumers of `pow()` are required to actually declare `'#m'`). It runs even when `generate_dynamic = True` — it is faster than the link itself and catches the same misses earlier, per-library, with feedback that points at the specific dep instead of at the final binary.
+  The check uses `nm` (or `dumpbin` on MSVC) on the target's just-built static archive and each transitive `cc_library` dep's archive, plus pre-generated symbol caches for every `#alias` system library (so e.g. consumers of `pow()` are required to actually declare `'#m'`). It runs even when `generate_dynamic = True` — it is faster than the link itself and catches the same misses earlier, per-library, with feedback that points at the specific dep instead of at the final binary.
 
-  Skipped automatically when the toolchain is MSVC (`link.exe` already rejects undefined externals via LNK2019, and MSVC's `.obj` `DEFAULTLIB` directives resolve symbols outside the source-visible graph in ways the nm model can't represent).
+  The check ships enabled by default, but while it is still experimental its findings default to `warning` severity (see [`cc_library_config.check_undefined_severity`](../config.md#cc_library_config)) — the build keeps going so any edge cases surface as diagnostics rather than CI failures. Flip the severity to `error` once it's clean on your codebase.
 
   See [Static undefined-symbol check](#static-undefined-symbol-check) for the bigger picture; per-invocation overrides are `--cc-check-undefined` / `--no-cc-check-undefined`; the global default is [`cc_library_config.check_undefined`](../config.md#cc_library_config).
 

@@ -737,9 +737,15 @@ class _NinjaFileHeaderGenerator:
         # batch emitter registers (each .syms is also an explicit input
         # there, so ninja still re-runs the batch when any archive's
         # symbol set changes).
+        # Severity is project-global, baked into the rule command at generate
+        # time so a config flip triggers a normal ninja regen (the build.ninja
+        # text changes -> ninja reloads). 'warning' (default while the check is
+        # experimental) logs findings but doesn't fail the build; 'error' fails.
+        severity = config.get_item('cc_library_config', 'check_undefined_severity')
+        batch_args = '${out} ${in} --severity=%s' % severity
         self.generate_rule(name='ccchkund_batch',
                            command=self._builtin_command(
-                               'cc_check_undefined_batch', '${out} ${in}'),
+                               'cc_check_undefined_batch', batch_args),
                            description='CC CHECK UNDEFINED [batch]')
 
     def _generate_cc_ar_rules(self):

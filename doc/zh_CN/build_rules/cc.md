@@ -132,13 +132,13 @@ cc_library(
 
   设为 `generate_dynamic = True` 则强制无条件生成动态库。
 
-- `check_undefined`: bool = True
+- `check_undefined`: bool = True **（实验性）**
 
-  是否在归档完成、最终链接之前**静态校验**：本库声明的 `deps` 是否覆盖了它引用的全部未定义符号。如果有未定义符号缺乏来源，立即报错并指出具体的缺失依赖；否则一直等到最终二进制链接才会爆出（往往滞后到几百个目标之后），错误消息只指向二进制名而非有问题的库本身。
+  是否在归档完成、最终链接之前**静态校验**：本库声明的 `deps` 是否覆盖了它引用的全部未定义符号。如果有未定义符号缺乏来源，立即给出诊断并指出具体的缺失依赖；否则一直等到最终二进制链接才会爆出（往往滞后到几百个目标之后），错误消息只指向二进制名而非有问题的库本身。
 
-  检查方式：对本目标新生成的 `.a` 跑 `nm -u`，对每个传递的 `cc_library` 依赖归档跑 `nm --defined-only`，再加上每个 `#alias` 系统库（如 `#m`、`#pthread`、`#dl`）的预生成符号缓存（消费者用了 `pow()` 就必须显式声明 `'#m'`）。即便 `generate_dynamic = True`，本检查也仍然执行——它比最终链接更快、并能更早、按库粒度指出问题。
+  检查方式：对本目标新生成的 `.a` 跑 `nm -u`（MSVC 下用 `dumpbin`），对每个传递的 `cc_library` 依赖归档跑 `nm --defined-only`（同样 MSVC 下用 `dumpbin`），再加上每个 `#alias` 系统库（如 `#m`、`#pthread`、`#dl`）的预生成符号缓存（消费者用了 `pow()` 就必须显式声明 `'#m'`）。即便 `generate_dynamic = True`，本检查也仍然执行——它比最终链接更快、并能更早、按库粒度指出问题。
 
-  在 MSVC 工具链下自动跳过（`link.exe` 已经通过 LNK2019 拒绝未定义外部符号；而且 MSVC 的 `.obj` `DEFAULTLIB` 指令解析符号的方式我们的 nm 模型无法表达）。
+  本检查默认启用，但目前仍属实验阶段，其诊断默认以 `warning` 级别输出（见 [`cc_library_config.check_undefined_severity`](../config.md#cc_library_config)）——构建照常继续，未覆盖到的边缘情况以告警形式出现，而不会直接打断 CI。在你的代码库上稳定通过后，可将级别切换为 `error`。
 
   详见 [静态未定义符号检查](#static-undefined-symbol-check)；本次调用级覆盖：`--cc-check-undefined` / `--no-cc-check-undefined`；全局默认：[`cc_library_config.check_undefined`](../config.md#cc_library_config)。
 

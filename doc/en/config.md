@@ -331,21 +331,32 @@ C/C++ library configuration
 
   Whether to generate a dynamic library in addition to the static library.
 
-- `check_undefined` : bool = True
+- `check_undefined` : bool = True **(EXPERIMENTAL)**
 
   Project-wide default for the [static undefined-symbol check](build_rules/cc.md#static-undefined-symbol-check).
   When True (default), every `cc_library`'s undefined symbols are statically validated against
   its declared `deps` immediately after the archive is built — moving "missing dep" failures
-  earlier in the build, with errors that point at the broken library instead of at the final
-  binary.
+  earlier in the build, with diagnostics that point at the broken library instead of at the
+  final binary.
+
+  The check ships on by default but, while still experimental, its findings default to
+  `warning` severity (see `check_undefined_severity` below): the build keeps going so any
+  edge cases we haven't seen surface as diagnostics rather than CI failures. Flip the severity
+  to `error` once the check is clean on your codebase.
 
   Override per-invocation with `--cc-check-undefined` / `--no-cc-check-undefined`.
   Override per-target with `check_undefined = False` on `cc_library` (lowest setting wins —
   a per-target `False` cannot be re-enabled from CLI or config).
 
-  Skipped automatically on the MSVC toolchain (`link.exe` LNK2019 already rejects undefined
-  externals, and `.obj` DEFAULTLIB directives resolve symbols in ways the nm model can't
-  represent).
+- `check_undefined_severity` : str = `'warning'`
+
+  Severity of an unresolved-symbol finding:
+  - `'warning'` (default, experimental setting) — log the finding via `console.warning` and
+    let the build continue.
+  - `'error'` — fail the build on any finding (the eventual non-experimental default).
+
+  This setting is project-global; per-target behavior is still controlled by
+  `check_undefined` / `allow_undefined`.
 
 - `allow_undefined` : list = []
 

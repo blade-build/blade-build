@@ -129,10 +129,18 @@ _CONFIG_TEMPLATE = {
         'hdrs_missing_suppress': set(),
         # Validate that a cc_library's declared deps cover every undefined
         # symbol it references, without requiring a shared-library link.
-        # See issue #1225.
+        # See issue #1225. EXPERIMENTAL -- the check ships on by default but at
+        # `warning` severity so that any false-positives we haven't seen yet
+        # surface as diagnostics without blocking builds. Flip severity to
+        # `error` once you've confirmed the check is clean on your codebase.
         'check_undefined': True,
-        'check_undefined__help__': 'Whether to statically validate that declared deps '
-            'cover every undefined symbol referenced by each cc_library. Default True.',
+        'check_undefined__help__': 'EXPERIMENTAL. Whether to statically validate that '
+            'declared deps cover every undefined symbol referenced by each cc_library. '
+            'Default True; pair with check_undefined_severity to control the diagnostic.',
+        'check_undefined_severity': 'warning',
+        'check_undefined_severity__help__': 'Severity of an unresolved-symbol finding: '
+            '"warning" (default) logs a warning and lets the build continue; "error" fails '
+            'the build. Default is "warning" while the check is experimental.',
         # Global allowlist of symbols permitted to remain undefined. Each entry
         # is a Python regex matched with re.fullmatch against the mangled name
         # (what `nm -u` prints). System symbols (libc, libstdc++, weak refs)

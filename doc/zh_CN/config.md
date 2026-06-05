@@ -341,18 +341,27 @@ Blade 支持构建多目标平台的产物，例如在 x64 Linux 下，可以通
 
 除了生成静态库之外，是否同时生成动态库。
 
-#### `check_undefined`：bool = True
+#### `check_undefined`：bool = True **（实验性）**
 
 **[静态未定义符号检查](build_rules/cc.md#static-undefined-symbol-check)的项目级默认开关。**
 
-默认开启时，每个 `cc_library` 在归档完成后立即对其未定义符号进行静态校验，确认其声明的 `deps` 是否真的覆盖了所有用到的符号——把「缺依赖」的失败时机左移、按库报错，而不是堆到最终二进制链接才爆出。
+默认开启时，每个 `cc_library` 在归档完成后立即对其未定义符号进行静态校验，确认其声明的 `deps` 是否真的覆盖了所有用到的符号——把「缺依赖」的失败时机左移、按库给出诊断信息，而不是堆到最终二进制链接才爆出。
+
+检查默认启用，但目前仍属实验阶段，其诊断默认以 **warning** 级别输出（见下方 `check_undefined_severity`）：构建继续进行，未覆盖到的边缘情况以告警形式出现，而非直接打断 CI。在本检查在你的代码库稳定通过后，可将级别切换为 `error`。
 
 覆盖优先级：
 
 - 单次调用：`--cc-check-undefined` / `--no-cc-check-undefined`。
 - 单目标：在 `cc_library` 上设 `check_undefined = False`。**最低值胜出**——单目标 `False` 不能被 CLI 或配置重新开启。
 
-MSVC 工具链下自动跳过（`link.exe` 的 LNK2019 已经拒绝未定义外部符号；并且 `.obj` 的 DEFAULTLIB 指令解析方式 nm 模型无法表达）。
+#### `check_undefined_severity`：str = `'warning'`
+
+**未解析符号诊断的级别。**
+
+- `'warning'`（默认，实验阶段值）—— 通过 `console.warning` 输出诊断，构建继续。
+- `'error'` —— 任何未解析符号都判定构建失败（脱离实验阶段后的默认目标）。
+
+本配置作用于项目全局；单目标层面的开关仍由 `check_undefined` / `allow_undefined` 控制。
 
 #### `allow_undefined`：list = []
 

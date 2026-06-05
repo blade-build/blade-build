@@ -476,7 +476,7 @@ def generate_cc_check_undefined(args, **opts):
     return None
 
 
-def generate_cc_check_undefined_batch(args, **_opts):
+def generate_cc_check_undefined_batch(args, severity='error', **_opts):
     """Project-wide variant of :func:`generate_cc_check_undefined`.
 
     Runs the static undefined-symbol check for every cc_library in the
@@ -492,15 +492,16 @@ def generate_cc_check_undefined_batch(args, **_opts):
 
     Args:
         args: ``[<batch_stamp>, <manifest.json>]``
+        severity: ``'warning'`` (project default while the check is
+            experimental) logs findings via console.warning and still
+            writes the stamp so the build keeps going. ``'error'`` fails
+            the build on any finding. Anything else falls back to
+            ``'error'`` (defensive: an unknown severity is closer to "be
+            strict" than "be silent").
 
-    The manifest is a JSON array of per-target spec dicts written by
-    BuildManager at generate time:
-        {"target_label": str, "target_syms": str, "dep_syms": [str],
-         "sys_caches": [str], "allow_file": str}
-
-    Exits non-zero (and writes nothing) if any spec fails. The stamp
-    file is written only on full success, so a later incremental
-    invocation can short-circuit if no inputs changed.
+    On severity=``'error'``, exits non-zero (and writes nothing) when any
+    spec fails. The stamp is always written on the warning path so a
+    later incremental invocation can short-circuit if no inputs changed.
     """
     import json as _json  # pylint: disable=import-outside-toplevel
     import re as _re  # pylint: disable=import-outside-toplevel
@@ -542,6 +543,10 @@ def generate_cc_check_undefined_batch(args, **_opts):
         allow_cache[path] = compiled
         return compiled
 
+    # `severity` is the project-global diagnostic level. We resolve it once to
+    # the matching console.{warning,error} bound method so the per-target loop
+    # below doesn't keep re-branching.
+    log = console.warning if severity == 'warning' else console.error
     failed = 0
     for spec in specs:
         target_label = spec['target_label']
@@ -564,19 +569,20 @@ def generate_cc_check_undefined_batch(args, **_opts):
                           if not any(p.fullmatch(s) for p in compiled)}
         if unresolved:
             failed += 1
-            console.error('cc_check_undefined: %s has %d undefined symbol(s) not covered '
-                          'by declared deps:' % (target_label, len(unresolved)))
+            log('cc_check_undefined: %s has %d undefined symbol(s) not covered '
+                'by declared deps:' % (target_label, len(unresolved)))
             for s in sorted(unresolved)[:50]:
-                console.error('  %s' % s)
+                log('  %s' % s)
             if len(unresolved) > 50:
-                console.error('  ... and %d more' % (len(unresolved) - 50))
+                log('  ... and %d more' % (len(unresolved) - 50))
 
     if failed:
-        console.error('cc_check_undefined: %d target(s) failed; add the providing '
-                      'cc_library (or #syslib) to deps, or whitelist with '
-                      'allow_undefined=[regex] / cc_library_config.allow_undefined.'
-                      % failed)
-        return 1
+        log('cc_check_undefined: %d target(s) failed; add the providing '
+            'cc_library (or #syslib) to deps, or whitelist with '
+            'allow_undefined=[regex] / cc_library_config.allow_undefined.'
+            % failed)
+        if severity != 'warning':
+            return 1
 
     os.makedirs(os.path.dirname(stamp_file), exist_ok=True)
     with open(stamp_file, 'w', encoding='utf-8') as f:

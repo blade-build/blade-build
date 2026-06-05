@@ -551,5 +551,109 @@ class CheckUndefinedDiffTest(unittest.TestCase):
         self.assertEqual(rc, 1)
 
 
+# ----------------------------------------------------------------------------
+# Batch tool severity behavior (experimental warning default)
+# ----------------------------------------------------------------------------
+
+
+class CheckUndefinedBatchSeverityTest(unittest.TestCase):
+    """Pin the project-global severity contract of
+    ``generate_cc_check_undefined_batch``:
+
+      * ``severity='warning'`` (the experimental default): findings emit via
+        ``console.warning``, no failure, stamp is written.
+      * ``severity='error'``: findings emit via ``console.error``, return is 1,
+        no stamp.
+    """
+
+    def _run(self, severity, missing_symbol='_real_missing'):
+        """Drive the batch tool with one synthetic spec that has an
+        unresolved symbol; return (rc, stamp_exists, warnings, errors).
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            target_syms = os.path.join(tmp, 'target.syms')
+            with open(target_syms, 'w', encoding='utf-8') as f:
+                f.write('# blade archive-symbols cache v1\n#U\n')
+                f.write(missing_symbol + '\n#D\n')
+            allow_file = os.path.join(tmp, 'allow')
+            with open(allow_file, 'w', encoding='utf-8') as f:
+                pass
+            manifest = os.path.join(tmp, 'manifest.json')
+            import json as _json
+            with open(manifest, 'w', encoding='utf-8') as f:
+                _json.dump([{
+                    'target_label': 'foo:bar',
+                    'target_syms': target_syms,
+                    'dep_syms': [],
+                    'sys_caches': [],
+                    'allow_file': allow_file,
+                }], f)
+            stamp = os.path.join(tmp, 'stamp')
+            warnings, errors = [], []
+            with mock.patch.object(builtin_tools.console, 'warning',
+                                   side_effect=warnings.append), \
+                 mock.patch.object(builtin_tools.console, 'error',
+                                   side_effect=errors.append):
+                rc = builtin_tools.generate_cc_check_undefined_batch(
+                    [stamp, manifest], severity=severity)
+            return rc, os.path.exists(stamp), warnings, errors
+
+    def test_warning_severity_logs_and_continues(self):
+        rc, stamp_exists, warnings, errors = self._run('warning')
+        self.assertIsNone(rc)
+        self.assertTrue(stamp_exists, 'stamp must be written on warning path')
+        self.assertEqual(errors, [], 'no errors on warning path')
+        # At minimum: the per-target header, the one symbol, and the summary.
+        self.assertTrue(any('foo:bar' in w for w in warnings))
+        self.assertTrue(any('_real_missing' in w for w in warnings))
+
+    def test_error_severity_fails_and_skips_stamp(self):
+        rc, stamp_exists, warnings, errors = self._run('error')
+        self.assertEqual(rc, 1)
+        self.assertFalse(stamp_exists, 'stamp must NOT be written on error path')
+        self.assertEqual(warnings, [], 'no warnings on error path')
+        self.assertTrue(any('foo:bar' in e for e in errors))
+
+    def test_clean_run_writes_stamp_at_either_severity(self):
+        """No unresolved symbols -> stamp written, no diagnostics, return is
+        None. Severity is irrelevant when there's nothing to report."""
+        for severity in ('warning', 'error'):
+            with self.subTest(severity=severity), \
+                 tempfile.TemporaryDirectory() as tmp:
+                target_syms = os.path.join(tmp, 'target.syms')
+                with open(target_syms, 'w', encoding='utf-8') as f:
+                    f.write('# blade archive-symbols cache v1\n#U\n#D\n')
+                allow_file = os.path.join(tmp, 'allow')
+                with open(allow_file, 'w', encoding='utf-8') as f:
+                    pass
+                manifest = os.path.join(tmp, 'manifest.json')
+                import json as _json
+                with open(manifest, 'w', encoding='utf-8') as f:
+                    _json.dump([{
+                        'target_label': 'foo:bar',
+                        'target_syms': target_syms,
+                        'dep_syms': [], 'sys_caches': [],
+                        'allow_file': allow_file,
+                    }], f)
+                stamp = os.path.join(tmp, 'stamp')
+                rc = builtin_tools.generate_cc_check_undefined_batch(
+                    [stamp, manifest], severity=severity)
+                self.assertIsNone(rc)
+                self.assertTrue(os.path.exists(stamp))
+
+
+class CheckUndefinedSeverityConfigTest(unittest.TestCase):
+    """Template default + help text for the new severity config option."""
+
+    def setUp(self):
+        self._template = config._CONFIG_TEMPLATE['cc_library_config']
+
+    def test_severity_defaults_to_warning(self):
+        self.assertEqual(self._template['check_undefined_severity'], 'warning')
+
+    def test_help_text_marks_experimental(self):
+        self.assertIn('EXPERIMENTAL', self._template['check_undefined__help__'])
+
+
 if __name__ == '__main__':
     unittest.main()
