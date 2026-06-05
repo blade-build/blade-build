@@ -20,7 +20,7 @@ import os
 import subprocess
 import sys
 import unittest
-from unittest import mock
+import unittest.mock as mock
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
@@ -138,8 +138,11 @@ class DumpbinExtractExternalsTest(unittest.TestCase):
         self.assertEqual(undef, {'?helper@@YAHXZ'})
 
     def test_dumpbin_missing_returns_empty(self):
+        # Patch console.error so the expected "dumpbin not found" diagnostic
+        # doesn't print as noise during the test run.
         with mock.patch.object(subprocess, 'check_output',
-                               side_effect=FileNotFoundError(2, 'no dumpbin')):
+                               side_effect=FileNotFoundError(2, 'no dumpbin')), \
+             mock.patch.object(builtin_tools.console, 'error'):
             self.assertEqual(
                 builtin_tools._dumpbin_extract_externals('dumpbin', 'a.lib'),
                 (set(), set()))

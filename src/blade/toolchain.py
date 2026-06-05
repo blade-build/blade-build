@@ -1220,7 +1220,7 @@ def _detect_default_linked_libs(cxx: str) -> 'tuple[str, ...]':
         try:
             os.unlink(tmp_out)
         except OSError:
-            pass
+            pass  # best-effort cleanup; the temp file may already be gone
 
     libs: list[str] = []
     seen: set[str] = set()
