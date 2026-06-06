@@ -22,7 +22,7 @@ from blade.cc_targets import CcLibrary  # noqa: E402
 
 
 class MsvcAsmRuleTest(unittest.TestCase):
-    def _gen(self, asm_tool='ml64.exe'):
+    def _gen(self, asm_tool: 'str | None' = 'ml64.exe'):
         gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
         gen.build_toolchain = mock.Mock()
         gen.build_toolchain.tool.return_value = asm_tool
