@@ -85,6 +85,33 @@ class WindowsResourcesTarget(Target):
     def _allow_duplicate_source(self):
         return True
 
+    def _dep_generated_headers(self):
+        """Generated headers (and their dirs) from transitive deps.
+
+        A `.rc` may `#include` a header produced by a gen_rule (e.g. PuTTY's
+        licence.h). Such headers live under the build dir, which rc.exe does not
+        otherwise search, and the rc edge must wait for them. Returns
+        ``(files, dirs)`` of full build-dir paths to feed `/i` and implicit_deps.
+        """
+        files, dirs = set(), set()
+        build_targets = self.blade.get_build_targets()
+        seen, stack = set(), list(self.deps)
+        while stack:
+            dkey = stack.pop()
+            if dkey in seen:
+                continue
+            seen.add(dkey)
+            dep = build_targets.get(dkey)
+            if not dep:
+                continue
+            for hdr in dep.attr.get('generated_hdrs', []):
+                files.add(hdr)
+                dirs.add(os.path.dirname(hdr))
+            for inc in dep.attr.get('generated_incs', []):
+                dirs.add(inc)
+            stack.extend(dep.deps)
+        return files, dirs
+
     def generate(self):
         """Generate Ninja build edges for compiling .rc files."""
         toolchain = self.blade.get_build_toolchain()
@@ -109,6 +136,13 @@ class WindowsResourcesTarget(Target):
         src_dir = os.path.normpath(os.path.join(self.blade.get_root_dir(), self.path))
         sdk_inc_flags.append('/i"%s"' % src_dir)
 
+        # Generated headers from deps (e.g. a gen_rule producing a header the
+        # .rc #includes) live under the build dir; add their dirs so rc.exe can
+        # resolve them, and the files to implicit_deps so rc waits for them.
+        gen_hdr_files, gen_hdr_dirs = self._dep_generated_headers()
+        for d in sorted(gen_hdr_dirs):
+            sdk_inc_flags.append('/i"%s"' % d if ' ' in d else '/i%s' % d)
+
         inc_flags = ' '.join(sdk_inc_flags)
 
         # Per-target ninja rule for rc.exe
@@ -125,7 +159,7 @@ class WindowsResourcesTarget(Target):
         # Resources and headers referenced by the .rc are implicit deps:
         # if they change Ninja rebuilds the .res, but they don't appear in
         # ${in} on the rc.exe command line.
-        implicit_deps = resource_inputs + hdr_inputs
+        implicit_deps = resource_inputs + hdr_inputs + sorted(gen_hdr_files)
 
         res_paths = []
         for i, rc_file in enumerate(self.attr['rc_files']):

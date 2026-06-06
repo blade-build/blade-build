@@ -23,14 +23,16 @@ from blade import windows_resources_target as wrt  # noqa: E402
 
 
 class WindowsResourcesRootPathTest(unittest.TestCase):
-    def _run_generate(self, target_path):
+    def _make_target(self, target_path, deps=None, build_targets=None):
         t = wrt.WindowsResourcesTarget.__new__(wrt.WindowsResourcesTarget)
         t.path = target_path
         t.name = 'res'
         t.attr = {'rc_files': ['app.rc'], 'resources': [], 'hdrs': []}
         t.data = {}
+        t.deps = deps or []
         t.blade = mock.Mock()
         t.blade.get_root_dir.return_value = os.path.join('C:', os.sep, 'ws', 'proj')
+        t.blade.get_build_targets.return_value = build_targets or {}
         tc = t.blade.get_build_toolchain.return_value
         tc.tool.return_value = 'rc.exe'
         tc.get_system_include_paths.return_value = []
@@ -38,10 +40,14 @@ class WindowsResourcesRootPathTest(unittest.TestCase):
         t._target_file_path = lambda p: p
         t._add_target_file = mock.Mock()
         t.generate_build = mock.Mock()
-        rules = []
-        t._write_rule = lambda text: rules.append(text)
+        t._rules = []
+        t._write_rule = lambda text: t._rules.append(text)
+        return t
+
+    def _run_generate(self, target_path):
+        t = self._make_target(target_path)
         t.generate()
-        return '\n'.join(rules)
+        return '\n'.join(t._rules)
 
     def test_root_package_has_no_escaped_quote(self):
         cmd = self._run_generate('')          # BUILD at repo root
@@ -53,6 +59,36 @@ class WindowsResourcesRootPathTest(unittest.TestCase):
         cmd = self._run_generate(os.path.join('sub', 'dir'))
         self.assertIn('rc.exe', cmd)
         self.assertNotIn('\\"', cmd)
+
+    def test_generated_header_from_dep_on_rc_path_and_deps(self):
+        # A dep gen_rule produces a header the .rc #includes (e.g. licence.h).
+        # Its build-dir is added to rc's /i, and the file to the rc edge's
+        # implicit_deps so rc waits for it.
+        gen = mock.Mock()
+        gen.attr = {'generated_hdrs': [os.path.join('build64_release', 'licence.h')],
+                    'generated_incs': []}
+        gen.deps = []
+        t = self._make_target('', deps=['//:gen'],
+                              build_targets={'//:gen': gen})
+        t.generate()
+        cmd = '\n'.join(t._rules)
+        self.assertIn('build64_release', cmd)            # gen dir on rc /i
+        kw = t.generate_build.call_args.kwargs
+        self.assertIn(os.path.join('build64_release', 'licence.h'),
+                      kw.get('implicit_deps', []))       # rc waits for it
+
+    def test_dep_generated_headers_is_transitive(self):
+        leaf = mock.Mock()
+        leaf.attr = {'generated_hdrs': [os.path.join('bd', 'a.h')], 'generated_incs': []}
+        leaf.deps = []
+        mid = mock.Mock()
+        mid.attr = {'generated_hdrs': [], 'generated_incs': [os.path.join('bd', 'inc')]}
+        mid.deps = ['//:leaf']
+        t = self._make_target('', deps=['//:mid'],
+                              build_targets={'//:mid': mid, '//:leaf': leaf})
+        files, dirs = t._dep_generated_headers()
+        self.assertEqual(files, {os.path.join('bd', 'a.h')})
+        self.assertEqual(dirs, {'bd', os.path.join('bd', 'inc')})
 
 
 if __name__ == '__main__':
