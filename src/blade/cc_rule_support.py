@@ -179,9 +179,19 @@ import os, re, subprocess, sys
 # wrapper drops. Real diagnostics carry spaces/colons and never match.
 _BARE_FILENAME_RE = re.compile(r'^[\w.+\-]+\.[\w.+\-]+$')
 
-cmd = sys.argv[sys.argv.index('--') + 1:]
+sep = sys.argv.index('--')
+args = sys.argv[1:sep]
+cmd = sys.argv[sep + 1:]
 env = dict(os.environ)
 env['VSLANG'] = '1033'  # force English so the filter below matches
+# Prepend the MSVC + Windows SDK bin dirs so link.exe can find the helper
+# tools it spawns by name -- notably mt.exe (in the SDK bin, a different dir
+# from link.exe) for /MANIFEST:EMBED. blade invokes link by absolute path, but
+# tools link itself spawns are resolved via PATH. See cc_rule_support.
+if '--prepend-path' in args:
+    _dirs = args[args.index('--prepend-path') + 1]
+    if _dirs:
+        env['PATH'] = _dirs + os.pathsep + env.get('PATH', '')
 
 p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                      stderr=subprocess.STDOUT, universal_newlines=True,
@@ -512,24 +522,39 @@ class CcRuleGenerator:
 
         self._add_line('linkflags = %s\n' % ' '.join(linkflags))
 
+        # MSVC + Windows SDK bin dirs, so link.exe can find tools it spawns by
+        # name (e.g. mt.exe in the SDK bin for /MANIFEST:EMBED -- a different dir
+        # from link.exe). blade calls link by absolute path, but link resolves
+        # its own sub-tools via PATH; the link wrapper prepends these.
+        tool_dirs = []
+        for _key in ('ld', 'cc', 'rc', 'as'):
+            _t = self.build_toolchain.tool(_key)
+            if _t:
+                _d = os.path.dirname(_t)
+                if _d and _d not in tool_dirs:
+                    tool_dirs.append(_d)
+        prepend_path = os.pathsep.join(tool_dirs)
+
+        link_wrapper = self._msvc_link_wrapper_py()
+        wrap = f'"{sys.executable}" -B {link_wrapper} --prepend-path "{prepend_path}" --'
+
         self.generate_rule(name='link',
-                           command=f'{ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
+                           command=f'{wrap} {ld} /nologo /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
                            description='LINK EXE ${out}')
 
         # ${dllflags} carries the per-target `/DEF:<def> /IMPLIB:<implib>` for a
         # cc_library DLL (empty for other solink edges, e.g. cc_plugin). The
         # `.def` (auto-export, COMDAT-filtered) makes the DLL export its symbols
         # without source annotations; the import library is what dependents link.
-        # Route the DLL link through a small Python wrapper that drops link.exe's
-        # redundant "Creating library ... and object ..." notice (the import lib
-        # is always created for a DLL, so it always prints). See
-        # `_MSVC_LINK_WRAPPER_PY`.
-        link_wrapper = self._msvc_link_wrapper_py()
+        # Route the DLL link through the same Python wrapper, which drops
+        # link.exe's redundant "Creating library ... and object ..." notice (the
+        # import lib is always created for a DLL, so it always prints) and
+        # prepends the tool dirs to PATH. See `_MSVC_LINK_WRAPPER_PY`.
         # restat: link.exe doesn't rewrite the import library (`/IMPLIB`) when
         # the DLL's exports are unchanged, so its mtime can lag; re-stat outputs
         # after linking so an unchanged DLL/implib prunes dependent relinks.
         self.generate_rule(name='solink',
-                           command=f'"{sys.executable}" -B {link_wrapper} -- {ld} /nologo /DLL ${{dllflags}} /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
+                           command=f'{wrap} {ld} /nologo /DLL ${{dllflags}} /out:${{out}} ${{linkflags}} {libpath_flags} ${{target_linkflags}} ${{extra_linkflags}} ${{in}}',
                            description='LINK DLL ${out}',
                            restat=True)
 
