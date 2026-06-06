@@ -85,46 +85,39 @@ class LexYaccConfigRuleTest(unittest.TestCase):
         self.assertEqual(section['bison'], '/usr/local/bin/bison')
 
 
+class _FakeRuleContext:
+    """Minimal RuleContext stand-in for the lex_yacc rule provider.
+
+    Captures emitted rules by name->command and serves the lex_yacc config
+    section.
+    """
+
+    def __init__(self, lex_yacc_section):
+        self._section = lex_yacc_section
+        self.commands = {}
+
+    def config_section(self, _name):
+        return self._section
+
+    def emit_rule(self, rule):
+        self.commands[rule.name] = rule.command
+
+
 class LexYaccBackendWiringTest(unittest.TestCase):
-    """The backend rule generation must read from lex_yacc_config; users
-    pinning a path via the BLADE_ROOT rule are entitled to see it surface in
-    the ninja command line."""
+    """The lex_yacc rule provider (now in lex_yacc_target) must read from
+    lex_yacc_config; users pinning a path via the BLADE_ROOT rule are entitled
+    to see it surface in the ninja command line."""
 
-    def _make_gen(self, target_os='posix'):
-        """Build a _NinjaFileHeaderGenerator with just enough state for the
-        lex/yacc rule generator to run.
-
-        Mirrors the helper used by cc_library_config_test.CcArchiveRulesTest.
-        """
-        from blade import backend
-        gen = backend._NinjaFileHeaderGenerator.__new__(
-            backend._NinjaFileHeaderGenerator)
-        gen._NinjaFileHeaderGenerator__all_rule_names = set()
-        gen.rules_buf = []
-        gen._add_line = mock.Mock()
-        return gen
-
-    def _capture_rules(self, gen, lex_yacc_section, fake_os_name='posix'):
-        """Run generate_lex_yacc_rules with mocked config + os, collect the
-        generated rule commands by name."""
-        from blade import backend
-        commands = {}
-
-        def fake_generate_rule(name, command, description):
-            commands[name] = command
-
-        with mock.patch.object(gen, 'generate_rule',
-                               side_effect=fake_generate_rule), \
-             mock.patch('blade.backend.config') as mock_config, \
-             mock.patch('blade.backend.os.name', fake_os_name):
-            mock_config.get_section.return_value = lex_yacc_section
-            gen.generate_lex_yacc_rules()
-        return commands
+    def _capture_rules(self, lex_yacc_section, fake_os_name='posix'):
+        """Run the provider with mocked os.name, collect rule commands by name."""
+        from blade import lex_yacc_target
+        ctx = _FakeRuleContext(lex_yacc_section)
+        with mock.patch('blade.lex_yacc_target.os.name', fake_os_name):
+            lex_yacc_target._generate_lex_yacc_rules(ctx)
+        return ctx.commands
 
     def test_posix_uses_config_values(self):
-        gen = self._make_gen()
         cmds = self._capture_rules(
-            gen,
             {'flex': '/opt/homebrew/opt/flex/bin/flex',
              'bison': '/opt/homebrew/opt/bison/bin/bison'},
             fake_os_name='posix')
@@ -135,14 +128,11 @@ class LexYaccBackendWiringTest(unittest.TestCase):
     def test_windows_default_wraps_bison_pkgdatadir_when_unchanged(self):
         # When the user hasn't overridden bison, we keep the existing WinGet
         # data-dir sniff so win_bison can find m4sugar/.
-        gen = self._make_gen()
-        from blade import backend
+        from blade import lex_yacc_target
         with mock.patch.object(
-                backend._NinjaFileHeaderGenerator,
-                '_find_win_bison_data_dir',
+                lex_yacc_target, '_find_win_bison_data_dir',
                 return_value=r'C:\Program Files\WinFlexBison\data'):
             cmds = self._capture_rules(
-                gen,
                 {'flex': 'win_flex --wincompat', 'bison': 'win_bison'},
                 fake_os_name='nt')
         # The data-dir sniff is applied, but only because bison == 'win_bison'.
@@ -152,14 +142,11 @@ class LexYaccBackendWiringTest(unittest.TestCase):
     def test_windows_custom_bison_skips_pkgdatadir_sniff(self):
         # If the user pinned a specific bison binary, the WinGet hack should
         # NOT muddy the command line — the user knows what they want.
-        gen = self._make_gen()
-        from blade import backend
+        from blade import lex_yacc_target
         with mock.patch.object(
-                backend._NinjaFileHeaderGenerator,
-                '_find_win_bison_data_dir',
+                lex_yacc_target, '_find_win_bison_data_dir',
                 return_value=r'C:\Program Files\WinFlexBison\data'):
             cmds = self._capture_rules(
-                gen,
                 {'flex': 'win_flex --wincompat',
                  'bison': r'C:\custom\bison.exe'},
                 fake_os_name='nt')
