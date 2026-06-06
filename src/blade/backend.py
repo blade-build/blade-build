@@ -14,9 +14,7 @@ objects to generate build rules.
 """
 
 
-import glob
 import os
-import shutil
 import sys
 import textwrap
 
@@ -234,15 +232,6 @@ for line in p.stdout:
     sys.stdout.flush()
 sys.exit(p.wait())
 '''
-
-
-def _incs_list_to_string(incs):
-    """Convert incs list to string.
-
-    Example:
-        ['thirdparty', 'include'] -> "-I thirdparty -I include"
-    """
-    return ' '.join(['-I ' + path for path in incs])
 
 
 def protoc_import_path_option(incs):
@@ -1077,89 +1066,6 @@ class _NinjaFileHeaderGenerator:
         self.generate_scalac_rule(java_config)
         self.generate_scalatest_rule(java_config)
 
-    def generate_thrift_rules(self):
-        thrift_config = config.get_section('thrift_config')
-        incs = _incs_list_to_string(thrift_config['thrift_incs'])
-        gen_params = thrift_config['thrift_gen_params']
-        thrift = thrift_config['thrift']
-        if thrift.startswith('//'):
-            thrift = thrift.replace('//', self.build_dir + '/')
-            thrift = thrift.replace(':', '/')
-        self.generate_rule(name='thrift',
-                           command='%s --gen %s '
-                                   '-I . %s -I `dirname ${in}` '
-                                   '-out %s/`dirname ${in}` ${in}' % (
-                                       thrift, gen_params, incs, self.build_dir),
-                           description='THRIFT ${in}')
-
-    def generate_go_rules(self):
-        go_home = config.get_item('go_config', 'go_home')
-        go = config.get_item('go_config', 'go')
-        go_module_enabled = config.get_item('go_config', 'go_module_enabled')
-        go_module_relpath = config.get_item('go_config', 'go_module_relpath')
-        if go_home and go:
-            go_pool = 'golang_pool'
-            self._add_line(textwrap.dedent('''\
-                    pool %s
-                      depth = 1
-                    ''') % go_pool)
-            go_path = os.path.normpath(os.path.abspath(go_home))
-            out_relative = ""
-            if go_module_enabled:
-                prefix = go
-                if go_module_relpath:
-                    relative_prefix = os.path.relpath(prefix, go_module_relpath)
-                    prefix = f"cd {go_module_relpath} && {relative_prefix}"
-                    # add slash to the end of the relpath
-                    out_relative = os.path.join(os.path.relpath("./", go_module_relpath), "")
-            else:
-                prefix = f'GOPATH={go_path} {go}'
-            self.generate_rule(name='gopackage',
-                               command='%s install ${extra_goflags} ${package}' % prefix,
-                               description='GO INSTALL ${package}',
-                               pool=go_pool)
-            self.generate_rule(name='gocommand',
-                               command=f'{prefix} build -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
-                               description='GO BUILD ${package}',
-                               pool=go_pool)
-            self.generate_rule(name='gotest',
-                               command=f'{prefix} test -c -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
-                               description='GO TEST ${package}',
-                               pool=go_pool)
-
-    def generate_lex_yacc_rules(self):
-        lex_yacc_config = config.get_section('lex_yacc_config')
-        lex_cmd = lex_yacc_config['flex']
-        yacc_cmd = lex_yacc_config['bison']
-        # Windows-only: when the user hasn't overridden the bison command and
-        # we're falling back to the platform default `win_bison`, sniff the
-        # WinFlexBison data dir. win_bison invoked via the WinGet Links
-        # hardlink otherwise looks for data/m4sugar/ next to the link itself
-        # instead of the real install dir.
-        if os.name == 'nt' and yacc_cmd == 'win_bison':
-            bison_data_dir = self._find_win_bison_data_dir()
-            if bison_data_dir:
-                yacc_cmd = f'cmd /c set "BISON_PKGDATADIR={bison_data_dir}" && win_bison'
-        self.generate_rule(name='lex',
-                           command=f'{lex_cmd} ${{lexflags}} -o ${{out}} ${{in}}',
-                           description='LEX ${in}')
-        self.generate_rule(name='yacc',
-                           command=f'{yacc_cmd} ${{yaccflags}} -o ${{out}} ${{in}}',
-                           description='YACC ${in}')
-
-    @staticmethod
-    def _find_win_bison_data_dir():
-        for pattern in [
-            os.path.join(os.path.dirname(shutil.which('win_bison') or ''), 'data'),
-            os.path.join(os.environ.get('LOCALAPPDATA', ''),
-                         'Microsoft', 'WinGet', 'Packages',
-                         'WinFlexBison*', 'data'),
-        ]:
-            matches = glob.glob(pattern)
-            if matches and os.path.isdir(matches[0]):
-                return matches[0]
-        return None
-
     def generate_version_rules(self):
         cc = self.build_toolchain.get_cc()
         cc_version = self.build_toolchain.get_cc_version()
@@ -1381,14 +1287,8 @@ def _register_builtin_rule_providers():
     # moved next to its target module).
     reg(lambda ctx: ctx.generator.generate_java_scala_rules(),
         order=rule_registry.ORDER_JAVA_SCALA, name='java_scala')
-    reg(lambda ctx: ctx.generator.generate_thrift_rules(),
-        order=rule_registry.ORDER_THRIFT, name='thrift')
-    # 'python', 'shell', 'package' are registered by their target modules
-    # (py_targets / sh_test_target / package_target) -- M2.
-    reg(lambda ctx: ctx.generator.generate_go_rules(),
-        order=rule_registry.ORDER_GO, name='go')
-    reg(lambda ctx: ctx.generator.generate_lex_yacc_rules(),
-        order=rule_registry.ORDER_LEX_YACC, name='lex_yacc')
+    # 'thrift', 'go', 'lex_yacc' (plus 'resource', 'python', 'shell',
+    # 'package') are registered by their target modules -- M2.
     reg(lambda ctx: ctx.generator.generate_version_rules(),
         order=rule_registry.ORDER_VERSION, name='version')
     reg(lambda ctx: ctx.generator.generate_cuda_rules(),

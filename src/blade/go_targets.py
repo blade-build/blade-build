@@ -13,12 +13,15 @@ gets totally.
 
 import os
 import re
+import textwrap
 
 from blade import build_manager
 from blade import build_rules
 from blade import config
 from blade import console
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
+from blade.ninja_rule import NinjaRule
 from blade.target import Target
 from blade.util import run_command, var_to_list, var_to_list_or_none
 
@@ -339,3 +342,52 @@ build_rules.register_function(go_library)
 build_rules.register_function(go_binary)
 build_rules.register_function(go_test)
 build_rules.register_function(go_package)
+
+
+def _generate_go_rules(ctx):
+    """Ninja rules for go_library / go_binary / go_test.
+
+    No-op unless go is configured (go_home + go), matching the original
+    behaviour of emitting nothing when there is no go toolchain.
+    """
+    go_home = config.get_item('go_config', 'go_home')
+    go = config.get_item('go_config', 'go')
+    go_module_enabled = config.get_item('go_config', 'go_module_enabled')
+    go_module_relpath = config.get_item('go_config', 'go_module_relpath')
+    if not (go_home and go):
+        return
+    go_pool = 'golang_pool'
+    ctx.add_line(textwrap.dedent('''\
+            pool %s
+              depth = 1
+            ''') % go_pool)
+    go_path = os.path.normpath(os.path.abspath(go_home))
+    out_relative = ""
+    if go_module_enabled:
+        prefix = go
+        if go_module_relpath:
+            relative_prefix = os.path.relpath(prefix, go_module_relpath)
+            prefix = f"cd {go_module_relpath} && {relative_prefix}"
+            # add slash to the end of the relpath
+            out_relative = os.path.join(os.path.relpath("./", go_module_relpath), "")
+    else:
+        prefix = f'GOPATH={go_path} {go}'
+    ctx.emit_rule(NinjaRule(
+        name='gopackage',
+        command='%s install ${extra_goflags} ${package}' % prefix,
+        description='GO INSTALL ${package}',
+        pool=go_pool))
+    ctx.emit_rule(NinjaRule(
+        name='gocommand',
+        command=f'{prefix} build -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
+        description='GO BUILD ${package}',
+        pool=go_pool))
+    ctx.emit_rule(NinjaRule(
+        name='gotest',
+        command=f'{prefix} test -c -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
+        description='GO TEST ${package}',
+        pool=go_pool))
+
+
+rule_registry.register_rule_provider(
+    _generate_go_rules, order=rule_registry.ORDER_GO, name='go')

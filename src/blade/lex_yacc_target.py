@@ -9,10 +9,17 @@ Define lex_yacc_library target.
 """
 
 
+import glob
+import os
+import shutil
+
 from blade import build_manager
 from blade import build_rules
+from blade import config
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget
+from blade.ninja_rule import NinjaRule
 from blade.util import var_to_list, var_to_list_or_none
 
 
@@ -199,3 +206,43 @@ def lex_yacc_library(
 
 
 build_rules.register_function(lex_yacc_library)
+
+
+def _find_win_bison_data_dir():
+    for pattern in [
+        os.path.join(os.path.dirname(shutil.which('win_bison') or ''), 'data'),
+        os.path.join(os.environ.get('LOCALAPPDATA', ''),
+                     'Microsoft', 'WinGet', 'Packages',
+                     'WinFlexBison*', 'data'),
+    ]:
+        matches = glob.glob(pattern)
+        if matches and os.path.isdir(matches[0]):
+            return matches[0]
+    return None
+
+
+def _generate_lex_yacc_rules(ctx):
+    """Ninja rules for lex_yacc_library."""
+    lex_yacc_config = ctx.config_section('lex_yacc_config')
+    lex_cmd = lex_yacc_config['flex']
+    yacc_cmd = lex_yacc_config['bison']
+    # Windows-only: when the user hasn't overridden the bison command and we're
+    # falling back to the platform default `win_bison`, sniff the WinFlexBison
+    # data dir. win_bison invoked via the WinGet Links hardlink otherwise looks
+    # for data/m4sugar/ next to the link itself instead of the real install dir.
+    if os.name == 'nt' and yacc_cmd == 'win_bison':
+        bison_data_dir = _find_win_bison_data_dir()
+        if bison_data_dir:
+            yacc_cmd = f'cmd /c set "BISON_PKGDATADIR={bison_data_dir}" && win_bison'
+    ctx.emit_rule(NinjaRule(
+        name='lex',
+        command=f'{lex_cmd} ${{lexflags}} -o ${{out}} ${{in}}',
+        description='LEX ${in}'))
+    ctx.emit_rule(NinjaRule(
+        name='yacc',
+        command=f'{yacc_cmd} ${{yaccflags}} -o ${{out}} ${{in}}',
+        description='YACC ${in}'))
+
+
+rule_registry.register_rule_provider(
+    _generate_lex_yacc_rules, order=rule_registry.ORDER_LEX_YACC, name='lex_yacc')

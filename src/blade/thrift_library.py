@@ -18,8 +18,10 @@ import os
 from blade import build_manager
 from blade import build_rules
 from blade import config
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget
+from blade.ninja_rule import NinjaRule
 from blade.thrift_helper import ThriftHelper
 from blade.util import var_to_list, var_to_list_or_none
 
@@ -138,3 +140,34 @@ def thrift_library(
 
 
 build_rules.register_function(thrift_library)
+
+
+def _incs_list_to_string(incs):
+    """Convert incs list to string.
+
+    Example:
+        ['thirdparty', 'include'] -> "-I thirdparty -I include"
+    """
+    return ' '.join(['-I ' + path for path in incs])
+
+
+def _generate_thrift_rules(ctx):
+    """Ninja rule for thrift_library."""
+    thrift_config = ctx.config_section('thrift_config')
+    incs = _incs_list_to_string(thrift_config['thrift_incs'])
+    gen_params = thrift_config['thrift_gen_params']
+    thrift = thrift_config['thrift']
+    if thrift.startswith('//'):
+        thrift = thrift.replace('//', ctx.build_dir + '/')
+        thrift = thrift.replace(':', '/')
+    ctx.emit_rule(NinjaRule(
+        name='thrift',
+        command='%s --gen %s '
+                '-I . %s -I `dirname ${in}` '
+                '-out %s/`dirname ${in}` ${in}' % (
+                    thrift, gen_params, incs, ctx.build_dir),
+        description='THRIFT ${in}'))
+
+
+rule_registry.register_rule_provider(
+    _generate_thrift_rules, order=rule_registry.ORDER_THRIFT, name='thrift')
