@@ -14,7 +14,9 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
+from blade.ninja_rule import NinjaRule
 from blade.target import Target, LOCATION_RE
 from blade.util import which, var_to_list, var_to_list_or_none
 
@@ -217,3 +219,24 @@ def package(name: str,
 
 
 build_rules.register_function(package)
+
+
+def _generate_package_rules(ctx):
+    """Ninja rules for package."""
+    ctx.emit_rule(NinjaRule(
+        name='package',
+        command=ctx.builtin_command('package', '${out} ${in} ${entries}'),
+        description='PACKAGE ${out}'))
+    ctx.emit_rule(NinjaRule(
+        name='package_tar',
+        command='tar -c -f ${out} ${tarflags} -C ${packageroot} ${entries}',
+        description='TAR ${out}'))
+    ctx.emit_rule(NinjaRule(
+        name='package_zip',
+        command='cd ${packageroot} && zip -q temp_archive.zip ${entries} && '
+                'cd - && mv ${packageroot}/temp_archive.zip ${out}',
+        description='ZIP ${out}'))
+
+
+rule_registry.register_rule_provider(
+    _generate_package_rules, order=rule_registry.ORDER_PACKAGE, name='package')

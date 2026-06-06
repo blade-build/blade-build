@@ -15,7 +15,9 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
+from blade.ninja_rule import NinjaRule
 from blade.target import Target
 from blade.util import var_to_list, var_to_list_or_none
 
@@ -335,3 +337,22 @@ def py_test(name: str,
 
 
 build_rules.register_function(py_test)
+
+
+def _generate_python_rules(ctx):
+    """Ninja rules for python_library / python_binary."""
+    ctx.emit_rule(NinjaRule(
+        name='pythonlibrary',
+        command=ctx.builtin_command('python_library', '--basedir=${basedir} --pylib=${out} ${in}'),
+        description='PYTHON LIBRARY ${out}'))
+    ctx.emit_rule(NinjaRule(
+        name='pythonbinary',
+        command=ctx.builtin_command(
+            'python_binary',
+            '--basedir=${basedir} --exclusions=${exclusions} --mainentry=${mainentry} '
+            '--pybin=${out} ${in}'),
+        description='PYTHON BINARY ${out}'))
+
+
+rule_registry.register_rule_provider(
+    _generate_python_rules, order=rule_registry.ORDER_PYTHON, name='python')

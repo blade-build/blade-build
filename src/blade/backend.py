@@ -936,15 +936,6 @@ class _NinjaFileHeaderGenerator:
                                            protoc, protobuf_incs, protoc_go_plugin, go_out),
                                description='PROTOCGOLANG ${in}')
 
-    def generate_resource_rules(self):
-        self.generate_rule(name='resource_index',
-                           command=self._builtin_command('resource_index',
-                                                         '${name} ${path} ${out} ${in}'),
-                           description='RESOURCE INDEX ${out}')
-        self.generate_rule(name='resource',
-                           command=self._builtin_command('resource', '${out} ${in}'),
-                           description='RESOURCE ${in}')
-
     def get_java_command(self, java_config, cmd):
         java_home = java_config['java_home']
         if java_home:
@@ -1101,17 +1092,6 @@ class _NinjaFileHeaderGenerator:
                                        thrift, gen_params, incs, self.build_dir),
                            description='THRIFT ${in}')
 
-    def generate_python_rules(self):
-        args = '--basedir=${basedir} --pylib=${out} ${in}'
-        self.generate_rule(name='pythonlibrary',
-                           command=self._builtin_command('python_library', args),
-                           description='PYTHON LIBRARY ${out}')
-        args = ('--basedir=${basedir} --exclusions=${exclusions} --mainentry=${mainentry} '
-                '--pybin=${out} ${in}')
-        self.generate_rule(name='pythonbinary',
-                           command=self._builtin_command('python_binary', args),
-                           description='PYTHON BINARY ${out}')
-
     def generate_go_rules(self):
         go_home = config.get_item('go_config', 'go_home')
         go = config.get_item('go_config', 'go')
@@ -1147,15 +1127,6 @@ class _NinjaFileHeaderGenerator:
                                description='GO TEST ${package}',
                                pool=go_pool)
 
-    def generate_shell_rules(self):
-        self.generate_rule(name='shelltest',
-                           command=self._builtin_command('shell_test'),
-                           description='SHELL TEST ${out}')
-        args = '${out} ${in} ${testdata}'
-        self.generate_rule(name='shelltestdata',
-                           command=self._builtin_command('shell_testdata', args),
-                           description='SHELL TEST DATA ${out}')
-
     def generate_lex_yacc_rules(self):
         lex_yacc_config = config.get_section('lex_yacc_config')
         lex_cmd = lex_yacc_config['flex']
@@ -1188,19 +1159,6 @@ class _NinjaFileHeaderGenerator:
             if matches and os.path.isdir(matches[0]):
                 return matches[0]
         return None
-
-    def generate_package_rules(self):
-        args = '${out} ${in} ${entries}'
-        self.generate_rule(name='package',
-                           command=self._builtin_command('package', args),
-                           description='PACKAGE ${out}')
-        self.generate_rule(name='package_tar',
-                           command='tar -c -f ${out} ${tarflags} -C ${packageroot} ${entries}',
-                           description='TAR ${out}')
-        self.generate_rule(name='package_zip',
-                           command='cd ${packageroot} && zip -q temp_archive.zip ${entries} && '
-                                   'cd - && mv ${packageroot}/temp_archive.zip ${out}',
-                           description='ZIP ${out}')
 
     def generate_version_rules(self):
         cc = self.build_toolchain.get_cc()
@@ -1419,22 +1377,18 @@ def _register_builtin_rule_providers():
         order=rule_registry.ORDER_CC, name='cc')
     reg(lambda ctx: ctx.generator.generate_proto_rules(),
         order=rule_registry.ORDER_PROTO, name='proto')
-    reg(lambda ctx: ctx.generator.generate_resource_rules(),
-        order=rule_registry.ORDER_RESOURCE, name='resource')
+    # 'resource' is registered by resource_library_target (M2: rule definition
+    # moved next to its target module).
     reg(lambda ctx: ctx.generator.generate_java_scala_rules(),
         order=rule_registry.ORDER_JAVA_SCALA, name='java_scala')
     reg(lambda ctx: ctx.generator.generate_thrift_rules(),
         order=rule_registry.ORDER_THRIFT, name='thrift')
-    reg(lambda ctx: ctx.generator.generate_python_rules(),
-        order=rule_registry.ORDER_PYTHON, name='python')
+    # 'python', 'shell', 'package' are registered by their target modules
+    # (py_targets / sh_test_target / package_target) -- M2.
     reg(lambda ctx: ctx.generator.generate_go_rules(),
         order=rule_registry.ORDER_GO, name='go')
-    reg(lambda ctx: ctx.generator.generate_shell_rules(),
-        order=rule_registry.ORDER_SHELL, name='shell')
     reg(lambda ctx: ctx.generator.generate_lex_yacc_rules(),
         order=rule_registry.ORDER_LEX_YACC, name='lex_yacc')
-    reg(lambda ctx: ctx.generator.generate_package_rules(),
-        order=rule_registry.ORDER_PACKAGE, name='package')
     reg(lambda ctx: ctx.generator.generate_version_rules(),
         order=rule_registry.ORDER_VERSION, name='version')
     reg(lambda ctx: ctx.generator.generate_cuda_rules(),

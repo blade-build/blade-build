@@ -37,6 +37,14 @@ class RuleContext:
     def config_section(self, name):
         return config.get_section(name)
 
+    def builtin_command(self, builder, args=''):
+        """Build the command line that runs a blade builtin tool.
+
+        Forwards to the generator's `_builtin_command`, which handles the
+        per-platform PYTHONPATH / interpreter wrapping.
+        """
+        return self.generator._builtin_command(builder, args)
+
     def add_line(self, line):
         """Emit one raw line into the ninja header buffer."""
         self.generator._add_line(line)

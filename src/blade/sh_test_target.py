@@ -13,7 +13,9 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
+from blade.ninja_rule import NinjaRule
 from blade.target import Target, LOCATION_RE
 from blade.util import var_to_list, var_to_list_or_none
 
@@ -120,3 +122,19 @@ def sh_test(name: str,
 
 
 build_rules.register_function(sh_test)
+
+
+def _generate_shell_rules(ctx):
+    """Ninja rules for sh_test."""
+    ctx.emit_rule(NinjaRule(
+        name='shelltest',
+        command=ctx.builtin_command('shell_test'),
+        description='SHELL TEST ${out}'))
+    ctx.emit_rule(NinjaRule(
+        name='shelltestdata',
+        command=ctx.builtin_command('shell_testdata', '${out} ${in} ${testdata}'),
+        description='SHELL TEST DATA ${out}'))
+
+
+rule_registry.register_rule_provider(
+    _generate_shell_rules, order=rule_registry.ORDER_SHELL, name='shell')

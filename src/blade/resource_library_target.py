@@ -12,7 +12,9 @@ Define resource_library target.
 from blade import build_manager
 from blade import build_rules
 from blade import cc_targets
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
+from blade.ninja_rule import NinjaRule
 from blade.util import regular_variable_name, var_to_list, var_to_list_or_none
 
 
@@ -109,3 +111,19 @@ def resource_library(name: str | None = None,
 
 
 build_rules.register_function(resource_library)
+
+
+def _generate_resource_rules(ctx):
+    """Ninja rules for resource_library (registered with the rule registry)."""
+    ctx.emit_rule(NinjaRule(
+        name='resource_index',
+        command=ctx.builtin_command('resource_index', '${name} ${path} ${out} ${in}'),
+        description='RESOURCE INDEX ${out}'))
+    ctx.emit_rule(NinjaRule(
+        name='resource',
+        command=ctx.builtin_command('resource', '${out} ${in}'),
+        description='RESOURCE ${in}'))
+
+
+rule_registry.register_rule_provider(
+    _generate_resource_rules, order=rule_registry.ORDER_RESOURCE, name='resource')
