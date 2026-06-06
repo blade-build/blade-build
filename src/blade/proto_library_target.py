@@ -11,14 +11,17 @@ Define proto_library target.
 
 import os
 import re
+import textwrap
 
 from blade import build_manager
 from blade import build_rules
 from blade import config  # lgtm[py/cyclic-import]
 from blade import console
 from blade import java_targets  # lgtm[py/cyclic-import]
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget  # lgtm[py/cyclic-import]
+from blade.ninja_rule import NinjaRule
 from blade.util import to_unix_path, var_to_list, var_to_list_or_none
 
 
@@ -491,3 +494,84 @@ def proto_library(
 
 
 build_rules.register_function(proto_library)
+
+
+def protoc_import_path_option(incs):
+    return ' '.join(['-I=%s' % inc for inc in incs])
+
+
+def _generate_proto_rules(ctx):
+    """Ninja rules for proto_library (cpp/java/python/descriptors/go)."""
+    proto_config = ctx.config_section('proto_library_config')
+    protoc = proto_config['protoc']
+    protoc_java = protoc
+    if proto_config['protoc_java']:
+        protoc_java = proto_config['protoc_java']
+    protobuf_incs = protoc_import_path_option(proto_config['protobuf_incs'])
+    protobuf_java_incs = protobuf_incs
+    if proto_config['protobuf_java_incs']:
+        protobuf_java_incs = protoc_import_path_option(proto_config['protobuf_java_incs'])
+    ctx.add_line(textwrap.dedent('''\
+            protocflags =
+            protoccpppluginflags =
+            protocjavapluginflags =
+            protocpythonpluginflags =
+            '''))
+    ctx.emit_rule(NinjaRule(
+        name='proto',
+        command='%s --proto_path=. %s -I=${srcdir} '
+                '--cpp_out=%s ${protocflags} ${protoccpppluginflags} ${in}' % (
+                    protoc, protobuf_incs, ctx.build_dir),
+        description='PROTOC CPP ${in}'))
+    # Generate Java into a per-proto gen dir (${javagen}) and zip whatever
+    # protoc produced into a single `.srcjar` (${out}). This handles an
+    # unpredictable output set -- e.g. `option java_multiple_files = true;`
+    # emits one .java per top-level type -- without predicting filenames.
+    # The Java protoc plugins also target ${javagen} (see
+    # _protoc_plugin_parameters) so insertion points still resolve. #1054.
+    protojava_cmd = '%s --proto_path=. %s --java_out=${javagen} ${protocjavapluginflags} ${in}' % (
+        protoc_java, protobuf_java_incs)
+    ctx.emit_rule(NinjaRule(
+        name='protojava',
+        command=ctx.builtin_command(
+            'proto_java_srcjar', '${out} ${javagen} -- ' + protojava_cmd),
+        description='PROTOC JAVA ${in}'))
+    ctx.emit_rule(NinjaRule(
+        name='protopython',
+        command='%s --proto_path=. %s -I=${srcdir} '
+                '--python_out=%s ${protocpythonpluginflags} ${in}' % (
+                    protoc, protobuf_incs, ctx.build_dir),
+        description='PROTOC PYTHON ${in}'))
+    ctx.emit_rule(NinjaRule(
+        name='protodescriptors',
+        command='%s --proto_path=. %s -I=${srcdir} '
+                '--descriptor_set_out=${out} --include_imports '
+                '--include_source_info ${in}' % (
+                    protoc, protobuf_incs),
+        description='PROTODESCRIPTORS ${in}'))
+    protoc_go_plugin = proto_config['protoc_go_plugin']
+    if protoc_go_plugin:
+        go_home = config.get_item('go_config', 'go_home')
+        go_module_enabled = config.get_item('go_config', 'go_module_enabled')
+        go_module_relpath = config.get_item('go_config', 'go_module_relpath')
+        if not go_home:
+            console.fatal('"go_config.go_home" is not configured')
+        if go_module_enabled and not go_module_relpath:
+            outdir = proto_config['protobuf_go_path']
+        else:
+            outdir = os.path.join(go_home, 'src')
+        subplugins = proto_config['protoc_go_subplugins']
+        if subplugins:
+            go_out = 'plugins={}:{}'.format('+'.join(subplugins), outdir)
+        else:
+            go_out = outdir
+        ctx.emit_rule(NinjaRule(
+            name='protogo',
+            command='%s --proto_path=. %s -I=${srcdir} '
+                    '--plugin=protoc-gen-go=%s --go_out=%s ${in}' % (
+                        protoc, protobuf_incs, protoc_go_plugin, go_out),
+            description='PROTOCGOLANG ${in}'))
+
+
+rule_registry.register_rule_provider(
+    _generate_proto_rules, order=rule_registry.ORDER_PROTO, name='proto')

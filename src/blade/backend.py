@@ -234,10 +234,6 @@ sys.exit(p.wait())
 '''
 
 
-def protoc_import_path_option(incs):
-    return ' '.join(['-I=%s' % inc for inc in incs])
-
-
 class _NinjaFileHeaderGenerator:
     """Generate global declarations and definitions for build script.
 
@@ -859,72 +855,6 @@ class _NinjaFileHeaderGenerator:
         return 'sh %s compile %s %%s %s' % (
             self._inclusion_wrapper_script(), inclusion_stack_file, print_header_option)
 
-    def generate_proto_rules(self):
-        proto_config = config.get_section('proto_library_config')
-        protoc = proto_config['protoc']
-        protoc_java = protoc
-        if proto_config['protoc_java']:
-            protoc_java = proto_config['protoc_java']
-        protobuf_incs = protoc_import_path_option(proto_config['protobuf_incs'])
-        protobuf_java_incs = protobuf_incs
-        if proto_config['protobuf_java_incs']:
-            protobuf_java_incs = protoc_import_path_option(proto_config['protobuf_java_incs'])
-        self._add_line(textwrap.dedent('''\
-                protocflags =
-                protoccpppluginflags =
-                protocjavapluginflags =
-                protocpythonpluginflags =
-                '''))
-        self.generate_rule(name='proto',
-                           command='%s --proto_path=. %s -I=${srcdir} '
-                                   '--cpp_out=%s ${protocflags} ${protoccpppluginflags} ${in}' % (
-                                       protoc, protobuf_incs, self.build_dir),
-                           description='PROTOC CPP ${in}')
-        # Generate Java into a per-proto gen dir (${javagen}) and zip whatever
-        # protoc produced into a single `.srcjar` (${out}). This handles an
-        # unpredictable output set -- e.g. `option java_multiple_files = true;`
-        # emits one .java per top-level type -- without predicting filenames.
-        # The Java protoc plugins also target ${javagen} (see
-        # _protoc_plugin_parameters) so insertion points still resolve. #1054.
-        protojava_cmd = '%s --proto_path=. %s --java_out=${javagen} ${protocjavapluginflags} ${in}' % (
-            protoc_java, protobuf_java_incs)
-        self.generate_rule(name='protojava',
-                           command=self._builtin_command(
-                               'proto_java_srcjar', '${out} ${javagen} -- ' + protojava_cmd),
-                           description='PROTOC JAVA ${in}')
-        self.generate_rule(name='protopython',
-                           command='%s --proto_path=. %s -I=${srcdir} '
-                                   '--python_out=%s ${protocpythonpluginflags} ${in}' % (
-                                       protoc, protobuf_incs, self.build_dir),
-                           description='PROTOC PYTHON ${in}')
-        self.generate_rule(name='protodescriptors',
-                           command='%s --proto_path=. %s -I=${srcdir} '
-                                   '--descriptor_set_out=${out} --include_imports '
-                                   '--include_source_info ${in}' % (
-                                       protoc, protobuf_incs),
-                           description='PROTODESCRIPTORS ${in}')
-        protoc_go_plugin = proto_config['protoc_go_plugin']
-        if protoc_go_plugin:
-            go_home = config.get_item('go_config', 'go_home')
-            go_module_enabled = config.get_item('go_config', 'go_module_enabled')
-            go_module_relpath = config.get_item('go_config', 'go_module_relpath')
-            if not go_home:
-                console.fatal('"go_config.go_home" is not configured')
-            if go_module_enabled and not go_module_relpath:
-                outdir = proto_config['protobuf_go_path']
-            else:
-                outdir = os.path.join(go_home, 'src')
-            subplugins = proto_config['protoc_go_subplugins']
-            if subplugins:
-                go_out = 'plugins={}:{}'.format('+'.join(subplugins), outdir)
-            else:
-                go_out = outdir
-            self.generate_rule(name='protogo',
-                               command='%s --proto_path=. %s -I=${srcdir} '
-                                       '--plugin=protoc-gen-go=%s --go_out=%s ${in}' % (
-                                           protoc, protobuf_incs, protoc_go_plugin, go_out),
-                               description='PROTOCGOLANG ${in}')
-
     def get_java_command(self, java_config, cmd):
         java_home = java_config['java_home']
         if java_home:
@@ -1281,14 +1211,10 @@ def _register_builtin_rule_providers():
         order=rule_registry.ORDER_COMMON, name='common')
     reg(lambda ctx: ctx.generator.generate_cc_rules(),
         order=rule_registry.ORDER_CC, name='cc')
-    reg(lambda ctx: ctx.generator.generate_proto_rules(),
-        order=rule_registry.ORDER_PROTO, name='proto')
-    # 'resource' is registered by resource_library_target (M2: rule definition
-    # moved next to its target module).
     reg(lambda ctx: ctx.generator.generate_java_scala_rules(),
         order=rule_registry.ORDER_JAVA_SCALA, name='java_scala')
-    # 'thrift', 'go', 'lex_yacc' (plus 'resource', 'python', 'shell',
-    # 'package') are registered by their target modules -- M2.
+    # 'proto', 'resource', 'thrift', 'go', 'lex_yacc', 'python', 'shell',
+    # 'package' are registered by their target modules -- M2.
     reg(lambda ctx: ctx.generator.generate_version_rules(),
         order=rule_registry.ORDER_VERSION, name='version')
     reg(lambda ctx: ctx.generator.generate_cuda_rules(),
