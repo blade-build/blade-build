@@ -21,12 +21,16 @@
   可含有如下变量，运行前会被替换为实际的值：
   - $SRCS 空格分开的源文件名列表，相对 WORKSPACE
   - $OUTS 空格分开的输出文件列表，相对 WORKSPACE
+  - $SRCS[i] / $SRCS[名字] 按下标（纯数字）或按声明名/basename 取**单个**输入，如 `$SRCS[0]`、`$SRCS[calc.y]`
+  - $OUTS[i] / $OUTS[名字] 按下标或名字取**单个**输出，如 `$OUTS[0]`、`$OUTS[parser.h]`。
+    只有一个输出时，`$OUTS[0]` 与 `$OUTS` 等价。建议优先按名（`$OUTS[parser.h]`）——按下标在重排 `outs` 后会错位。
   - $SRC\_DIR 输入文件所在的目录
   - $OUT\_DIR 输出文件所在的目录
-  - $FIRST\_SRC 第一个输入文件的路径
-  - $FIRST\_OUT 第一个输出文件的路径
+  - $FIRST\_SRC 第一个输入文件的路径（**已废弃** — 请用 `$SRCS[0]`）
+  - $FIRST\_OUT 第一个输出文件的路径（**已废弃** — 请用 `$OUTS[0]`）
   - $BUILD\_DIR 输出的根目录，比如 build[64,32]\_[release,debug]
-  - `$(location target)` 和 `$(location target label)` — 被替换为所引用目标的输出文件路径。可选的 `label` 参数指定特定输出（如 `$(location //bin:server bin)` 表示可执行文件）。常用于 `gen_rule.cmd`、`testdata`、`package`、`sh_test` 等场景。示例：
+  - `$(location target)` / `$(location target label)` — 被替换为所引用目标的**单个**输出文件路径。可选的 `label` 指定特定输出（如 `$(location //bin:server bin)`）。该目标（在该 label 下）须只有一个输出。
+  - `$(locations target)` — 被替换为所引用目标的**全部**输出文件（空格分隔）。当目标产出多个文件时用，如 `cmd = 'cat $(locations //idl:msgs) > $OUTS'`。常用于 `gen_rule.cmd`、`testdata`、`package`、`sh_test` 等场景。示例：
 
     ```python
     gen_rule(

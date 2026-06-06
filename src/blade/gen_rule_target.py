@@ -11,6 +11,7 @@ Allow users defining their custom build rules.
 
 
 import os
+import re
 import shutil
 
 from blade import build_manager
@@ -18,9 +19,21 @@ from blade import build_rules
 from blade import cc_targets
 from blade import console
 from blade.blade_types import StrOrListOpt
-from blade.target import Target, LOCATION_RE
+from blade.target import Target
 from blade.util import regular_variable_name
 from blade.util import var_to_list, var_to_list_or_none
+
+
+# $(location //x:y) -> a dep's single output; $(locations //x:y) -> all of its
+# outputs (space-joined). Combined into one regex so left-to-right order is
+# preserved for the positional %s expansion. Group 1 = the optional plural 's',
+# group 2 = the target key, group 3 = the optional output label.
+_LOCATION_RE = re.compile(r'\$\(location(s)?\s+(\S*:\S+)(\s+\w*)?\)')
+
+# $OUTS[i] / $OUTS[name] / $SRCS[i] / $SRCS[name] -- reference a single output or
+# input by index (all-digits) or by declared name / basename.
+_OUTS_INDEX_RE = re.compile(r'\$OUTS\[([^\]]+)\]')
+_SRCS_INDEX_RE = re.compile(r'\$SRCS\[([^\]]+)\]')
 
 
 # The rule template for gen_rule. The command is fully wrapped by
@@ -92,7 +105,7 @@ class GenRuleTarget(Target):
         self.attr['outs'] = var_to_list(outs)
         self.attr['outputs'] = [self._target_file_path(o) for o in self.attr['outs']]
         self.attr['locations'] = []
-        self.attr['cmd'] = LOCATION_RE.sub(self._process_location_reference, selected_cmd)
+        self.attr['cmd'] = _LOCATION_RE.sub(self._process_location_reference, selected_cmd)
         self.attr['cmd_name'] = cmd_name
         self.attr['heavy'] = heavy
         self.attr['exclude_dep_labels'] = exclude_dep_labels
@@ -196,10 +209,36 @@ class GenRuleTarget(Target):
         return [self._target_file_path(inc) for inc in incs]
 
     def _process_location_reference(self, m):
-        """Process target location reference in the command."""
-        key, type = self._add_location_reference_target(m)
-        self.attr['locations'].append((key, type))
+        """Process a $(location ...) / $(locations ...) reference.
+
+        Registers the referenced target as a dep and records (key, label,
+        plural) for expansion. Returns a '%s' placeholder, filled positionally
+        in `_expand_command` (one combined regex keeps left-to-right order).
+        """
+        plural = bool(m.group(1))
+        key = self._unify_dep(m.group(2))
+        label = (m.group(3) or '').strip()
+        if key and key not in self.deps:
+            self.deps.append(key)
+        self.attr['locations'].append((key, label, plural))
         return '%s'  # Will be expanded in `_expand_command`
+
+    def _index_ref(self, sel, names, paths, what):
+        """Resolve a single $OUTS[sel] / $SRCS[sel] to one concrete path.
+
+        ``sel`` is an index when all-digits, else a declared name or basename.
+        """
+        if sel.isdigit():
+            i = int(sel)
+            if 0 <= i < len(paths):
+                return paths[i]
+            self.error('$%s index out of range: [%s]' % (what.upper(), sel))
+            return ''
+        for i, n in enumerate(names):
+            if n == sel or os.path.basename(n) == sel:
+                return paths[i]
+        self.error('$%s has no entry named "%s"' % (what.upper(), sel))
+        return ''
 
     def _allow_duplicate_source(self):
         return True
@@ -207,6 +246,14 @@ class GenRuleTarget(Target):
     def _expand_command(self):
         """Expand vars and location references in command"""
         cmd = self.attr['cmd']
+        # Indexed/named refs first: a bare `$OUTS` replace below would otherwise
+        # turn `$OUTS[0]` into `${out}[0]`.
+        cmd = _OUTS_INDEX_RE.sub(
+            lambda m: self._index_ref(m.group(1), self.attr['outs'],
+                                      self.attr['outputs'], 'outs'), cmd)
+        inputs = self._expand_srcs()
+        cmd = _SRCS_INDEX_RE.sub(
+            lambda m: self._index_ref(m.group(1), self.srcs, inputs, 'srcs'), cmd)
         cmd = cmd.replace('$SRCS', '${in}')
         cmd = cmd.replace('$OUTS', '${out}')
         cmd = cmd.replace('$FIRST_SRC', '${_in_1}')
@@ -218,7 +265,14 @@ class GenRuleTarget(Target):
         if locations:
             targets = self.blade.get_build_targets()
             locations_paths = []
-            for key, label in locations:
+            for key, label, plural in locations:
+                if plural:
+                    files = targets[key]._get_target_files()
+                    if not files:
+                        self.error('Invalid locations reference %s' % ':'.join(key))
+                        continue
+                    locations_paths.append(' '.join(files))
+                    continue
                 path = targets[key]._get_target_file(label)
                 if not path:
                     self.error('Invalid location reference {} {}'.format(':'.join(key), label))

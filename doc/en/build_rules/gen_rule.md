@@ -24,15 +24,25 @@ Used to customize your own construction rules, parameters:
 - cmd: str, the called command line, may contain the following variables, which will be replaced with actual values before running:
     - $SRCS, space-separated list of source file names, relative to WORKSPACE
     - $OUTS, space-separated list of output files, relative to WORKSPACE
+    - $SRCS[i] / $SRCS[name], a single input by index (all-digits) or by declared
+      name / basename, e.g. `$SRCS[0]`, `$SRCS[calc.y]`
+    - $OUTS[i] / $OUTS[name], a single output by index or name, e.g. `$OUTS[0]`,
+      `$OUTS[parser.h]`. When there is exactly one output, `$OUTS[0]` and `$OUTS`
+      are equivalent. Prefer by-name (`$OUTS[parser.h]`) over by-index, since the
+      index shifts if you reorder `outs`.
     - $SRC\_DIR, the directory where the input file is located
     - $OUT\_DIR, the directory where the output file is located
-    - $FIRST\_SRC, first input file path
-    - $FIRST\_OUT, the path of the first output file
+    - $FIRST\_SRC, first input file path (**deprecated** — use `$SRCS[0]`)
+    - $FIRST\_OUT, the path of the first output file (**deprecated** — use `$OUTS[0]`)
     - BUILD\_DIR, The root output directory, such as build[64,32]\_[release, debug]
-  - `$(location target)` and `$(location target label)` — replaced with the output
-    file path(s) of the referenced target. The optional `label` parameter specifies
-    a particular output (e.g. `$(location //bin:server bin)`). Commonly used in
-    `gen_rule.cmd`, `testdata`, `package`, and `sh_test`. Example:
+  - `$(location target)` / `$(location target label)` — replaced with the output
+    file path of the referenced target. The optional `label` parameter selects a
+    particular output (e.g. `$(location //bin:server bin)`). The target must have
+    exactly one output (for that label).
+  - `$(locations target)` — replaced with **all** output files of the referenced
+    target, space-separated. Use when the target produces several files, e.g.
+    `cmd = 'cat $(locations //idl:msgs) > $OUTS'`.
+    Commonly used in `gen_rule.cmd`, `testdata`, `package`, and `sh_test`. Example:
 
     ```python
     gen_rule(
