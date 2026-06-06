@@ -29,6 +29,9 @@ class WindowsResourcesRootPathTest(unittest.TestCase):
         t.name = 'res'
         t.attr = {'rc_files': ['app.rc'], 'resources': [], 'hdrs': []}
         t.data = {}
+        # expanded_deps is the direct + transitive dep list (set by the
+        # dependency analyzer before generate()).
+        t.expanded_deps = deps or []
         t.deps = deps or []
         t.blade = mock.Mock()
         t.blade.get_root_dir.return_value = os.path.join('C:', os.sep, 'ws', 'proj')
@@ -77,14 +80,14 @@ class WindowsResourcesRootPathTest(unittest.TestCase):
         self.assertIn(os.path.join('build64_release', 'licence.h'),
                       kw.get('implicit_deps', []))       # rc waits for it
 
-    def test_dep_generated_headers_is_transitive(self):
+    def test_dep_generated_headers_uses_expanded_deps(self):
+        # expanded_deps is already flattened (direct + transitive), so the
+        # helper just iterates it -- no manual graph walk.
         leaf = mock.Mock()
         leaf.attr = {'generated_hdrs': [os.path.join('bd', 'a.h')], 'generated_incs': []}
-        leaf.deps = []
         mid = mock.Mock()
         mid.attr = {'generated_hdrs': [], 'generated_incs': [os.path.join('bd', 'inc')]}
-        mid.deps = ['//:leaf']
-        t = self._make_target('', deps=['//:mid'],
+        t = self._make_target('', deps=['//:mid', '//:leaf'],
                               build_targets={'//:mid': mid, '//:leaf': leaf})
         files, dirs = t._dep_generated_headers()
         self.assertEqual(files, {os.path.join('bd', 'a.h')})

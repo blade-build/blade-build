@@ -86,7 +86,7 @@ class WindowsResourcesTarget(Target):
         return True
 
     def _dep_generated_headers(self):
-        """Generated headers (and their dirs) from transitive deps.
+        """Generated headers (and their dirs) from all deps (direct + transitive).
 
         A `.rc` may `#include` a header produced by a gen_rule (e.g. PuTTY's
         licence.h). Such headers live under the build dir, which rc.exe does not
@@ -94,13 +94,9 @@ class WindowsResourcesTarget(Target):
         ``(files, dirs)`` of full build-dir paths to feed `/i` and implicit_deps.
         """
         files, dirs = set(), set()
+        assert self.expanded_deps is not None, 'expanded_deps not expanded'
         build_targets = self.blade.get_build_targets()
-        seen, stack = set(), list(self.deps)
-        while stack:
-            dkey = stack.pop()
-            if dkey in seen:
-                continue
-            seen.add(dkey)
+        for dkey in self.expanded_deps:  # already direct + transitive
             dep = build_targets.get(dkey)
             if not dep:
                 continue
@@ -109,7 +105,6 @@ class WindowsResourcesTarget(Target):
                 dirs.add(os.path.dirname(hdr))
             for inc in dep.attr.get('generated_incs', []):
                 dirs.add(inc)
-            stack.extend(dep.deps)
         return files, dirs
 
     def generate(self):
