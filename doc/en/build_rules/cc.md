@@ -769,10 +769,26 @@ On a Windows (MSVC) toolchain, a `cc_library` that needs a shared library is bui
 
 Two Windows specifics are handled for you:
 
-- **Automatic export.** Unlike ELF, where every global symbol is exported by default, Windows exports nothing unless symbols are marked `__declspec(dllexport)` or listed in a module-definition (`.def`) file. To avoid forcing source changes, Blade scans the library's object files and generates a `.def` that exports every defined, externally-visible symbol — except symbols in deduplicated COMDAT sections (template instantiations, inline functions, and similar), which must not be exported. This makes a plain `cc_library` usable as a DLL with no annotations, the way it already is as a `.so`.
+- **Automatic export.** Unlike ELF, where every global symbol is exported by default, Windows exports nothing unless symbols are marked `__declspec(dllexport)` or listed in a module-definition (`.def`) file. To avoid forcing source changes, Blade scans the library's object files and generates a `.def` that exports every defined, externally-visible symbol — except symbols in deduplicated COMDAT sections (template instantiations, inline functions, and similar). C++ vtable and RTTI symbols are an exception: they are kept even though they are COMDAT, so a polymorphic class consumed via `__declspec(dllimport)` links correctly. This makes a plain `cc_library` usable as a DLL with no annotations, the way it already is as a `.so`. The same objects serve both static and shared linking, so you never write `dllexport` and the library is never compiled twice.
 - **Runtime discovery.** Windows has no rpath, and a PE import table records only a DLL's base name. So at test/run time Blade flattens every dependency DLL into the target's `runfiles` directory and prepends that directory to `PATH` — the Windows analog of `LD_LIBRARY_PATH`. Because each DLL's name encodes its package path, flattening never collides.
 
-**Caveat — global mutable data across the DLL boundary.** Auto-export makes *functions* work transparently, but a global variable defined in one DLL and used from another needs `__declspec(dllimport)` at the use site; without it, each module links its own copy. A library that relies on shared global state — most notably a test framework with a global test registry — should therefore set `generate_dynamic = False` so it is linked statically into the executable instead of becoming a DLL. With that, the rest of the dependency graph can still be DLLs while the stateful library stays correct.
+Use [`export_map`](#cc_library) to narrow the export set when you want export discipline or to stay under the PE 64K export limit.
+
+#### Consumer-side limitations
+
+Exporting is automated, but **importing is not symmetric on Windows** — the consumer side still follows the platform ABI. When you `#include` a header from a Blade-built DLL and use its symbols:
+
+- **Functions** — usable with no annotation; the import library provides a thunk.
+- **Global variables / static data members** — the consumer **must** declare them `__declspec(dllimport)`; without it the compiler reads the import-table slot (a pointer) instead of the variable's value, silently producing wrong results. A library that relies on shared global mutable state — most notably a test framework with a global test registry — should instead set `generate_dynamic = False` so it is linked statically into the executable. With that, the rest of the dependency graph can still be DLLs while the stateful library stays correct.
+- **Polymorphic classes** — Blade exports the vtable and RTTI, so a class consumed via `__declspec(dllimport)` links. You still need `__declspec(dllimport)` on the class declaration (the compiler references the *imported* vtable/RTTI).
+- **Implicit special members** — a `dllimport` class also imports its constructor / destructor / assignment. Auto-export only exports symbols actually *emitted* in the DLL, so an implicit member used only by the consumer is never emitted there and fails to link. Declare such members out-of-line (e.g. `Greeter::Greeter() = default;` in a `.cc`) to force the DLL to emit and export them, or expose a factory function so the consumer never constructs the class directly.
+- **Consistency** — whether you compile a consumer for static or DLL use must match the library you actually link. A mismatch produces `LNK2019` (unresolved) or `LNK4217` (locally defined symbol imported) errors.
+
+On Linux/macOS none of this applies: imports resolve through the GOT with no annotation, so a header written for those platforms needs no decoration on the use side.
+
+**Recommended:** prefer a function-based ABI (accessors / factory functions) across DLL boundaries rather than exporting global variables or polymorphic classes directly. Functions need no `dllimport`, share one set of objects across static/dynamic, and keep headers free of platform-specific decoration.
+
+> Automating the consumer-side import macro (so headers need no manual `dllimport`) is planned but not yet implemented; for now legacy exported-class headers must keep their own import macro.
 
 ## windows_resources
 

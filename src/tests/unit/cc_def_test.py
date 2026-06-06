@@ -8,9 +8,11 @@
 export list a `.def` needs. It must export only **external, defined** symbols,
 and must drop *dedup* COMDAT symbols (templates / inlines / constants —
 selection ANY/SAME_SIZE/EXACT_MATCH/LARGEST) while keeping NODUPLICATES
-sections (ordinary functions under /Gy). These tests pin that logic with
-synthetic records so they run on any platform (the COFF byte parser is
-exercised separately, on real objects, on Windows).
+sections (ordinary functions under /Gy). C++ vtable (??_7), vbtable (??_8)
+and RTTI (??_R*) symbols are the exception: they are kept even when dedup
+COMDAT, so dllimport-consumed polymorphic classes link. These tests pin that
+logic with synthetic records so they run on any platform (the COFF byte parser
+is exercised separately, on real objects, on Windows).
 """
 
 import os
@@ -59,6 +61,29 @@ class SelectDllExportsTest(unittest.TestCase):
         selection = {11: 1, 12: 2, 13: 2, 14: 6}
         names = [n for n, _ in builtin_tools._select_dll_exports(symbols, selection)]
         self.assertEqual(['?Greet@@YAXXZ'], names)
+
+    def test_vtable_and_rtti_kept_despite_dedup_comdat(self):
+        # vtable (??_7), vbtable (??_8) and RTTI (??_R*) are emitted as dedup
+        # COMDAT, but must still be exported so a dllimport-consumed polymorphic
+        # class can link against the imported vtable/RTTI. A template and a
+        # string literal in the same dedup selection are still dropped.
+        symbols = [
+            ('??_7Widget@@6B@', _EXTERNAL, 11, _DATA),       # vftable
+            ('??_8Derived@@7B@', _EXTERNAL, 12, _DATA),      # vbtable
+            ('??_R0?AVWidget@@@8', _EXTERNAL, 13, _DATA),    # RTTI type descriptor
+            ('??_R4Widget@@6B@', _EXTERNAL, 14, _DATA),      # RTTI complete object locator
+            ('??$tmpl@H@@YAXXZ', _EXTERNAL, 15, _FUNC),      # template ANY → dropped
+            ('??_C@_05@strlit', _EXTERNAL, 16, _DATA),       # string literal ANY → dropped
+        ]
+        selection = dict.fromkeys((11, 12, 13, 14, 15, 16), 2)  # all dedup ANY(2)
+        exports = dict(builtin_tools._select_dll_exports(symbols, selection))
+        self.assertIn('??_7Widget@@6B@', exports)
+        self.assertIn('??_8Derived@@7B@', exports)
+        self.assertIn('??_R0?AVWidget@@@8', exports)
+        self.assertIn('??_R4Widget@@6B@', exports)
+        self.assertNotIn('??$tmpl@H@@YAXXZ', exports)
+        self.assertNotIn('??_C@_05@strlit', exports)
+        self.assertTrue(exports['??_7Widget@@6B@'])  # vtable is data → DATA keyword
 
     def test_dedup_preserves_first_seen(self):
         symbols = [

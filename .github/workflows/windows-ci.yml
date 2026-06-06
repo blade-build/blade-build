@@ -115,4 +115,4 @@ jobs:
         rem Explicit targets — exclude cu_basic (CUDA toolkit not available on CI)
         set PYTHONPATH=%GITHUB_WORKSPACE%\blade-build\src
         cd /d %GITHUB_WORKSPACE%\blade-test
-        call %GITHUB_WORKSPACE%\blade-build\blade.bat test //suites/cc_basic:hello_test //suites/cc_basic:hello_dynamic_test //suites/cc_basic:cross_package_dynamic_test //suites/cc_basic:hello-world //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test //suites/resource_basic:greeter_test
+        call %GITHUB_WORKSPACE%\blade-build\blade.bat test //suites/cc_basic:hello_test //suites/cc_basic:hello_dynamic_test //suites/cc_basic:cross_package_dynamic_test //suites/cc_basic:hello-world //suites/cc_dll_export:foo_test //suites/java_basic:greeter_test //suites/lex_yacc_basic:calc_test //suites/py_basic:greeter_test //suites/resource_basic:greeter_test

@@ -615,6 +615,20 @@ _IMAGE_SYM_DTYPE_FUNCTION = 0x20  # Type high nibble == FUNCTION
 # symbol is provided by every TU that uses it, so the DLL needn't export it.
 _COMDAT_DEDUP_SELECTIONS = frozenset((2, 3, 4, 6))
 
+# C++ ABI symbols that must be exported even though they are dedup COMDAT:
+# the vftable (??_7), vbtable (??_8) and RTTI structures (??_R*). A consumer
+# that uses an exported polymorphic class via __declspec(dllimport) references
+# the *imported* vtable / RTTI and does NOT emit its own copy, so the DLL must
+# export them or the consumer fails to link. These are decorated C++ names
+# (leading '?'), never given the extra leading underscore even on x86, so the
+# prefix check works on all architectures.
+#
+# Trade-off: for template-heavy polymorphic code this re-introduces export
+# table growth (each instantiation's vtable/RTTI is exported), which can
+# approach the 64K per-image export limit. Use `export_map` to narrow the
+# export set when that becomes a problem.
+_CXX_ABI_EXPORT_PREFIXES = ('??_7', '??_8', '??_R')
+
 
 def _select_dll_exports(symbols, section_selection):
     """Pick the symbols a DLL should export, from parsed COFF symbol records.
@@ -625,17 +639,20 @@ def _select_dll_exports(symbols, section_selection):
     ``(name, is_data)``.
 
     A symbol is exported when it is **external** and **defined here**
-    (``section_number > 0``) and its section is not a *dedup* COMDAT. Functions
-    (COFF type FUNCTION) are exported plain; everything else is data and gets
-    the ``DATA`` keyword in the `.def`.
+    (``section_number > 0``) and its section is not a *dedup* COMDAT — except
+    for C++ vtable / RTTI symbols (:data:`_CXX_ABI_EXPORT_PREFIXES`), which are
+    kept regardless so that ``dllimport``-consumed polymorphic classes link.
+    Functions (COFF type FUNCTION) are exported plain; everything else is data
+    and gets the ``DATA`` keyword in the `.def`.
     """
     seen = {}
     for name, storage_class, section_number, coff_type in symbols:
         if storage_class != _IMAGE_SYM_CLASS_EXTERNAL or section_number <= 0:
             continue
-        if section_selection.get(section_number, 0) in _COMDAT_DEDUP_SELECTIONS:
-            continue
         if not name:
+            continue
+        if (section_selection.get(section_number, 0) in _COMDAT_DEDUP_SELECTIONS
+                and not name.startswith(_CXX_ABI_EXPORT_PREFIXES)):
             continue
         is_data = coff_type != _IMAGE_SYM_DTYPE_FUNCTION
         seen.setdefault(name, is_data)  # first definition wins
