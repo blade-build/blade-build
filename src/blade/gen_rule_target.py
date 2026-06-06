@@ -11,6 +11,7 @@ Allow users defining their custom build rules.
 
 
 import os
+import shutil
 
 from blade import build_manager
 from blade import build_rules
@@ -22,10 +23,12 @@ from blade.util import regular_variable_name
 from blade.util import var_to_list, var_to_list_or_none
 
 
-# The rule template for gen_rule
+# The rule template for gen_rule. The command is fully wrapped by
+# `_wrap_command` (interpreter + output-existence check), so nothing
+# shell-specific is hard-coded here -- see issue #1204.
 _RULE_FORMAT = '''\
 rule %s
-  command = %s && cd %s && ls ${out} > /dev/null
+  command = %s
   description = %s
 '''
 
@@ -42,6 +45,8 @@ class GenRuleTarget(Target):
                  tags: StrOrListOpt,
                  outs: StrOrListOpt,
                  cmd: str,
+                 cmd_bash: str,
+                 cmd_bat: str,
                  cmd_name: str,
                  generated_hdrs: StrOrListOpt,
                  generated_incs: StrOrListOpt,
@@ -71,8 +76,12 @@ class GenRuleTarget(Target):
         self._add_tags('type:gen_rule')
         if not outs:
             self.error('"outs" can not be empty')
-        if not cmd:
-            self.error('"cmd" can not be empty')
+        selected_cmd, self._gen_kind, self._bash = self._select_command(
+            cmd, cmd_bash, cmd_bat)
+        if not selected_cmd:
+            self.error('one of "cmd", "cmd_bash", "cmd_bat" must be set '
+                       '(and usable on this platform)')
+            selected_cmd = ''
         outs = var_to_list(outs)
         # self._check_path_list(outs, "outs", must_exist=False)
         outs = [os.path.normpath(o) for o in outs]
@@ -83,7 +92,7 @@ class GenRuleTarget(Target):
         self.attr['outs'] = var_to_list(outs)
         self.attr['outputs'] = [self._target_file_path(o) for o in self.attr['outs']]
         self.attr['locations'] = []
-        self.attr['cmd'] = LOCATION_RE.sub(self._process_location_reference, cmd)
+        self.attr['cmd'] = LOCATION_RE.sub(self._process_location_reference, selected_cmd)
         self.attr['cmd_name'] = cmd_name
         self.attr['heavy'] = heavy
         self.attr['exclude_dep_labels'] = exclude_dep_labels
@@ -113,6 +122,71 @@ class GenRuleTarget(Target):
         if system_export_incs:
             self.attr['system_export_incs'] = self._expand_incs(
                 var_to_list(system_export_incs))
+
+    @staticmethod
+    def _select_command(cmd, cmd_bash, cmd_bat):
+        """Pick the command + how to run it for the host platform (issue #1204).
+
+        Borrowed from Bazel's per-shell genrule commands, simplified:
+          * Windows: prefer ``cmd_bat`` (cmd.exe); else ``cmd_bash`` if bash is
+            available; else the generic ``cmd``.
+          * POSIX: prefer ``cmd_bash`` if bash is available; else ``cmd``.
+        ``cmd`` is the back-compat generic, run by the host's default shell.
+        Returns ``(command, kind, bash_path)`` with kind in
+        ``{'bat', 'bash', 'raw'}``; ``(None, None, bash)`` if nothing usable.
+        """
+        bash = shutil.which('bash')
+        if os.name == 'nt':
+            if cmd_bat:
+                return cmd_bat, 'bat', bash
+            if cmd_bash and bash:
+                return cmd_bash, 'bash', bash
+            if cmd:
+                return cmd, 'raw', bash
+            if cmd_bash:  # no bash found -- best effort via the host shell
+                return cmd_bash, 'raw', bash
+        else:
+            if cmd_bash and bash:
+                return cmd_bash, 'bash', bash
+            if cmd:
+                return cmd, 'raw', bash
+            if cmd_bash:
+                return cmd_bash, 'raw', bash
+        return None, None, bash
+
+    def _output_check(self, shell):
+        """A command that fails the build if any declared output is missing.
+
+        Replaces the old POSIX-only ``ls ${out} > /dev/null`` scaffold with an
+        explicit per-output check in the given shell's syntax, using the known
+        output paths (so no ``${out}`` separator / for-loop quirks).
+        """
+        outs = self.attr['outputs']
+        if shell == 'cmd':
+            return ' && '.join('if not exist "%s" exit /b 1' % o for o in outs)
+        # sh/bash: forward slashes so backslashes aren't treated as escapes
+        return ' && '.join('test -e "%s"' % o.replace('\\', '/') for o in outs)
+
+    def _wrap_command(self, cmd):
+        """Wrap the user command with the right interpreter + output check.
+
+        Launch arguments follow Bazel: ``cmd.exe /S /E:ON /V:ON /D /c`` for bat,
+        ``bash -c`` with ``set -e -o pipefail`` for bash.
+        """
+        kind = self._gen_kind
+        if kind == 'bash':
+            inner = 'set -e -o pipefail;%s && %s' % (cmd, self._output_check('sh'))
+            # single-quote the bash script so the double-quoted paths in the
+            # output check don't clash with bash -c's own quoting.
+            return '"%s" -c \'%s\'' % (self._bash, inner)
+        if kind == 'bat' or os.name == 'nt':
+            # On Windows wrap in an explicit cmd.exe (Bazel's launch args). This
+            # also gives ninja a clean outer process to pipe -- a raw command
+            # doing its own `>` redirection in ninja's directly-piped cmd can
+            # trip "ninja: fatal: GetOverlappedResult".
+            return 'cmd /S /E:ON /V:ON /D /c "%s && %s"' % (cmd, self._output_check('cmd'))
+        # raw on POSIX: the host's /bin/sh -c runs it directly.
+        return '%s && %s' % (cmd, self._output_check('sh'))
 
     def _expand_incs(self, incs):
         """Expand incs"""
@@ -175,9 +249,9 @@ class GenRuleTarget(Target):
         # Because the `command` variable is not lazy evaluated althrough it can be overridden in a
         # `build` statement, so any other build scoped variables are expanded to empty.
         rule = '%s__rule__' % regular_variable_name(self._source_file_path(self.name))
-        cmd = self._expand_command()
+        cmd = self._wrap_command(self._expand_command())
         description = console.colored('{} {}'.format(self.attr['cmd_name'], self.fullname), 'dimpurple')
-        self._write_rule(_RULE_FORMAT % (rule, cmd, self.blade.get_root_dir(), description))
+        self._write_rule(_RULE_FORMAT % (rule, cmd, description))
 
         outputs = self.attr['outputs']
         inputs = self._expand_srcs()
@@ -204,6 +278,8 @@ def gen_rule(
         tags: StrOrListOpt = None,
         outs: StrOrListOpt = None,
         cmd: str = '',
+        cmd_bash: str = '',
+        cmd_bat: str = '',
         cmd_name: str = 'COMMAND',
         generated_hdrs: StrOrListOpt = None,
         generated_incs: StrOrListOpt = None,
@@ -215,6 +291,14 @@ def gen_rule(
         **kwargs: object):
     """General Build Rule
     Args:
+        cmd: str, the command, run by the host's default shell (``/bin/sh`` on
+            POSIX, ``cmd.exe`` on Windows). The generic, back-compatible form.
+        cmd_bash: str, a command run via ``bash`` (``set -e -o pipefail``).
+            Preferred on POSIX, and on Windows when bash is available.
+        cmd_bat: str, a Windows batch command run via
+            ``cmd.exe /S /E:ON /V:ON /D /c``. Preferred on Windows.
+            At least one of ``cmd`` / ``cmd_bash`` / ``cmd_bat`` is required;
+            the platform-appropriate one is selected automatically (#1204).
         src_exts: List[str],
             Valid extension names for file in "srcs", can be None, which means any is valid.
             NOTE the empty string is also a valid extension, which means NO extension.
@@ -250,6 +334,8 @@ def gen_rule(
             tags=tags,
             outs=outs,
             cmd=cmd,
+            cmd_bash=cmd_bash,
+            cmd_bat=cmd_bat,
             cmd_name=cmd_name,
             generated_hdrs=generated_hdrs,
             generated_incs=generated_incs,

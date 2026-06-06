@@ -2,7 +2,16 @@
 
 ## gen\_rule
 
-> **Not supported on the Windows (MSVC) toolchain yet.** `gen_rule` runs its command through a POSIX shell — the scaffold uses `ls` / `/dev/null`, and commands are typically written for `sh` — which Windows `cmd.exe` does not provide. Tracked in [#1204](https://github.com/blade-build/blade-build/issues/1204).
+> **Windows note.** `cmd` is run by the host's default shell (`/bin/sh` on
+> POSIX, `cmd.exe` on Windows), so a `cmd` written for `sh` will not work on
+> Windows. Use `cmd_bat` (a `cmd.exe` command) and/or `cmd_bash` (a `bash`
+> command) for portability — the platform-appropriate one is selected
+> automatically. blade's own output-existence check is cross-platform.
+>
+> Keep gen_rule commands simple. For anything non-trivial, write a small Python
+> script and call it (`cmd = 'python $SRC_DIR/gen.py $SRCS $OUTS'`): Python is on
+> `PATH` on every platform, so it is naturally cross-platform, easy to debug, and
+> avoids per-shell quoting.
 
 Used to customize your own construction rules, parameters:
 
@@ -33,6 +42,14 @@ Used to customize your own construction rules, parameters:
     )
     ```
 
+- cmd\_bash: str, a command run via `bash` (with `set -e -o pipefail`). Preferred
+  on POSIX, and on Windows when `bash` is on `PATH` (e.g. Git Bash). Same
+  variables as `cmd`.
+- cmd\_bat: str, a Windows batch command run via `cmd.exe /S /E:ON /V:ON /D /c`.
+  Preferred on Windows. Same variables as `cmd`.
+  At least one of `cmd` / `cmd_bash` / `cmd_bat` must be set; the
+  platform-appropriate one is chosen automatically (Windows: `cmd_bat` →
+  `cmd_bash` → `cmd`; POSIX: `cmd_bash` → `cmd`).
 - cmd\_name: str, the name of the command, used to display in simplified mode, the default is `COMMAND`
 - generate\_hdrs: bool, indicates whether this target will generate C/C++ header files other than the file names already listed in `outs`.
   If a C/C ++ target depends on the gen\_rule target that generates header files, then these header files need to be generated before compilation can begin.
@@ -66,7 +83,7 @@ NOTE:
 to generate source code and want to reference the generated source code in other targets, just
 consider them as if they are generated in the source tree, without the BUILD\_DIR prefix.
 
-- `srcs` can be empty, but `outs` and `cmd` cannot be empty.
+- `srcs` can be empty, but `outs` cannot be empty, and at least one of `cmd` / `cmd_bash` / `cmd_bat` must be set.
 - `gen_rule` should only generate output files in the corresponding result output directory, and will not pollute the source code tree. But if you reference in other targets
   which generating source files with `gen_rule`, it is only necessary to assume that these files are generated in the source code directory, without considering the result directory prefix.
 - After the command is executed, the correct exit code must be returned, 0 means success, other values mean failure

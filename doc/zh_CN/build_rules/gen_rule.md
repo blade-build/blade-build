@@ -2,7 +2,13 @@
 
 ## gen\_rule
 
-> **暂不支持 Windows（MSVC）工具链。** `gen_rule` 的命令通过 POSIX shell 执行——脚手架用到 `ls` / `/dev/null`，且命令通常按 `sh` 编写——而 Windows 的 `cmd.exe` 不提供这些。进展见 [#1204](https://github.com/blade-build/blade-build/issues/1204)。
+> **Windows 说明。** `cmd` 由宿主默认 shell 执行（POSIX 上是 `/bin/sh`，Windows 上是
+> `cmd.exe`），所以按 `sh` 写的 `cmd` 在 Windows 上不工作。跨平台请用 `cmd_bat`（`cmd.exe`
+> 命令）和/或 `cmd_bash`（`bash` 命令）——会按平台自动选择。blade 自身的输出存在性检查已跨平台。
+>
+> gen_rule 的命令应尽量简单。稍复杂的逻辑,建议写一个小 Python 脚本来调用
+> （`cmd = 'python $SRC_DIR/gen.py $SRCS $OUTS'`）：Python 在各平台都在 `PATH` 上,
+> 天然跨平台、易调试,也免去各 shell 的引号转义。
 
 用于定制自己的构建规则，参数：
 
@@ -30,6 +36,11 @@
     )
     ```
 
+- `cmd_bash`: str，通过 `bash` 执行的命令（带 `set -e -o pipefail`）。POSIX 上优先,Windows 上当
+  `bash` 在 `PATH`（如 Git Bash）时也用。变量同 `cmd`。
+- `cmd_bat`: str，通过 `cmd.exe /S /E:ON /V:ON /D /c` 执行的 Windows 批处理命令。Windows 上优先。变量同 `cmd`。
+  `cmd` / `cmd_bash` / `cmd_bat` 至少要设一个;按平台自动选（Windows：`cmd_bat` → `cmd_bash` → `cmd`；
+  POSIX：`cmd_bash` → `cmd`）。
 - `cmd_name`: str，命令的名字，用于简略模式下显示，默认为 `COMMAND`
 - generate\_hdrs bool，指示这个目标是否会生成 outs 里列出的文件名之外的 C/C++ 头文件。
   如果一个 C/C++ 目标依赖会生成头文件的 gen\_rule 目标，那么需要这些头文件生成后才能开始编译。
@@ -54,7 +65,7 @@ gen_rule(
 
 注意：
 
-- `srcs` 可以为空，但是 `outs` 和 `cmd` 不能为空。
+- `srcs` 可以为空，但是 `outs` 不能为空，且 `cmd` / `cmd_bash` / `cmd_bat` 至少要设一个。
 - `gen_rule` 只应该把输出文件生成在相应的结果输出目录下，不应该污染源代码树。但是你在其他目标中引用
   `gen_rule` 生成的源文件时，只需要假设这些文件是生成在源代码目录下，不需要考虑结果目录前缀。
 - 命令执行后务必返回正确的退出码，0 表示成功，其他值表示失败。
