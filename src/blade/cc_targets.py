@@ -20,9 +20,11 @@ from typing import Any
 
 from blade import build_manager
 from blade import build_rules
+from blade import cc_rule_support
 from blade import config  # lgtm[py/cyclic-import]
 from blade import console
 from blade import inclusion_check
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.constants import HEAP_CHECK_VALUES
 from blade.target import Target
@@ -2665,3 +2667,7 @@ def cc_test(name: str,
 
 
 build_rules.register_function(cc_test)
+
+
+rule_registry.register_rule_provider(
+    cc_rule_support.generate_cc_rules, order=rule_registry.ORDER_CC, name='cc')

@@ -15,8 +15,10 @@ import os
 
 from blade import build_manager
 from blade import build_rules
+from blade import cc_rule_support
 from blade import config
 from blade import console
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget
 from blade.util import var_to_list, var_to_list_or_none
@@ -524,3 +526,7 @@ def cu_test(
 
 
 build_rules.register_function(cu_test)
+
+
+rule_registry.register_rule_provider(
+    cc_rule_support.generate_cuda_rules, order=rule_registry.ORDER_CUDA, name='cuda')

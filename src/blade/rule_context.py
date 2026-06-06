@@ -33,6 +33,8 @@ class RuleContext:
         self.blade_path = generator.blade_path
         self.toolchain = generator.build_toolchain
         self.accelerator = generator.build_accelerator
+        self.command = generator.command
+        self.blade = generator.blade
 
     def config_section(self, name):
         return config.get_section(name)

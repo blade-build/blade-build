@@ -100,11 +100,13 @@ class CcArchiveRulesTest(unittest.TestCase):
     """Test platform-specific archive command generation."""
 
     def _make_gen(self, target_os):
-        """Build a _NinjaFileHeaderGenerator with enough state for ar tests."""
-        from blade import backend
-        gen = backend._NinjaFileHeaderGenerator.__new__(backend._NinjaFileHeaderGenerator)
-        gen._NinjaFileHeaderGenerator__all_rule_names = set()
-        gen.rules_buf = []
+        """Build a CcRuleGenerator with enough state for ar tests.
+
+        The cc ar rules moved to cc_rule_support.CcRuleGenerator (M2 of #1264);
+        config/console are module globals there.
+        """
+        from blade import cc_rule_support
+        gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
         gen._add_line = mock.Mock()
         gen.build_toolchain = mock.Mock()
         gen.build_toolchain.target_os = target_os
@@ -115,7 +117,7 @@ class CcArchiveRulesTest(unittest.TestCase):
     def _capture_ar_command(self, gen, deterministic=False, thin=False):
         """Call _generate_cc_ar_rules and return the generated command."""
         with mock.patch.object(gen, 'generate_rule') as mock_rule:
-            with mock.patch('blade.backend.config') as mock_config:
+            with mock.patch('blade.cc_rule_support.config') as mock_config:
                 mock_config.get_section.return_value = {
                     'arflags': ['rcs'],
                     'deterministic': deterministic,
@@ -128,7 +130,7 @@ class CcArchiveRulesTest(unittest.TestCase):
     def _capture_windows_ar_command(self, gen, deterministic=False, thin=False):
         """Call _generate_windows_ar_rules and return the generated command."""
         with mock.patch.object(gen, 'generate_rule') as mock_rule:
-            with mock.patch('blade.backend.config') as mock_config:
+            with mock.patch('blade.cc_rule_support.config') as mock_config:
                 mock_config.get_section.return_value = {
                     'deterministic': deterministic,
                     'thin': thin,
@@ -174,8 +176,8 @@ class CcArchiveRulesTest(unittest.TestCase):
     def test_darwin_thin_logs_error(self):
         gen = self._make_gen('darwin')
         with mock.patch.object(gen, 'generate_rule'):
-            with mock.patch('blade.backend.console') as mock_console:
-                with mock.patch('blade.backend.config') as mock_config:
+            with mock.patch('blade.cc_rule_support.console') as mock_console:
+                with mock.patch('blade.cc_rule_support.config') as mock_config:
                     mock_config.get_section.return_value = {
                         'arflags': ['rcs'],
                         'deterministic': False,
@@ -201,8 +203,8 @@ class CcArchiveRulesTest(unittest.TestCase):
     def test_windows_thin_warns(self):
         gen = self._make_gen('windows')
         with mock.patch.object(gen, 'generate_rule'):
-            with mock.patch('blade.backend.console') as mock_console:
-                with mock.patch('blade.backend.config') as mock_config:
+            with mock.patch('blade.cc_rule_support.console') as mock_console:
+                with mock.patch('blade.cc_rule_support.config') as mock_config:
                     mock_config.get_section.return_value = {
                         'deterministic': False,
                         'thin': True,

@@ -30,7 +30,7 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..',
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 
 from blade import config  # noqa: E402
-from blade import backend  # noqa: E402
+from blade import cc_rule_support  # noqa: E402
 
 
 class CcConfigPieDefaultsTest(unittest.TestCase):
@@ -136,8 +136,8 @@ class GetIntrinsicCcFlagsInterpositionTest(unittest.TestCase):
         # Avoid running NinjaFileHeaderGenerator.__init__ (which wants a
         # BuildManager, options, build dirs etc.). Construct an empty
         # object and only set the fields the method actually reads.
-        gen = backend._NinjaFileHeaderGenerator.__new__(
-            backend._NinjaFileHeaderGenerator)
+        gen = cc_rule_support.CcRuleGenerator.__new__(
+            cc_rule_support.CcRuleGenerator)
         gen.options = mock.Mock()
         # _get_intrinsic_cc_flags reads .m, .profile, and three pgo-ish
         # `getattr(self.options, 'name', default)` calls. We set sentinels
@@ -176,7 +176,7 @@ class GetIntrinsicCcFlagsInterpositionTest(unittest.TestCase):
         ``-fno-semantic-interposition`` flag -- the perf-win posture this
         knob exists to enable."""
         gen, fake_get_section = self._make_generator(True, cc_vendor='gcc')
-        with mock.patch.object(backend.config, 'get_section', side_effect=fake_get_section):
+        with mock.patch.object(cc_rule_support.config, 'get_section', side_effect=fake_get_section):
             cppflags, _ = gen._get_intrinsic_cc_flags()
         self.assertIn('-fno-semantic-interposition', cppflags)
 
@@ -185,7 +185,7 @@ class GetIntrinsicCcFlagsInterpositionTest(unittest.TestCase):
         the flag. Used by plugin/in-app hook frameworks that rely on
         overriding exe-internal symbols."""
         gen, fake_get_section = self._make_generator(False, cc_vendor='gcc')
-        with mock.patch.object(backend.config, 'get_section', side_effect=fake_get_section):
+        with mock.patch.object(cc_rule_support.config, 'get_section', side_effect=fake_get_section):
             cppflags, _ = gen._get_intrinsic_cc_flags()
         self.assertNotIn('-fno-semantic-interposition', cppflags)
 
@@ -196,7 +196,7 @@ class GetIntrinsicCcFlagsInterpositionTest(unittest.TestCase):
         the flag on Clang -- same posture Clang gives natively, no warning
         noise."""
         gen, fake_get_section = self._make_generator(True, cc_vendor='clang')
-        with mock.patch.object(backend.config, 'get_section', side_effect=fake_get_section):
+        with mock.patch.object(cc_rule_support.config, 'get_section', side_effect=fake_get_section):
             cppflags, _ = gen._get_intrinsic_cc_flags()
         self.assertNotIn('-fno-semantic-interposition', cppflags)
 
