@@ -429,7 +429,7 @@ class CcRuleGenerator:
         wrapper = self._msvc_tee_wrapper_py()
         template = '"%s" -B %s ${inclusion_stack} -- ' % (py, wrapper)
 
-        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} ${extra_compile_flags} ${in}' % (
+        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} /external:W0 ${cppflags} ${includes} ${extra_compile_flags} ${in}' % (
             cc, optimize, ' '.join(cppflags), ' '.join(cflags), include_flags))
         self.generate_rule(name='cc',
                            command=cc_command,
@@ -437,7 +437,7 @@ class CcRuleGenerator:
                            deps='msvc',
                            restat=True)
 
-        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} ${extra_compile_flags} ${in}' % (
+        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} /external:W0 ${cppflags} ${includes} ${extra_compile_flags} ${in}' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxx',
                            command=cxx_command,
@@ -450,7 +450,7 @@ class CcRuleGenerator:
         # The Python wrapper captures /showIncludes to ${out} (.incstk file);
         # /Fi writes the preprocessed body to ${out}.pre.
         hdrs_template = '"%s" -B %s ${out} -- ' % (py, wrapper)
-        hdrs_command = hdrs_template + ('"%s" /nologo /P /Tp${in} /showIncludes %s %s %s %s /Fi${out}.pre' % (
+        hdrs_command = hdrs_template + ('"%s" /nologo /P /Tp${in} /showIncludes %s /external:W0 ${cppflags} ${includes} %s %s %s /Fi${out}.pre' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxxhdrs',
                            command=hdrs_command,

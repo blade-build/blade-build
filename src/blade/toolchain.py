@@ -932,7 +932,10 @@ class MsvcToolChain(ToolChain):
             paths.append(os.path.join(self._msvc_path, 'include'))
         if self._sdk_path and self._sdk_ver:
             sdk_inc = os.path.join(self._sdk_path, 'Include', self._sdk_ver)
-            for sub in ('ucrt', 'um', 'shared'):
+            # Same subdirs vcvarsall.bat puts on INCLUDE. 'winrt' provides WRL
+            # (wrl.h) used by Direct2D/DirectWrite code; 'cppwinrt' the C++/WinRT
+            # projections. Absent subdirs are skipped by the isdir guard.
+            for sub in ('ucrt', 'um', 'shared', 'winrt', 'cppwinrt'):
                 p = os.path.join(sdk_inc, sub)
                 if os.path.isdir(p):
                     paths.append(p)
@@ -1113,55 +1116,48 @@ class MsvcToolChain(ToolChain):
 
         valid_flags, unrecognized_flags = [], []
 
-        fd, obj = tempfile.mkstemp('.obj', 'filter_cc_flags_test')
-        try:
-            argv = [self.cc, '/nologo', '/c', '/Fo' + obj, '/WX', '/Tc-'] + to_test
-            proc = subprocess.Popen(
-                argv,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
-            _, _ = proc.communicate(input=b'int main() { return 0; }\n')
-            returncode = proc.returncode
-        finally:
-            try:
-                os.remove(obj)
-            except OSError:
-                # Temp file may already be deleted by the compiler on error.
-                pass
-            os.close(fd)
+        # cl.exe cannot read source from stdin (unlike gcc's '-'), so write a
+        # throwaway translation unit and compile that. Use the language's own
+        # extension so C++-only flags (e.g. /EHsc) are tested in C++ mode.
+        ext = '.cpp' if language in ('c++', 'cxx', 'cpp', 'cc') else '.c'
+        srcfd, src = tempfile.mkstemp(ext, 'filter_cc_flags_test')
+        os.write(srcfd, b'int main() { return 0; }\n')
+        os.close(srcfd)
 
-        if returncode == 0:
-            return trusted + to_test
-        # When a flag is unrecognized, MSVC puts it in the error output.
-        # Re-test each flag individually to identify bad ones.
-        for flag in to_test:
-            fd2, obj2 = tempfile.mkstemp('.obj', 'filter_cc_flags_test')
+        def _compiles(flags):
+            objfd, obj = tempfile.mkstemp('.obj', 'filter_cc_flags_test')
+            os.close(objfd)
             try:
-                test_argv = [self.cc, '/nologo', '/c', '/Fo' + obj2, '/WX', '/Tc-', flag]
                 proc = subprocess.Popen(
-                    test_argv,
-                    stdin=subprocess.PIPE,
+                    [self.cc, '/nologo', '/c', '/WX', '/Fo' + obj, src] + list(flags),
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE)
-                _, _ = proc.communicate(input=b'int main() { return 0; }\n')
-                if proc.returncode == 0:
-                    valid_flags.append(flag)
-                else:
-                    unrecognized_flags.append(flag)
+                proc.communicate()
+                return proc.returncode == 0
             finally:
                 try:
-                    os.remove(obj2)
+                    os.remove(obj)
                 except OSError:
-                    # Temp file may not exist or be already cleaned up.
                     pass
-                os.close(fd2)
+
+        try:
+            if _compiles(to_test):
+                return trusted + to_test
+            # Something in to_test is bad; re-test each flag individually.
+            for flag in to_test:
+                (valid_flags if _compiles([flag]) else unrecognized_flags).append(flag)
+        finally:
+            try:
+                os.remove(src)
+            except OSError:
+                pass
 
         if unrecognized_flags:
             console.warning('config: Unrecognized {} flags: {}'.format(
                     language, ', '.join(unrecognized_flags)))
 
-        return valid_flags
+        return trusted + valid_flags
 
 
 # ------------------------------------------------------------------

@@ -670,8 +670,17 @@ class CcTarget(Target):
         cppflags, regular_incs, system_incs = self._get_cc_flags()
         if cppflags:
             vars['cppflags'] = ' '.join(cppflags)
-        inc_flags = (['-I%s' % inc for inc in regular_incs]
-                     + ['-isystem%s' % inc for inc in system_incs])
+        if self.blade.get_build_toolchain().cc_is('msvc'):
+            # MSVC: regular incs -> /I; system (3rd-party) incs -> /external:I,
+            # the cl.exe analog of GCC's -isystem. The rule also passes
+            # /external:W0 so warnings from headers under these dirs are
+            # silenced (/external:I alone only tags them). /external is stable
+            # since VS2019 16.10.
+            inc_flags = (['/I%s' % inc for inc in regular_incs]
+                         + ['/external:I "%s"' % inc for inc in system_incs])
+        else:
+            inc_flags = (['-I%s' % inc for inc in regular_incs]
+                         + ['-isystem%s' % inc for inc in system_incs])
         if inc_flags:
             vars['includes'] = ' '.join(inc_flags)
 
