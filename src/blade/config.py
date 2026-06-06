@@ -382,9 +382,12 @@ _CONFIG_TEMPLATE = {
         'visual_studio__help__': 'Visual Studio edition (auto, Community, Professional, Enterprise)',
         # /utf-8: read sources (and emit narrow literals) as UTF-8 instead of the
         #   system ANSI codepage -- avoids C4819 / miscompiled string literals.
+        # /volatile:iso: standard ISO `volatile` (no implicit acquire/release
+        #   fences), matching GCC/Clang; already the default on ARM64. Use
+        #   std::atomic for cross-thread ordering.
         # The CRT flavor (/MD vs /MDd) is added per build profile in
         #   cc_rule_support, not hard-coded here.
-        'cppflags': ['/utf-8'],
+        'cppflags': ['/utf-8', '/volatile:iso'],
         'cflags': [],
         # /EHsc: C++ exceptions (meaningless for C, so kept out of cppflags).
         # /Zc:__cplusplus: report the real __cplusplus value (otherwise stuck at
