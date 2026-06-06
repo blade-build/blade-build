@@ -375,6 +375,7 @@ class CcRuleGenerator:
         cc, cxx, ld = self.build_accelerator.get_cc_commands()
         self._generate_windows_cc_vars()
         self._generate_windows_cc_compile_rules(cc, cxx)
+        self._generate_windows_asm_rule()
         self._generate_cc_inclusion_check_rule()
         self._generate_cc_check_undefined_rule()
         self._generate_windows_ar_rules()
@@ -457,6 +458,26 @@ class CcRuleGenerator:
                            description='CXX HDRS ${in}',
                            deps='msvc',
                            restat=True)
+
+    def _generate_windows_asm_rule(self):
+        """Generate the MSVC assembler (``ml64`` / ``ml``) rule for ``.asm``.
+
+        ``cl.exe`` cannot assemble MASM source; ``.asm`` files must go through
+        ``ml64.exe`` (x64) / ``ml.exe`` (x86), resolved by the toolchain as the
+        ``'as'`` tool. ``CcTarget._get_rule_from_suffix`` routes ``.asm`` here on
+        MSVC. Per-target inc dirs ride on ``${includes}`` (already ``/I`` form
+        on MSVC) and per-target asm flags on ``${extra_compile_flags}`` (from
+        ``extra_asflags``). No ``/showIncludes`` / inclusion-stack plumbing --
+        assembly is not header-dependency-checked.
+        """
+        asm = self.build_toolchain.tool('as')
+        if not asm:
+            return
+        self.generate_rule(
+            name='as',
+            command='"%s" /nologo /c /Fo${out} ${extra_compile_flags} '
+                    '${includes} ${in}' % asm,
+            description='AS ${in}')
 
     def _generate_windows_ar_rules(self):
         """Generate Windows static library rules."""

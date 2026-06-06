@@ -643,6 +643,10 @@ class CcTarget(Target):
         for suffix in ('.cc', '.cpp', '.cxx'):
             if src.endswith(suffix):
                 return 'cxx'
+        # MASM .asm can't go through cl.exe; route to the ml64/ml 'as' rule.
+        # (GCC assembles .s/.S via the cc driver, so only MSVC needs this.)
+        if src.endswith('.asm') and self.blade.get_build_toolchain().cc_is('msvc'):
+            return 'as'
         return 'cc'
 
     def _extra_compile_flags_for(self, src):
@@ -877,11 +881,14 @@ class CcTarget(Target):
                 self.generate_build('phony', full_src, inputs=[], clean=[])
             obj = os.path.join(objs_dir, self.blade.get_build_toolchain().object_file_of(src))
             rule = self._get_rule_from_suffix(src, secret)
+            # The ml64/ml 'as' rule does not emit an inclusion stack (assembly
+            # is not header-dependency-checked), so don't declare that output.
+            emit_stack = emit_inclusion_stack and rule != 'as'
             objvars, stack = vars, None
             extra = self._extra_compile_flags_for(src)
-            if emit_inclusion_stack or extra:
+            if emit_stack or extra:
                 objvars = dict(vars)
-                if emit_inclusion_stack:
+                if emit_stack:
                     stack = os.path.join(objs_dir, src) + '.incstk'
                     objvars['inclusion_stack'] = stack
                 if extra:
