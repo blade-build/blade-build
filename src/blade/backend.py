@@ -22,7 +22,10 @@ import textwrap
 
 from blade import config
 from blade import console
+from blade import rule_registry
 from blade import util
+from blade.ninja_rule import NinjaRule
+from blade.rule_context import RuleContext
 
 
 # To verify whether a header is included without depending on the library it
@@ -306,30 +309,21 @@ class _NinjaFileHeaderGenerator:
     def get_all_rule_names(self):
         return list(self.__all_rule_names)
 
+    def _record_rule_name(self, name):
+        """Record an emitted rule name (used by RuleContext.emit_rule)."""
+        self.__all_rule_names.add(name)
+
     def generate_rule(self, name, command, description=None,
                       depfile=None, generator=False, pool=None,
                       restat=False, rspfile=None,
                       rspfile_content=None, deps=None):
-        self.__all_rule_names.add(name)
-        self._add_line('rule %s' % name)
-        self._add_line('  command = %s' % command)
-        if description:
-            self._add_line('  description = %s' % console.colored(description, 'dimpurple'))
-        if depfile:
-            self._add_line('  depfile = %s' % depfile)
-        if generator:
-            self._add_line('  generator = 1')
-        if pool:
-            self._add_line('  pool = %s' % pool)
-        if restat:
-            self._add_line('  restat = 1')
-        if rspfile:
-            self._add_line('  rspfile = %s' % rspfile)
-        if rspfile_content:
-            self._add_line('  rspfile_content = %s' % rspfile_content)
-        if deps:
-            self._add_line('  deps = %s' % deps)
-        self._add_line('')  # An empty line to improve readability
+        rule = NinjaRule(
+            name=name, command=command, description=description,
+            depfile=depfile, generator=generator, pool=pool, restat=restat,
+            rspfile=rspfile, rspfile_content=rspfile_content, deps=deps)
+        self.__all_rule_names.add(rule.name)
+        for line in rule.emit():
+            self._add_line(line)
 
     def generate_file_header(self):
         self._add_line(textwrap.dedent('''\
@@ -1393,22 +1387,61 @@ class _NinjaFileHeaderGenerator:
         return ' '.join(cmd)
 
     def generate(self):
-        """Generate ninja rules."""
+        """Generate ninja rules by iterating the registered rule providers.
+
+        The file header (and pool) is not a rule, so it is emitted first
+        directly. Rule groups are contributed via the rule registry (see
+        ``rule_registry`` and ``_register_builtin_rule_providers`` below) and
+        emitted in a deterministic order, decoupling this method from the set
+        of languages.
+        """
         self.generate_file_header()
-        self.generate_common_rules()
-        self.generate_cc_rules()
-        self.generate_proto_rules()
-        self.generate_resource_rules()
-        self.generate_java_scala_rules()
-        self.generate_thrift_rules()
-        self.generate_python_rules()
-        self.generate_go_rules()
-        self.generate_shell_rules()
-        self.generate_lex_yacc_rules()
-        self.generate_package_rules()
-        self.generate_version_rules()
-        self.generate_cuda_rules()
+        ctx = RuleContext(self)
+        for provider in rule_registry.rule_providers():
+            provider(ctx)
         return self.rules_buf
+
+
+def _register_builtin_rule_providers():
+    """Register the built-in rule groups with the rule registry.
+
+    M1 bridge: each provider delegates to the corresponding
+    ``_NinjaFileHeaderGenerator.generate_*_rules`` method (unchanged) via
+    ``ctx.generator``, preserving byte-identical output. The explicit order
+    keys reproduce the original ``generate()`` sequence. Later milestones
+    rewrite these providers to construct ``NinjaRule`` values directly against
+    ``ctx`` and move them next to their target modules.
+    """
+    reg = rule_registry.register_rule_provider
+    reg(lambda ctx: ctx.generator.generate_common_rules(),
+        order=rule_registry.ORDER_COMMON, name='common')
+    reg(lambda ctx: ctx.generator.generate_cc_rules(),
+        order=rule_registry.ORDER_CC, name='cc')
+    reg(lambda ctx: ctx.generator.generate_proto_rules(),
+        order=rule_registry.ORDER_PROTO, name='proto')
+    reg(lambda ctx: ctx.generator.generate_resource_rules(),
+        order=rule_registry.ORDER_RESOURCE, name='resource')
+    reg(lambda ctx: ctx.generator.generate_java_scala_rules(),
+        order=rule_registry.ORDER_JAVA_SCALA, name='java_scala')
+    reg(lambda ctx: ctx.generator.generate_thrift_rules(),
+        order=rule_registry.ORDER_THRIFT, name='thrift')
+    reg(lambda ctx: ctx.generator.generate_python_rules(),
+        order=rule_registry.ORDER_PYTHON, name='python')
+    reg(lambda ctx: ctx.generator.generate_go_rules(),
+        order=rule_registry.ORDER_GO, name='go')
+    reg(lambda ctx: ctx.generator.generate_shell_rules(),
+        order=rule_registry.ORDER_SHELL, name='shell')
+    reg(lambda ctx: ctx.generator.generate_lex_yacc_rules(),
+        order=rule_registry.ORDER_LEX_YACC, name='lex_yacc')
+    reg(lambda ctx: ctx.generator.generate_package_rules(),
+        order=rule_registry.ORDER_PACKAGE, name='package')
+    reg(lambda ctx: ctx.generator.generate_version_rules(),
+        order=rule_registry.ORDER_VERSION, name='version')
+    reg(lambda ctx: ctx.generator.generate_cuda_rules(),
+        order=rule_registry.ORDER_CUDA, name='cuda')
+
+
+_register_builtin_rule_providers()
 
 
 class NinjaFileGenerator:
