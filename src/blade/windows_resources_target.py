@@ -103,7 +103,10 @@ class WindowsResourcesTarget(Target):
 
         # Add the source directory so rc.exe can resolve #include "..." and
         # ICON / BITMAP references relative to the .rc file's location.
-        src_dir = os.path.join(self.blade.get_root_dir(), self.path)
+        # normpath drops a trailing separator: for a root-package BUILD
+        # self.path is '', so join() yields '<root>\' and the quoted form
+        # '/i"<root>\"' makes rc.exe see an escaped quote -> RC1107.
+        src_dir = os.path.normpath(os.path.join(self.blade.get_root_dir(), self.path))
         sdk_inc_flags.append('/i"%s"' % src_dir)
 
         inc_flags = ' '.join(sdk_inc_flags)
