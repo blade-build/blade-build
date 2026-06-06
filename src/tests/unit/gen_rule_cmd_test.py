@@ -58,6 +58,9 @@ class GenRuleWrapTest(unittest.TestCase):
         t._gen_kind = kind
         t._bash = '/usr/bin/bash'
         t.attr = {'outputs': ['build/o1', 'build/o2']}
+        # get_root_dir='' so os.path.join leaves the relative paths unchanged
+        t.blade = mock.Mock()
+        t.blade.get_root_dir.return_value = ''
         with mock.patch.object(grt.os, 'name', osname):
             return t._wrap_command(cmd)
 

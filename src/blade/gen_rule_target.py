@@ -161,7 +161,10 @@ class GenRuleTarget(Target):
         explicit per-output check in the given shell's syntax, using the known
         output paths (so no ``${out}`` separator / for-loop quirks).
         """
-        outs = self.attr['outputs']
+        # Absolute paths so the check is immune to any `cd` the user command did
+        # (the old scaffold added an explicit `cd <root>` for this).
+        root = self.blade.get_root_dir()
+        outs = [os.path.join(root, o) for o in self.attr['outputs']]
         if shell == 'cmd':
             return ' && '.join('if not exist "%s" exit /b 1' % o for o in outs)
         # sh/bash: forward slashes so backslashes aren't treated as escapes
