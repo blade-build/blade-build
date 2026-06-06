@@ -99,6 +99,46 @@ _CONFIG_TEMPLATE = {
         'fission': False,
         'dwp': False,
         'fission__help__': 'Whether to generate split dwarf debug info',
+        # PIE posture for executables. blade compiles every TU with -fPIC so a
+        # single object set can serve .a / .so / exe (compile once, link many),
+        # but never touches -pie / -no-pie -- the resulting binary's PIE-ness is
+        # whatever the toolchain's default link mode is. That varies (modern
+        # gcc defaults to -pie, older / --disable-default-pie toolchains do
+        # not), making the hardening posture non-reproducible. This knob pins
+        # it at the link step on Linux. macOS executables are PIE by default
+        # (and ld64 removed -no_pie) and MSVC has no PIC/PIE concept, so the
+        # knob is a no-op there. See issue #1258.
+        'pie': 'auto',
+        'pie__help__': 'PIE posture for executable links (Linux only): "auto" '
+            '(default; follows the toolchain default), "yes" (force -pie -- '
+            'guaranteed ASLR), "no" (force -no-pie). No effect on macOS/MSVC.',
+        # Pass -fno-semantic-interposition to the compiler so it can reference
+        # and inline the current TU's own global symbols directly under -fPIC,
+        # instead of routing every reference through the GOT to allow
+        # LD_PRELOAD-style replacement of *exe-internal* symbols. Recovers
+        # most of the -fPIE perf without forking the object set (we still need
+        # -fPIC for .so reuse). Naming mirrors the GCC flag and CPython's
+        # Py_HAVE_NO_SEMANTIC_INTERPOSITION.
+        # Default True (= apply the optimization). GCC's own ELF default is
+        # the conservative interposable behavior; this knob flips it.
+        # Only emitted for GCC -- Clang/Apple Clang already default to
+        # non-interposing AND fire `-Wunused-command-line-argument` for this
+        # flag on the C++ driver, which `-Werror` projects can't accept.
+        # MSVC has no concept.
+        # LD_PRELOAD'd jemalloc/tcmalloc/sanitizers/libfaketime are NOT
+        # affected -- they replace libc symbols, which are extern to your TU
+        # and always go through PLT. Set this knob to False only if your
+        # binary intentionally has app-internal symbols that must remain
+        # LD_PRELOAD-overridable (plugin frameworks like Frida, in-app
+        # function-patching tools). See issue #1258 and CPython's
+        # libpython3.so adoption rationale.
+        'no_semantic_interposition': True,
+        'no_semantic_interposition__help__': 'Whether to pass '
+            '-fno-semantic-interposition to GCC for the perf win '
+            '(no-op on Clang/MSVC). Default True. Set False only for '
+            'plugin/in-app hook frameworks that replace exe-internal '
+            'symbols; standard malloc replacements (jemalloc/tcmalloc) '
+            'are unaffected.',
         'hdr_dep_missing_severity': 'error',
         'hdr_dep_missing_severity__help__': 'The severity of the missing dependency on the '
             'library to which the header file belongs, can be %s' % constants.SEVERITIES,
@@ -831,10 +871,14 @@ def _validate_allow_undefined(value, where):
             _blade_config.error('%s contains invalid regex %r: %s' % (where, p, e))
 
 
+_PIE_VALUES = ('auto', 'yes', 'no')
+
+
 @config_rule
 def cc_config(append=None, **kwargs):
     """extra cc config, like extra cpp include path splited by space."""
     _check_kwarg_enum_value(kwargs, 'hdr_dep_missing_severity', constants.SEVERITIES)
+    _check_kwarg_enum_value(kwargs, 'pie', _PIE_VALUES)
     if 'extra_incs' in kwargs:
         extra_incs = kwargs['extra_incs']
         if isinstance(extra_incs, str) and ' ' in extra_incs:

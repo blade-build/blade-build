@@ -422,6 +422,23 @@ class _NinjaFileHeaderGenerator:
             cppflags.append('-Wno-error=coverage-mismatch')
             cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
 
+        # Recover -fPIE-level optimization under -fPIC: tell the compiler the
+        # current TU's symbol definitions aren't interposable, so it can
+        # reference/inline its own globals directly instead of going through
+        # the GOT. Default-on (cc_config.no_semantic_interposition defaults
+        # to True); users with plugin frameworks that LD_PRELOAD-override
+        # exe-internal symbols opt out by setting it to False.
+        #
+        # GCC-only: Clang (incl. Apple Clang) is already non-interposing by
+        # default, so emitting the flag is redundant -- and on the C++ driver
+        # specifically Clang fires `-Wunused-command-line-argument`, which
+        # `-Werror` projects then refuse to compile. filter_cc_flags can't
+        # screen this out because it probes in C, where Clang stays silent.
+        # See issue #1258.
+        if (cc_config['no_semantic_interposition']
+                and self.build_toolchain.cc_is('gcc')):
+            cppflags.append('-fno-semantic-interposition')
+
         cppflags = self.build_toolchain.filter_cc_flags(cppflags)
         return cppflags, linkflags
 
@@ -780,7 +797,21 @@ class _NinjaFileHeaderGenerator:
 
     def _generate_cc_link_rules(self, ld, linkflags):
         self._add_line('linkflags = %s' % ' '.join(config.get_item('cc_config', 'linkflags')))
-        self._add_line('intrinsic_linkflags = %s\n' % ' '.join(linkflags))
+        self._add_line('intrinsic_linkflags = %s' % ' '.join(linkflags))
+        # PIE posture for the executable link (see cc_config.pie, issue #1258).
+        # Linux only -- macOS executables are PIE by default and ld64 removed
+        # -no_pie in recent versions; MSVC has no PIC/PIE concept. The flag is
+        # emitted as its own ninja variable so it lands only on the `link`
+        # rule, not `solink` (a shared library + -pie is contradictory and
+        # GCC/ld will error or warn).
+        pie_flag = ''
+        if self.build_toolchain.target_os == 'linux':
+            pie = config.get_item('cc_config', 'pie')
+            if pie == 'yes':
+                pie_flag = '-pie'
+            elif pie == 'no':
+                pie_flag = '-no-pie'
+        self._add_line('pie_flag = %s\n' % pie_flag)
 
         link_jobs = config.get_item('link_config', 'link_jobs')
         if link_jobs:
@@ -796,9 +827,11 @@ class _NinjaFileHeaderGenerator:
         # Linking might have a lot of object files exceeding maximal length of a bash command line.
         # Using response file can resolve this problem.
         # Refer to: https://ninja-build.org/manual.html
+        # Note: `${pie_flag}` is on the executable `link` rule only (it's a
+        # no-op when cc_config.pie == 'auto', the project-wide default).
         link_args = '-o ${out} ${intrinsic_linkflags} ${linkflags} @${out}.rsp ${extra_linkflags}'
         self.generate_rule(name='link',
-                           command=ld + ' ' + link_args,
+                           command=ld + ' ${pie_flag} ' + link_args,
                            rspfile='${out}.rsp',
                            rspfile_content='${target_linkflags} ${in}',
                            description='LINK BINARY ${out}',

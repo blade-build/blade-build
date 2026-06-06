@@ -191,6 +191,46 @@ the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
 
 **Command Line Alternative:** `--dwp` parameter
 
+#### `pie`: str = `'auto'` | `'yes'` | `'no'`
+**Executable PIE posture (Linux only)**
+
+blade compiles every translation unit with `-fPIC` so a single object set can serve `.a`, `.so`, and executables (compile once, link many). But blade never touches `-pie` / `-no-pie`, so an executable's PIE-ness is whatever the toolchain links by default — `gcc` on modern distros defaults to `-pie`, older toolchains or those built with `--disable-default-pie` do not. The result: the hardening posture isn't reproducible across machines.
+
+This knob pins it at the link step:
+
+- `'auto'` (default) — unchanged; follow the toolchain default.
+- `'yes'` — append `-pie` to the executable `link` rule (guaranteed PIE, full-image ASLR).
+- `'no'` — append `-no-pie` (guaranteed `ET_EXEC` — for embedded / special-loader scenarios that need a non-PIE binary).
+
+Only affects the executable `link` rule; shared libraries (`solink`) are unaffected (a `.so` with `-pie` is contradictory and the linker would error). No effect on macOS (executables are PIE by default and `ld64 -no_pie` was removed in recent versions) or MSVC (no PIC/PIE concept).
+
+**Verify:** `file a.out` reports `pie executable` when `pie='yes'`, `ET_EXEC` when `pie='no'`.
+
+#### `no_semantic_interposition`: bool = True
+**Recover `-fPIE`-level optimization under `-fPIC` (GCC only)**
+
+Default `True` makes blade pass `-fno-semantic-interposition` to **GCC** under its always-on `-fPIC`. The compiler then references and inlines the current TU's own global symbols directly instead of routing every reference through the GOT — recovering most of the `-fPIE`-level perf without forking the object set (we still need `-fPIC` for `.so` reuse). GCC's [own docs](https://gcc.gnu.org/onlinedocs/gcc/Code-Gen-Options.html) recommend the flag for "serious users"; CPython adopted it for `libpython3.so` (the matching macro is `Py_HAVE_NO_SEMANTIC_INTERPOSITION` — same double negative as ours, on purpose, to mirror the GCC flag name); Fedora ships it as a package default.
+
+**Per-compiler effect:**
+- **GCC** — real win; the flag is emitted. Eliminates GOT indirection and re-enables cross-TU inlining for own globals.
+- **Clang / Apple Clang** — already non-interposing by default, so blade does **not** emit the flag. (Emitting it would trigger `-Wunused-command-line-argument` on the C++ driver, breaking `-Werror` projects.) Same posture you'd get on GCC with the flag — for free.
+- **MSVC** — no concept; nothing emitted.
+
+**What this does NOT affect** (so leave the default alone if you use any of these):
+
+- `LD_PRELOAD`ed malloc replacements: **jemalloc, tcmalloc, mimalloc, gperftools** — these replace libc's `malloc`/`free`/`calloc`/..., which are *extern* to your TU and always go through the PLT. Unaffected.
+- Sanitizers in preload mode (ASan, MSan, TSan, UBSan), `libfaketime`, `electric-fence`, `libeatmydata`, `dlsym(RTLD_NEXT, ...)` shims — same logic; targets are libc / runtime symbols, not your app's own symbols.
+
+**When to set `False`** (opt out of the optimization):
+
+- You use a plugin/injection framework (e.g. Frida, in-app function-patching tools) that overrides symbols **defined in your application binary itself**, and you need internal call sites within the same TU to see the override.
+- You ship a library that documents its own symbols as user-replaceable (rare — `libpython` does the opposite).
+- You are debugging a strange ABI issue and want GCC's conservative default back.
+
+If you're not doing any of the above, leave it at `True` — the population that genuinely needs `False` is small and self-aware.
+
+Behavior change note: this default differs from earlier blade (off by default, then on by default starting this release). Existing GCC-built binaries get a free perf boost; nothing else changes for the common case.
+
 - `hdr_dep_missing_severity` : string = 'warning' | ['info', 'warning', 'error']
 
   The severity of the missing dependency on the library to which the header file belongs.

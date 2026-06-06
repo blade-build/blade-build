@@ -213,6 +213,49 @@ global_config(
 
 **命令行等效：** 可使用 `--dwp` 参数开启。
 
+#### `pie`：str = `'auto'` | `'yes'` | `'no'`
+
+**可执行文件的 PIE 选项（仅 Linux）**
+
+blade 编译时统一加 `-fPIC`，让同一组 `.o` 能服务于 `.a`、`.so` 和可执行文件（一次编译、多次链接）。但 blade 从不主动加 `-pie` / `-no-pie`，所以最终可执行文件是否 PIE 取决于工具链默认值——新版 `gcc` 默认 `-pie`，老的或 `--disable-default-pie` 构建的则不是。结果是同一份代码在不同机器上产出的安全 posture 不一致。
+
+本选项在链接时把这件事钉死：
+
+- `'auto'`（默认）—— 不修改，跟随工具链默认值。
+- `'yes'` —— 在可执行的 `link` 规则里追加 `-pie`（强制 PIE，保证全镜像 ASLR）。
+- `'no'` —— 追加 `-no-pie`（强制 `ET_EXEC`，用于需要非 PIE 二进制的嵌入式/特殊加载器场景）。
+
+仅作用于可执行 `link` 规则；共享库（`solink`）不受影响（`.so` 加 `-pie` 是矛盾的，链接器会报错）。在 macOS（可执行默认 PIE，`ld64 -no_pie` 也在近年版本中移除）和 MSVC（没有 PIC/PIE 概念）上是 no-op。
+
+**验证方式：** `file a.out` 在 `pie='yes'` 时报 `pie executable`，在 `pie='no'` 时报 `ET_EXEC`。
+
+#### `no_semantic_interposition`：bool = True
+
+**在 `-fPIC` 下恢复 `-fPIE` 级别的优化（仅 GCC）**
+
+默认 `True` 让 blade 在 **GCC** 上把 `-fno-semantic-interposition` 加到编译命令。配合 blade 永远启用的 `-fPIC`，编译器能直接引用/内联当前 TU 内的全局符号，避免走 GOT 间接寻址——把 `-fPIE` 级别的性能拿回来，同时保留 `-fPIC` 的"可以进 `.so`"特性。命名沿用 GCC 自家的 flag 名（含一层双重否定，故意保留以和 GCC 一致；CPython 的对应宏 `Py_HAVE_NO_SEMANTIC_INTERPOSITION` 也是相同写法）。[GCC 文档](https://gcc.gnu.org/onlinedocs/gcc/Code-Gen-Options.html) 推荐"serious users"开启；CPython 给 `libpython3.so` 默认开；Fedora 也作为打包默认。
+
+**各编译器的实际效果：**
+
+- **GCC** —— 真实收益；flag 被加入命令。消除自身全局符号的 GOT 间接，恢复跨 TU 内联。
+- **Clang / Apple Clang** —— 自身已默认不可插桩，所以 blade **不会**主动加这个 flag。（如果加，C++ driver 会报 `-Wunused-command-line-argument`，开 `-Werror` 的项目编不过。）等同于 GCC 加了 flag 之后的 posture，是免费的。
+- **MSVC** —— 没有这个概念；什么都不加。
+
+**不受影响的场景**（用了下列任何一种都可放心保持默认）：
+
+- `LD_PRELOAD` 风格的 malloc 替换：**jemalloc、tcmalloc、mimalloc、gperftools** —— 它们替换的是 libc 的 `malloc`/`free`/`calloc`/...，这些符号是 *extern* 到你的 TU 之外的，永远走 PLT。**不受影响**。
+- preload 模式下的 sanitizers (ASan/MSan/TSan/UBSan)、`libfaketime`、`electric-fence`、`libeatmydata`、`dlsym(RTLD_NEXT, ...)` 风格的 shim —— 同理，目标都是 libc / runtime 符号，不是应用自身符号。
+
+**什么时候应该设 `False`**（关掉本项优化）：
+
+- 你的项目用了插件/注入框架（如 Frida、应用内 function patching 工具），需要替换**你应用自己二进制里定义的符号**，且需要同 TU 内的调用点也看到这些替换。
+- 你做的是一个文档化了"用户可替换符号"的库（罕见——`libpython` 反而是反过来用本优化的典型）。
+- 你在调试某种诡异的 ABI 问题，想要 GCC 的保守默认行为回来。
+
+如果不属于以上任意一类，保持默认 `True` 即可——真正需要 `False` 的人群很小，并且这类项目通常本来就在精细控制编译选项，会自己注意到。
+
+行为变更说明：此默认值与早期版本的 blade 不同（之前是关，本 release 起默认开）。GCC 用户的现有二进制等于免费拿到性能提升；常见场景下其他什么都没变。
+
 #### `hdr_dep_missing_severity`：string = 'warning'
 
 **头文件所属库依赖缺失的严重性**
