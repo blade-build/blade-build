@@ -253,6 +253,9 @@ class GenRuleTarget(Target):
         vars + OS-native separators (correct for cmd.exe / POSIX sh).
         """
         cmd = self.attr['cmd']
+        # bash treats '\' as an escape, so paths must use '/' for the bash kind.
+        # cmd.exe and POSIX sh both accept '/' in file-path args, so no
+        # conversion is needed for the cmd/raw kinds.
         posix = self._gen_kind == 'bash'
 
         def _p(path):
