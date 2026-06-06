@@ -416,6 +416,13 @@ class Target:
         if key not in self.target_database:
             libpath = name if os.path.isabs(name) else None
             lib = SystemLibrary(name, key=key, libpath=libpath)
+            # For an absolute-path lib (the synthetic '#:abslib_<hash>'), the
+            # check's symbol provider cannot be found via `cc -print-file-name`
+            # (the alias is a hash). The path is known here, so enumerate its
+            # symbols now and stash the cache on the SystemLibrary; the check
+            # reads `dep.syms_cache` instead of resolving the alias.
+            if libpath and os.path.exists(libpath):
+                lib.syms_cache = self.blade.ensure_external_lib_syms(libpath)
             self.blade.register_target(lib)
 
     def _add_location_reference_target(self, m):
@@ -795,6 +802,12 @@ class Target:
 
 
 class SystemLibrary(Target):
+    # Path to a pre-generated `.syms` cache when this is an absolute-path lib
+    # (the synthetic '#:abslib_<hash>'); consumed by the cc_check_undefined
+    # static check. None for alias-based system libs ('#m', '#pthread', ...),
+    # which resolve their cache via BuildManager.get_system_symbol_cache.
+    syms_cache = None
+
     def __init__(self, name, key=None, libpath=None):
         super().__init__(
                 name=name,

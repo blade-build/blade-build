@@ -1033,11 +1033,14 @@ class CcTarget(Target):
         for key in self.expanded_deps:
             dep = targets[key]
             if dep.path == '#':
-                # System library -- e.g. `#pthread`, `#m`. Its symbols come
-                # from the pre-generated cache; if the cache was never made
-                # (resolution failed) skip silently and let the per-target
-                # diagnostic surface any genuine miss.
-                cache = self.blade.get_system_symbol_cache(dep.name)
+                # System library -- e.g. `#pthread`, `#m`, or an absolute-path
+                # lib ('#:abslib_<hash>'). Absolute-path libs carry their cache
+                # on the SystemLibrary (enumerated from the known path); alias
+                # libs resolve theirs via the pre-generated cache map. If no
+                # cache exists (resolution failed) skip silently and let the
+                # per-target diagnostic surface any genuine miss.
+                cache = (getattr(dep, 'syms_cache', None)
+                         or self.blade.get_system_symbol_cache(dep.name))
                 if cache:
                     system_caches.append(cache)
                 continue

@@ -228,6 +228,18 @@ class Blade:
                 if ':' in dep_key:
                     path, name = dep_key.split(':', 1)
                     if path == '#':
+                        # Absolute-path system libs (the synthetic
+                        # '#:abslib_<hash>' for an absolute lib path) carry their
+                        # real path in `libpath` and are enumerated eagerly at
+                        # registration (Target._add_system_library ->
+                        # ensure_external_lib_syms). Skip them here: their alias
+                        # is a hash that `cc -print-file-name` cannot resolve,
+                        # which would otherwise log a spurious "could not
+                        # resolve" warning.
+                        lib = self.__build_targets.get(dep_key)
+                        libpath = getattr(lib, 'libpath', None) if lib else None
+                        if libpath and os.path.isabs(libpath):
+                            continue
                         aliases.add(name)
 
         resolved = {}
@@ -251,6 +263,38 @@ class Blade:
         if it was not pre-generated (unknown alias or resolution failed)."""
         caches = getattr(self, '_system_symbol_caches', None) or {}
         return caches.get(alias)
+
+    def ensure_external_lib_syms(self, libpath):
+        """Generate (once) and return the ``.syms`` cache for an external,
+        absolute-path library -- e.g. an absolute lib passed via deps/linkflags
+        (the synthetic ``#:abslib_<hash>`` system library) or a proto/thrift
+        config lib. These cannot be located by ``cc -print-file-name`` (the
+        alias is a hash, not a lib name), but their path is already known, so we
+        enumerate directly from it. The result is cached on the SystemLibrary
+        object (see Target._add_system_library), so the check looks it up by
+        object rather than by the unresolvable alias name.
+
+        Returns None when check_undefined is disabled, the path is missing, or
+        enumeration fails."""
+        from blade import config  # pylint: disable=import-outside-toplevel
+        if not config.get_item('cc_library_config', 'check_undefined'):
+            return None
+        cache = getattr(self, '_external_lib_syms_cache', None)
+        if cache is None:
+            cache = self._external_lib_syms_cache = {}
+        if libpath in cache:
+            return cache[libpath]
+        from blade import system_symbols  # pylint: disable=import-outside-toplevel
+        cache_dir = os.path.join(self.get_build_dir(), '.cache', 'system-symbols')
+        result = None
+        try:
+            result = system_symbols.ensure_cache(
+                self.get_build_toolchain(), libpath, cache_dir)
+        except Exception as e:  # pylint: disable=broad-except
+            console.warning(
+                'system_symbols: failed to enumerate "%s": %s' % (libpath, e))
+        cache[libpath] = result
+        return result
 
     def get_default_linked_system_caches(self):
         """Return the list of cache file paths for the toolchain's default-
