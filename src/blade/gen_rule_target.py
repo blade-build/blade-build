@@ -244,23 +244,41 @@ class GenRuleTarget(Target):
         return True
 
     def _expand_command(self):
-        """Expand vars and location references in command"""
+        """Expand vars and location references in command.
+
+        For the bash kind, all paths are emitted with forward slashes (Windows
+        backslashes are escapes in bash) -- and `$SRCS`/`$OUTS`/`$FIRST_*` are
+        substituted as concrete paths rather than ninja `${in}`/`${out}`, which
+        ninja would render with backslashes on Windows. cmd/raw keep the ninja
+        vars + OS-native separators (correct for cmd.exe / POSIX sh).
+        """
         cmd = self.attr['cmd']
+        posix = self._gen_kind == 'bash'
+
+        def _p(path):
+            return path.replace('\\', '/') if posix else path
+
+        outputs = self.attr['outputs']
+        inputs = self._expand_srcs()
         # Indexed/named refs first: a bare `$OUTS` replace below would otherwise
         # turn `$OUTS[0]` into `${out}[0]`.
         cmd = _OUTS_INDEX_RE.sub(
-            lambda m: self._index_ref(m.group(1), self.attr['outs'],
-                                      self.attr['outputs'], 'outs'), cmd)
-        inputs = self._expand_srcs()
+            lambda m: _p(self._index_ref(m.group(1), self.attr['outs'], outputs, 'outs')), cmd)
         cmd = _SRCS_INDEX_RE.sub(
-            lambda m: self._index_ref(m.group(1), self.srcs, inputs, 'srcs'), cmd)
-        cmd = cmd.replace('$SRCS', '${in}')
-        cmd = cmd.replace('$OUTS', '${out}')
-        cmd = cmd.replace('$FIRST_SRC', '${_in_1}')
-        cmd = cmd.replace('$FIRST_OUT', '${_out_1}')
-        cmd = cmd.replace('$SRC_DIR', self.path)
-        cmd = cmd.replace('$OUT_DIR', os.path.join(self.build_dir, self.path))
-        cmd = cmd.replace('$BUILD_DIR', self.build_dir)
+            lambda m: _p(self._index_ref(m.group(1), self.srcs, inputs, 'srcs')), cmd)
+        if posix:
+            cmd = cmd.replace('$SRCS', ' '.join(_p(i) for i in inputs))
+            cmd = cmd.replace('$OUTS', ' '.join(_p(o) for o in outputs))
+            cmd = cmd.replace('$FIRST_SRC', _p(inputs[0]) if inputs else '')
+            cmd = cmd.replace('$FIRST_OUT', _p(outputs[0]) if outputs else '')
+        else:
+            cmd = cmd.replace('$SRCS', '${in}')
+            cmd = cmd.replace('$OUTS', '${out}')
+            cmd = cmd.replace('$FIRST_SRC', '${_in_1}')
+            cmd = cmd.replace('$FIRST_OUT', '${_out_1}')
+        cmd = cmd.replace('$SRC_DIR', _p(self.path))
+        cmd = cmd.replace('$OUT_DIR', _p(os.path.join(self.build_dir, self.path)))
+        cmd = cmd.replace('$BUILD_DIR', _p(self.build_dir))
         locations = self.attr['locations']
         if locations:
             targets = self.blade.get_build_targets()
@@ -271,13 +289,13 @@ class GenRuleTarget(Target):
                     if not files:
                         self.error('Invalid locations reference %s' % ':'.join(key))
                         continue
-                    locations_paths.append(' '.join(files))
+                    locations_paths.append(' '.join(_p(f) for f in files))
                     continue
                 path = targets[key]._get_target_file(label)
                 if not path:
                     self.error('Invalid location reference {} {}'.format(':'.join(key), label))
                     continue
-                locations_paths.append(path)
+                locations_paths.append(_p(path))
             cmd = cmd % tuple(locations_paths)
         return cmd
 

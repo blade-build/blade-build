@@ -98,17 +98,19 @@ class GenRuleWrapTest(unittest.TestCase):
 class GenRuleExpandTest(unittest.TestCase):
     """$OUTS[i|name] / $SRCS[i|name] indexed/named references."""
 
-    def _target(self, cmd):
+    def _target(self, cmd, kind='raw', outputs=None, inputs=None):
         t = GenRuleTarget.__new__(GenRuleTarget)
         t.error = mock.Mock()
+        t._gen_kind = kind
         t.path = 'pkg'
         t.build_dir = 'bd'
         t.srcs = ['in.y']
-        t._expand_srcs = lambda: ['pkg/in.y']
+        t._expand_srcs = lambda: (inputs if inputs is not None else ['pkg/in.y'])
         t.attr = {
             'cmd': cmd,
             'outs': ['parser.cc', 'parser.h'],
-            'outputs': ['bd/pkg/parser.cc', 'bd/pkg/parser.h'],
+            'outputs': outputs if outputs is not None
+                       else ['bd/pkg/parser.cc', 'bd/pkg/parser.h'],
             'locations': [],
         }
         return t
@@ -140,6 +142,18 @@ class GenRuleExpandTest(unittest.TestCase):
     def test_index_does_not_clobber_bare_outs(self):
         t = self._target('$OUTS[0] then $OUTS')
         self.assertEqual(t._expand_command(), 'bd/pkg/parser.cc then ${out}')
+
+    def test_bash_kind_forward_slashes_and_concrete_paths(self):
+        # bash kind: backslash -> '/', and $OUTS/$SRCS are concrete (not ${out})
+        t = self._target(
+            'gen $OUTS[0] all $OUTS in $SRCS',
+            kind='bash',
+            outputs=[r'bd\pkg\parser.cc', r'bd\pkg\parser.h'],
+            inputs=[r'pkg\in.y'])
+        out = t._expand_command()
+        self.assertEqual(out, 'gen bd/pkg/parser.cc all bd/pkg/parser.cc bd/pkg/parser.h in pkg/in.y')
+        self.assertNotIn('\\', out)
+        self.assertNotIn('${out}', out)
 
 
 if __name__ == '__main__':
