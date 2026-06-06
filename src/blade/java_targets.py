@@ -19,12 +19,15 @@ Implement java_library, java_binary, java_test and java_fat_library.
 import collections
 import os
 import re
+import textwrap
 
 from blade import build_manager
 from blade import build_rules
 from blade import config
 from blade import maven  # lgtm[py/cyclic-import]
+from blade import rule_registry
 from blade.blade_types import StrOrListOpt
+from blade.ninja_rule import NinjaRule
 from blade.target import Target, LOCATION_RE  # lgtm[py/cyclic-import]
 from blade.util import var_to_list, var_to_list_or_none
 from blade.version import LooseVersion
@@ -1084,3 +1087,170 @@ build_rules.register_function(java_binary)
 build_rules.register_function(java_library)
 build_rules.register_function(java_test)
 build_rules.register_function(java_fat_library)
+
+
+# --- ninja rule providers (java + scala) ----------------------------------
+# Registered as a single 'java_scala' group (see rule_registry). The scala
+# rules live here too because they share get_java_command / jacocoagent and
+# were historically emitted together by backend.generate_java_scala_rules.
+
+
+def _get_java_command(java_config, cmd):
+    java_home = java_config['java_home']
+    if java_home:
+        return os.path.join(java_home, 'bin', cmd)
+    return cmd
+
+
+def _get_jacocoagent():
+    jacoco_home = config.get_item('java_test_config', 'jacoco_home')
+    if jacoco_home:
+        return os.path.join(jacoco_home, 'lib', 'jacocoagent.jar')
+    return ''
+
+
+def _generate_javac_rules(ctx, java_config):
+    javac = _get_java_command(java_config, 'javac')
+    jar = _get_java_command(java_config, 'jar')
+    cmd = [javac]
+    version = java_config['version']
+    source_version = java_config.get('source_version', version)
+    target_version = java_config.get('target_version', version)
+    if source_version:
+        cmd.append('-source %s' % source_version)
+    if target_version:
+        cmd.append('-target %s' % target_version)
+    cmd += [
+        '-encoding ${source_encoding}',
+        '-d ${classes_dir}',
+        '-classpath ${classpath}',
+        '${javacflags}',
+        '${in}',
+    ]
+    ctx.add_line(textwrap.dedent('''\
+            source_encoding = UTF-8
+            classpath = .
+            javacflags =
+            '''))
+    jarflags = 'cf' + config.get_item('java_config', 'jar_compression_level')
+    if os.name == 'nt':
+        javac_opts = ''
+        if source_version:
+            javac_opts += f'-source {source_version} '
+        if target_version:
+            javac_opts += f'-target {target_version} '
+        command = ctx.builtin_command('javac_compile',
+                                      f'${{classes_dir}} ${{out}} ${{source_encoding}} '
+                                      f'${{classpath}} {javac_opts}${{javacflags}} -- ${{in}}')
+    else:
+        command = ('rm -fr ${classes_dir} && mkdir -p ${classes_dir} && '
+                   '%s && sleep 0.01 && '
+                   '%s %s ${out} -C ${classes_dir} .' % (
+                       ' '.join(cmd), jar, jarflags))
+    ctx.emit_rule(NinjaRule(name='javac', command=command,
+                            description='JAVAC ${out}', restat=True))
+
+
+def _generate_java_resource_rules(ctx):
+    ctx.emit_rule(NinjaRule(
+        name='javaresource',
+        command=ctx.builtin_command('java_resource'),
+        description='JAVA RESOURCE ${resources_dir}'))
+
+
+def _generate_java_jar_rules(ctx, java_config):
+    jar = _get_java_command(java_config, 'jar')
+    level = config.get_item('java_config', 'jar_compression_level')
+    args = f'{jar} --compression_level={level} ${{out}} ${{in}}'
+    ctx.emit_rule(NinjaRule(
+        name='javajar',
+        command=ctx.builtin_command('java_jar', args),
+        description='JAVA JAR ${out}', restat=True))
+
+
+def _generate_java_test_rules(ctx):
+    jacocoagent = _get_jacocoagent()
+    args = ('--script=${out} --main_class=${mainclass} --jacocoagent=%s '
+            '--packages_under_test=${packages_under_test} ${in}') % jacocoagent
+    ctx.emit_rule(NinjaRule(
+        name='javatest',
+        command=ctx.builtin_command('java_test', args),
+        description='JAVA TEST ${out}', restat=True))
+
+
+def _generate_fatjar_rules(ctx, java_config):
+    conflict_severity = java_config.get('fat_jar_conflict_severity', 'warning')
+    compression_level = java_config.get('fat_jar_compression_level')
+    args = f'--output=${{out}} --compression_level={compression_level} --conflict_severity={conflict_severity} ${{in}}'
+    ctx.emit_rule(NinjaRule(
+        name='fatjar',
+        command=ctx.builtin_command('java_fatjar', args),
+        description='FAT JAR ${out}'))
+
+
+def _generate_java_binary_rules(ctx):
+    bootjar = config.get_item('java_binary_config', 'one_jar_boot_jar')
+    args = '--onejar=${out} --bootjar=%s --main_class=${mainclass} ${in}' % bootjar
+    ctx.emit_rule(NinjaRule(
+        name='onejar',
+        command=ctx.builtin_command('java_onejar', args),
+        description='ONE JAR ${out}'))
+    ctx.emit_rule(NinjaRule(
+        name='javabinary',
+        command=ctx.builtin_command('java_binary'),
+        description='JAVA BINARY ${out}'))
+
+
+def _generate_scalac_rule(ctx, java_config):
+    scalac = 'scalac'
+    scala_home = config.get_item('scala_config', 'scala_home')
+    if scala_home:
+        scalac = os.path.join(scala_home, 'bin', scalac)
+    java = _get_java_command(java_config, 'java')
+    ctx.add_line(textwrap.dedent('''\
+            scalacflags = -nowarn
+            '''))
+    cmd = [
+        'JAVACMD=%s' % java,
+        scalac,
+        '-encoding UTF8',
+        '-d ${out}',
+        '-classpath ${classpath}',
+        '${scalacflags}',
+        '${in}'
+    ]
+    ctx.emit_rule(NinjaRule(
+        name='scalac',
+        command=' '.join(cmd),
+        description='SCALAC ${out}'))
+
+
+def _generate_scalatest_rule(ctx, java_config):
+    java = _get_java_command(java_config, 'java')
+    scala = 'scala'
+    scala_home = config.get_item('scala_config', 'scala_home')
+    if scala_home:
+        scala = os.path.join(scala_home, 'bin', scala)
+    jacocoagent = _get_jacocoagent()
+    args = ('--java=%s --scala=%s --jacocoagent=%s --packages_under_test=${packages_under_test} '
+            '--script=${out} ${in}') % (java, scala, jacocoagent)
+    ctx.emit_rule(NinjaRule(
+        name='scalatest',
+        command=ctx.builtin_command('scala_test', args),
+        description='SCALA TEST ${out}'))
+
+
+def _generate_java_scala_rules(ctx):
+    java_config = ctx.config_section('java_config')
+    _generate_javac_rules(ctx, java_config)
+    _generate_java_resource_rules(ctx)
+    _generate_java_jar_rules(ctx, java_config)
+    _generate_java_test_rules(ctx)
+    _generate_fatjar_rules(ctx, java_config)
+    _generate_java_binary_rules(ctx)
+    _generate_scalac_rule(ctx, java_config)
+    _generate_scalatest_rule(ctx, java_config)
+
+
+rule_registry.register_rule_provider(
+    _generate_java_scala_rules, order=rule_registry.ORDER_JAVA_SCALA, name='java_scala')
