@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Tencent Inc.
+# Copyright (c) 2026 The Blade Authors.
 # All rights reserved.
 #
 # Unit tests for blade.scala_targets.ScalaTest._apply_scalatest_libs_from_config.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Tencent Inc.
+# Copyright (c) 2026 The Blade Authors.
 # All rights reserved.
 #
 # Unit tests for load_build_files._is_load_excluded_dir (issue #518).

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Tencent Inc.
+# Copyright (c) 2025 The Blade Authors.
 # All rights reserved.
 #
 # Author: Feng Chen <phongchen@tencent.com>

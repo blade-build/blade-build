@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Tencent Inc.
+# Copyright (c) 2026 The Blade Authors.
 # All rights reserved.
 #
 # Unit tests for cc_config.pie and cc_config.no_semantic_interposition.

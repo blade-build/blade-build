@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Tencent Inc.
+# Copyright (c) 2026 The Blade Authors.
 # All rights reserved.
 
 """
