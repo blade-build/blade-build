@@ -433,6 +433,19 @@ class CcRuleGenerator:
         optimize_flags = windows_config['optimize']
         optimize = ' '.join(optimize_flags.get(self.options.profile, []))
 
+        # Runtime library (CRT) tracks the build profile unless the user pinned
+        # one in cc_config: debug -> /MDd, release -> /MD. default_linked_libs
+        # reads the actually-selected variant back from /DEFAULTLIB directives.
+        crt_flags = ('/MD', '/MDd', '/MT', '/MTd', '/LD', '/LDd')
+        if not any(f in crt_flags for f in cppflags + cflags + cxxflags):
+            cppflags = ['/MDd' if self.options.profile == 'debug' else '/MD'] + cppflags
+
+        # Debug info (previously unwired on MSVC, so -p debug produced no PDB).
+        # /Z7 embeds CodeView in each .obj -- parallel-safe under ninja, unlike
+        # the PDB-server /Zi; the matching linker /DEBUG is added in the link rule.
+        global_config = config.get_section('global_config')
+        cppflags = cppflags + windows_config['debug_info_levels'][global_config['debug_info_level']]
+
         # The Python stderr-tee wrapper captures /showIncludes output and tees
         # it to both stderr (for Ninja's deps=msvc) and the inclusion stack
         # file (for inclusion checking).
@@ -511,6 +524,16 @@ class CcRuleGenerator:
         # Combine windows_config linkflags with filtered cc_config linkflags
         linkflags = (windows_config['linkflags'] +
                      self.build_toolchain.filter_cc_flags(cc_config['linkflags']))
+
+        # /DEBUG emits a PDB from the /Z7 CodeView in the objects (matches the
+        # compiler debug-info level). For release, also dead-strip and fold
+        # (/OPT:REF,/OPT:ICF) and disable incremental linking that /DEBUG would
+        # otherwise turn on, keeping release binaries lean and deterministic.
+        global_config = config.get_section('global_config')
+        if global_config['debug_info_level'] != 'no':
+            linkflags = linkflags + ['/DEBUG']
+        if self.options.profile == 'release':
+            linkflags = linkflags + ['/OPT:REF', '/OPT:ICF', '/INCREMENTAL:NO']
 
         # System library paths (MSVC + Windows SDK) discovered by the toolchain
         lib_paths = self.build_toolchain.get_system_lib_paths()

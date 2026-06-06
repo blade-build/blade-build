@@ -948,18 +948,27 @@ def _parse_coff(data):
     """Parse a COFF object file's symbol table (pure stdlib `struct`).
 
     Returns ``(symbols, section_selection)`` as consumed by
-    :func:`_select_dll_exports`. Raises ``NotImplementedError`` for the
-    "bigobj" variant (used only by objects with > 65279 sections), which the
-    caller should surface as an actionable error.
+    :func:`_select_dll_exports`. Handles both the regular ``IMAGE_FILE_HEADER``
+    layout and the ``ANON_OBJECT_HEADER_BIGOBJ`` variant emitted by ``cl
+    /bigobj`` (which uses a different header, 20-byte ``IMAGE_SYMBOL_EX``
+    records with a 32-bit section number, and a wider string-table base).
     """
     import struct  # pylint: disable=import-outside-toplevel
     machine, = struct.unpack_from('<H', data, 0)
     sig2, = struct.unpack_from('<H', data, 2)
     if machine == 0 and sig2 == 0xFFFF:
-        raise NotImplementedError('bigobj COFF object is not supported')
-    # IMAGE_FILE_HEADER: skip to symbol-table pointer / count.
-    _num_sections, _ts, sym_off, num_syms = struct.unpack_from('<HIII', data, 2)
-    strtab_off = sym_off + num_syms * 18
+        # ANON_OBJECT_HEADER_BIGOBJ: Sig1,Sig2,Version,Machine,TimeDateStamp,
+        # ClassID[16],SizeOfData,Flags,MetaDataSize,MetaDataOffset, then
+        # NumberOfSections(@44), PointerToSymbolTable(@48), NumberOfSymbols(@52).
+        sym_off, num_syms = struct.unpack_from('<II', data, 48)
+        rec_size = 20          # IMAGE_SYMBOL_EX
+        sym_fmt = '<IiHBB'     # value, secnum(LONG), type, sclass, naux
+    else:
+        # IMAGE_FILE_HEADER: skip to symbol-table pointer / count.
+        _num_sections, _ts, sym_off, num_syms = struct.unpack_from('<HIII', data, 2)
+        rec_size = 18          # IMAGE_SYMBOL
+        sym_fmt = '<IhHBB'     # value, secnum(SHORT), type, sclass, naux
+    strtab_off = sym_off + num_syms * rec_size
 
     def read_name(name8):
         if name8[:4] == b'\x00\x00\x00\x00':
@@ -972,14 +981,16 @@ def _parse_coff(data):
     section_selection = {}
     i = 0
     while i < num_syms:
-        rec = sym_off + i * 18
+        rec = sym_off + i * rec_size
         name8 = data[rec:rec + 8]
-        value, secnum, ctype, sclass, naux = struct.unpack_from('<IhHBB', data, rec + 8)
+        value, secnum, ctype, sclass, naux = struct.unpack_from(sym_fmt, data, rec + 8)
         # A section-definition symbol (Static, type NULL, value 0, one aux)
-        # carries the COMDAT selection of its section in that aux record.
+        # carries the COMDAT selection of its section in that aux record. The
+        # Selection byte sits at offset 14 of the aux record in both the regular
+        # and the bigobj (IMAGE_AUX_SYMBOL_EX) layouts.
         if (sclass == _IMAGE_SYM_CLASS_STATIC and ctype == 0 and value == 0
                 and naux >= 1 and secnum > 0):
-            selection, = struct.unpack_from('<B', data, rec + 18 + 14)
+            selection, = struct.unpack_from('<B', data, rec + rec_size + 14)
             section_selection[secnum] = selection
         elif sclass == _IMAGE_SYM_CLASS_EXTERNAL:
             symbols.append((read_name(name8), sclass, secnum, ctype))

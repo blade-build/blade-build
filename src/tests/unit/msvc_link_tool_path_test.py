@@ -46,9 +46,12 @@ class MsvcLinkToolPathTest(unittest.TestCase):
         gen._builtin_command = lambda builder, args='': 'cmd'  # for cc_windef
         gen._add_line = mock.Mock()
         gen.generate_rule = mock.Mock()
+        gen.options = mock.Mock()
+        gen.options.profile = 'release'
         with mock.patch('blade.cc_rule_support.config') as cfg:
             cfg.get_section.side_effect = lambda n: {
-                'msvc_config': {'linkflags': []}, 'cc_config': {'linkflags': []}}[n]
+                'msvc_config': {'linkflags': []}, 'cc_config': {'linkflags': []},
+                'global_config': {'debug_info_level': 'mid'}}[n]
             gen._generate_windows_link_rules()
         return {c.kwargs['name']: c.kwargs['command']
                 for c in gen.generate_rule.call_args_list}

@@ -380,20 +380,32 @@ _CONFIG_TEMPLATE = {
         'windows_sdk__help__': 'Windows SDK version (auto, 10.0, etc.)',
         'visual_studio': 'auto',
         'visual_studio__help__': 'Visual Studio edition (auto, Community, Professional, Enterprise)',
-        'cppflags': ['/MD', '/EHsc'],
+        # /utf-8: read sources (and emit narrow literals) as UTF-8 instead of the
+        #   system ANSI codepage -- avoids C4819 / miscompiled string literals.
+        # The CRT flavor (/MD vs /MDd) is added per build profile in
+        #   cc_rule_support, not hard-coded here.
+        'cppflags': ['/utf-8'],
         'cflags': [],
-        'cxxflags': ['/std:c++17'],
+        # /EHsc: C++ exceptions (meaningless for C, so kept out of cppflags).
+        # /Zc:__cplusplus: report the real __cplusplus value (otherwise stuck at
+        #   199711L regardless of /std, breaking feature checks).
+        # /bigobj: raise the COFF section limit -- avoids C1128 on heavily
+        #   templated C++ (blade's COFF parser understands bigobj objects).
+        'cxxflags': ['/EHsc', '/Zc:__cplusplus', '/bigobj'],
         'linkflags': ['/SUBSYSTEM:CONSOLE'],
         'warnings': ['/W3'],
         'optimize': {
             'debug': ['/Od'],
             'release': ['/O2'],
         },
+        # Compiler debug-info flags per `global_config.debug_info_level`. /Z7
+        # embeds CodeView in each .obj (parallel-safe under ninja, unlike the
+        # PDB-server /Zi); the matching linker /DEBUG is added by the link rule.
         'debug_info_levels': {
             'no': [],
-            'low': ['/Zi'],
-            'mid': ['/Zi', '/DEBUG'],
-            'high': ['/Zi', '/DEBUG', '/RTC1'],
+            'low': ['/Z7'],
+            'mid': ['/Z7'],
+            'high': ['/Z7'],
         },
     },
 

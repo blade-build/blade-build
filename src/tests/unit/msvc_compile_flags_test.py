@@ -41,9 +41,11 @@ class MsvcCompileFlagsTest(unittest.TestCase):
         gen = self._make_gen()
         section = {
             'msvc_config': {'cppflags': [], 'cflags': [], 'cxxflags': [],
-                            'optimize': {'release': ['/O2']}},
+                            'optimize': {'release': ['/O2']},
+                            'debug_info_levels': {'mid': []}},
             'cc_config': {'cflags': [], 'cxxflags': [], 'cppflags': [],
                           'extra_incs': []},
+            'global_config': {'debug_info_level': 'mid'},
         }
         with mock.patch('blade.cc_rule_support.config') as cfg:
             cfg.get_section.side_effect = lambda n: section[n]
