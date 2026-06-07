@@ -38,6 +38,7 @@ from query_target_test import TestQuery
 from resource_library_test import TestResourceLibrary
 from target_pattern_test import TargetPatternTest
 from linker_scripts_test import LinkerScriptsTest
+from build_from_subdir_test import BuildFromSubdirTest
 
 from html_test_runner import HTMLTestRunner
 from test_target_test import TestTestRunner
@@ -70,6 +71,7 @@ def _main():
         unittest.defaultTestLoader.loadTestsFromTestCase(TestTestRunner),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestPrebuildCcLibrary),
         unittest.defaultTestLoader.loadTestsFromTestCase(LinkerScriptsTest),
+        unittest.defaultTestLoader.loadTestsFromTestCase(BuildFromSubdirTest),
         ])
 
     generate_html = len(sys.argv) > 1 and sys.argv[1].startswith('html')
