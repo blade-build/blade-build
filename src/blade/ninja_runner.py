@@ -114,6 +114,8 @@ def _show_progress(process, file_reader):
                     eta = (total - finished) * elapsed / finished if finished else None
                     window = () if quiet else recent
                     console.render_build_panel(finished, running, total, window, eta)
+                elif line == 'ninja: no work to do.':
+                    pass
                 elif line:
                     console.output(line)
             elif process.returncode is not None:
