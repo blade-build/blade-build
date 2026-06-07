@@ -128,4 +128,6 @@ their own `description`.
   summary appear.
 - **Color off** (`_color_enabled` false): the bar uses glyph shades and
   descriptions are plain.
+- **Quiet** (`is_quiet()`): the recent-completions window is dropped — only the
+  aggregate bar is shown, no per-step descriptions.
 - **Verbose**: no panel at all; ninja owns the terminal.

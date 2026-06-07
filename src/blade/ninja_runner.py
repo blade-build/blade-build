@@ -95,6 +95,8 @@ def _show_progress(process, file_reader):
     """
     progress_re = re.compile(r'^\[(\d+)/(\d+)\]\((\d+)\)\s+(.*)$')
     recent = collections.deque(maxlen=console._PANEL_MAX_RECENT)
+    # In quiet mode show only the aggregate bar, not the per-step descriptions.
+    quiet = console.is_quiet()
     total = finished = 0
     start = time.time()
     try:
@@ -110,7 +112,8 @@ def _show_progress(process, file_reader):
                     recent.append(m.group(4))
                     elapsed = time.time() - start
                     eta = (total - finished) * elapsed / finished if finished else None
-                    console.render_build_panel(finished, running, total, recent, eta)
+                    window = () if quiet else recent
+                    console.render_build_panel(finished, running, total, window, eta)
                 elif line:
                     console.output(line)
             elif process.returncode is not None:

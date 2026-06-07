@@ -107,4 +107,5 @@ rem_w  = width - done_w - run_w
 - **非 TTY / 重定向**(`_cursor_control` 为假):`render_build_panel` 直接空操作——
   不往管道/日志里漏控制码;只出现永久行 + 汇总。
 - **颜色关闭**(`_color_enabled` 为假):进度条用方块字符档位,描述为纯文本。
+- **quiet**(`is_quiet()`):去掉最近完成窗口——只显示聚合进度条,不显示逐条描述。
 - **verbose**:完全没有面板;ninja 独占终端。

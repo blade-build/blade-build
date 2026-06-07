@@ -71,6 +71,14 @@ class PanelLinesTest(unittest.TestCase):
         self.assertIn('ETA 0:05', lines[0])
         self.assertEqual(lines[1:], ['  CC a.cc', '  CC b.cc'])
 
+    def test_empty_window_is_header_only(self):
+        # quiet mode passes an empty window -> just the aggregate bar line
+        with mock.patch.object(console.shutil, 'get_terminal_size',
+                               return_value=os.terminal_size((120, 40))), \
+             mock.patch.object(console, '_color_enabled', False):
+            lines = console._build_panel_lines(3, 1, 10, [], None)
+        self.assertEqual(len(lines), 1)
+
     def test_window_capped_by_max(self):
         recent = ['step %d' % i for i in range(50)]
         with mock.patch.object(console.shutil, 'get_terminal_size',
