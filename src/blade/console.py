@@ -257,13 +257,13 @@ def _compute_progress_bar_width(total):
 
 
 def _progress_bar(progress, current, total):
-    """Progress bar drawing text, like this:
-    [===========================================================----] 46/50 92%
+    """Single-line progress bar in the panel's grayscale style (a two-zone case
+    of the tri-state bar: done / remaining), like this:
+    ██████████████████████████████████████████░░░░░░░░░░ 46/50 92%
     """
     bar_width = _compute_progress_bar_width(total)
-    filled = progress * bar_width // 100
-    return '[{}{}] {}/{} {:g}%'.format('=' * filled, '-' * (bar_width - filled),
-                                  current, total, progress)
+    return '%s %d/%d %d%%' % (_tri_state_bar(current, 0, total, bar_width),
+                              current, total, progress)
 
 
 def _need_refresh_progress_bar(current, total, now):

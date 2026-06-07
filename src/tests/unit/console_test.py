@@ -90,8 +90,11 @@ class ProgressBarFrameTest(_ConsoleStateMixin, unittest.TestCase):
         # doesn't affect the redraw geometry.
         console.show_progress_bar(5, 10)
         out = self.stderr.getvalue()
-        self.assertIn('\r[', out,
-                      f'expected CR + [ inside the frame, got {out!r}')
+        # column 0 (\r) then the bar (grayscale blocks); trailing \033[K wipes
+        # any leftover tail from a previous, longer frame.
+        self.assertIn('\r' + console._GRAY_DONE, out,
+                      f'expected CR + bar start inside the frame, got {out!r}')
+        self.assertIn('5/10', out)
         self.assertTrue(out.endswith('\x1b[K'),
                         f'expected trailing \\033[K, got {out[-6:]!r}')
 
@@ -135,7 +138,7 @@ class ProgressBarRefreshLogicTest(_ConsoleStateMixin, unittest.TestCase):
         console.show_progress_bar(1, 100)
         # Immediately push a distinct value — still within the 200ms window.
         console.show_progress_bar(2, 100)
-        self.assertEqual(self.stderr.getvalue().count('\r['), 1,
+        self.assertEqual(self.stderr.getvalue().count('\r' + console._GRAY_DONE), 1,
                          'second frame within throttle window should be dropped')
 
     def test_100_percent_is_always_painted_even_when_throttled(self):
@@ -299,7 +302,7 @@ class ConcurrencyTest(_ConsoleStateMixin, unittest.TestCase):
 
     def test_messages_never_split_a_progress_frame(self):
         # Run many progress redraws and many message prints in parallel.
-        # With the lock, every frame ('\r[' ... '\033[K') must be a
+        # With the lock, every frame ('\r' + bar-start ... '\033[K') must be a
         # contiguous, uninterrupted byte range — no message text in the
         # middle.
         with patch.object(console, '_PROGRESS_REFRESH_INTERVAL', 0):
@@ -317,14 +320,16 @@ class ConcurrencyTest(_ConsoleStateMixin, unittest.TestCase):
             t1.start(); t2.start(); t1.join(); t2.join()
 
         out = self.stderr.getvalue()
-        # Walk the byte stream looking for frame starts. '\r[' marks a frame
-        # (note: '\r\033[K' from a clear doesn't match — '\r' is followed by
-        # '\033', not '['). Between '\r[' and the next '\033[K' there must
-        # be no newline, otherwise a message leaked into the frame.
+        # Walk the byte stream looking for frame starts. '\r' + the grayscale
+        # "done" code marks a painted bar frame (a clear is '\r\033[K', whose
+        # '\r' is followed by the EOL-clear, not the gray code). Between the
+        # frame start and the next '\033[K' there must be no newline, otherwise
+        # a message leaked into the frame.
+        marker = '\r' + console._GRAY_DONE
         i = 0
         frames_seen = 0
         while True:
-            start = out.find('\r[', i)
+            start = out.find(marker, i)
             if start < 0:
                 break
             end = out.find('\x1b[K', start)
