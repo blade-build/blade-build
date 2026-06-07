@@ -27,6 +27,7 @@ class WindowsResourcesRootPathTest(unittest.TestCase):
         t = wrt.WindowsResourcesTarget.__new__(wrt.WindowsResourcesTarget)
         t.path = target_path
         t.name = 'res'
+        t.build_dir = 'build64_release'
         t.attr = {'rc_files': ['app.rc'], 'resources': [], 'hdrs': []}
         t.data = {}
         # expanded_deps is the direct + transitive dep list (set by the
@@ -63,35 +64,43 @@ class WindowsResourcesRootPathTest(unittest.TestCase):
         self.assertIn('rc.exe', cmd)
         self.assertNotIn('\\"', cmd)
 
-    def test_generated_header_from_dep_on_rc_path_and_deps(self):
-        # A dep gen_rule produces a header the .rc #includes (e.g. licence.h).
-        # Its build-dir is added to rc's /i, and the file to the rc edge's
-        # implicit_deps so rc waits for it.
+    def test_generated_header_resolves_via_build_dir_not_its_own_dir(self):
+        # A dep gen_rule produces a header the .rc #includes (e.g. licence.h),
+        # here in a sub-build-dir. The build dir goes on rc /i (so the .rc
+        # resolves it by build-dir-relative path), the header's OWN dir is NOT
+        # auto-added (that risked shadowing a system header), and the file is an
+        # implicit_dep so rc waits for it.
+        hdr = os.path.join('build64_release', 'sub', 'licence.h')
         gen = mock.Mock()
-        gen.attr = {'generated_hdrs': [os.path.join('build64_release', 'licence.h')],
-                    'generated_incs': []}
-        gen.deps = []
-        t = self._make_target('', deps=['//:gen'],
-                              build_targets={'//:gen': gen})
+        gen.attr = {'generated_hdrs': [hdr], 'generated_incs': []}
+        t = self._make_target('', deps=['//:gen'], build_targets={'//:gen': gen})
         t.generate()
         cmd = '\n'.join(t._rules)
-        self.assertIn('build64_release', cmd)            # gen dir on rc /i
-        kw = t.generate_build.call_args.kwargs
-        self.assertIn(os.path.join('build64_release', 'licence.h'),
-                      kw.get('implicit_deps', []))       # rc waits for it
+        self.assertIn('/i"build64_release"', cmd)                       # build dir on rc /i
+        self.assertNotIn(os.path.join('build64_release', 'sub'), cmd)   # header's own dir NOT added
+        self.assertIn(hdr, t.generate_build.call_args.kwargs.get('implicit_deps', []))
+
+    def test_explicit_generated_inc_on_rc_path(self):
+        # Explicit export_incs / generated_incs ARE added to rc /i (opt-in).
+        inc = os.path.join('build64_release', 'pkg', 'inc')
+        gen = mock.Mock()
+        gen.attr = {'generated_hdrs': [], 'generated_incs': [inc]}
+        t = self._make_target('', deps=['//:gen'], build_targets={'//:gen': gen})
+        t.generate()
+        self.assertIn(inc, '\n'.join(t._rules))
 
     def test_dep_generated_headers_uses_expanded_deps(self):
-        # expanded_deps is already flattened (direct + transitive), so the
-        # helper just iterates it -- no manual graph walk.
+        # expanded_deps is already flattened (direct + transitive); the helper
+        # returns generated-header FILES + only the explicit generated_incs dirs.
         leaf = mock.Mock()
         leaf.attr = {'generated_hdrs': [os.path.join('bd', 'a.h')], 'generated_incs': []}
         mid = mock.Mock()
         mid.attr = {'generated_hdrs': [], 'generated_incs': [os.path.join('bd', 'inc')]}
         t = self._make_target('', deps=['//:mid', '//:leaf'],
                               build_targets={'//:mid': mid, '//:leaf': leaf})
-        files, dirs = t._dep_generated_headers()
+        files, inc_dirs = t._dep_generated_headers()
         self.assertEqual(files, {os.path.join('bd', 'a.h')})
-        self.assertEqual(dirs, {'bd', os.path.join('bd', 'inc')})
+        self.assertEqual(inc_dirs, {os.path.join('bd', 'inc')})  # only explicit generated_incs
 
 
 if __name__ == '__main__':

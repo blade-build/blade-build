@@ -86,26 +86,29 @@ class WindowsResourcesTarget(Target):
         return True
 
     def _dep_generated_headers(self):
-        """Generated headers (and their dirs) from all deps (direct + transitive).
+        """Generated headers + explicitly-exported include dirs from all deps
+        (direct + transitive).
 
         A `.rc` may `#include` a header produced by a gen_rule (e.g. PuTTY's
-        licence.h). Such headers live under the build dir, which rc.exe does not
-        otherwise search, and the rc edge must wait for them. Returns
-        ``(files, dirs)`` of full build-dir paths to feed `/i` and implicit_deps.
+        licence.h). Returns ``(files, inc_dirs)``: ``files`` are the generated
+        header paths, listed as implicit_deps so the rc edge waits for them;
+        ``inc_dirs`` are only the deps' **explicit** ``export_incs`` /
+        ``generated_incs``. We do NOT add each generated header's own directory
+        to the rc search path -- that auto-export raised the chance of a
+        generated header shadowing a system header. Generated headers are
+        instead reached by their build-dir-relative path via the build-dir on
+        the rc `/i` (added in `generate`), matching how cc consumes them.
         """
-        files, dirs = set(), set()
+        files, inc_dirs = set(), set()
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
         build_targets = self.blade.get_build_targets()
         for dkey in self.expanded_deps:  # already direct + transitive
             dep = build_targets.get(dkey)
             if not dep:
                 continue
-            for hdr in dep.attr.get('generated_hdrs', []):
-                files.add(hdr)
-                dirs.add(os.path.dirname(hdr))
-            for inc in dep.attr.get('generated_incs', []):
-                dirs.add(inc)
-        return files, dirs
+            files.update(dep.attr.get('generated_hdrs', []))
+            inc_dirs.update(dep.attr.get('generated_incs', []))
+        return files, inc_dirs
 
     def generate(self):
         """Generate Ninja build edges for compiling .rc files."""
@@ -131,11 +134,15 @@ class WindowsResourcesTarget(Target):
         src_dir = os.path.normpath(os.path.join(self.blade.get_root_dir(), self.path))
         sdk_inc_flags.append('/i"%s"' % src_dir)
 
-        # Generated headers from deps (e.g. a gen_rule producing a header the
-        # .rc #includes) live under the build dir; add their dirs so rc.exe can
-        # resolve them, and the files to implicit_deps so rc waits for them.
-        gen_hdr_files, gen_hdr_dirs = self._dep_generated_headers()
-        for d in sorted(gen_hdr_dirs):
+        # The build dir, so a generated header a .rc #includes (e.g. PuTTY's
+        # licence.h) resolves by its build-dir-relative path -- mirrors cc's
+        # `-I<build_dir>`, and avoids auto-exporting each generated header's own
+        # directory (which risked shadowing a system header). Deps' explicit
+        # export_incs / generated_incs are still added; the generated header
+        # files become implicit_deps so the rc edge waits for them.
+        sdk_inc_flags.append('/i"%s"' % self.build_dir)
+        gen_hdr_files, gen_inc_dirs = self._dep_generated_headers()
+        for d in sorted(gen_inc_dirs):
             sdk_inc_flags.append('/i"%s"' % d if ' ' in d else '/i%s' % d)
 
         inc_flags = ' '.join(sdk_inc_flags)
