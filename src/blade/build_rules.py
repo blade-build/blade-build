@@ -18,6 +18,11 @@ class Native:
 
 __build_rules = {}
 
+# Names visible ONLY inside extension (`.bld`) files, never in BUILD files --
+# e.g. `define_rule` / `attr` for custom rules (#829). Mirrors how Bazel exposes
+# `rule`/`attr` as top-level builtins only in `.bzl`.
+__extension_only = {}
+
 __native = Native()
 
 def register_variable(name, value):
@@ -31,6 +36,11 @@ def register_function(f):
     register_variable(f.__name__, f)
 
 
+def register_extension_variable(name, value):
+    """Register a name visible only in extension (`.bld`) files, not BUILD."""
+    __extension_only[name] = value
+
+
 def get_all():
     """Get the globals dict"""
     result = __build_rules.copy()
@@ -38,7 +48,9 @@ def get_all():
 
 
 def get_all_for_extension():
-    """Get the globals dict, 'native' is only visible to extensions."""
+    """Get the globals dict; 'native' and extension-only names (define_rule,
+    attr) are visible to extensions but not to BUILD files."""
     result = get_all()
     result['native'] = __native
+    result.update(__extension_only)
     return result

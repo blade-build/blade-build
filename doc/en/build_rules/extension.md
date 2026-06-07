@@ -17,6 +17,10 @@ def awesome_library(name, srcs=[], deps=[]):
 
 Remember the `gen_rule` is a useful native rule when you create your own rules.
 
+> For a real new rule **type** — with typed attributes and a custom action that
+> computes outputs and emits build commands, rather than a macro that wraps
+> existing rules — see [Custom Rules (`define_rule`)](custom_rule.md) (experimental).
+
 Since the built-in rules can be overridden in the extension, you can enforce using the built-in rules
 by adding the `native.` prefix before the rule name.
 The `native.` prefix can only be used in extensions but not in `BUILD` files.

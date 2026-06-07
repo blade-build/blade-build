@@ -19,37 +19,36 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..',
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 
 from blade import gen_rule_target as grt  # noqa: E402
+from blade import gen_command as gc  # noqa: E402
 from blade.gen_rule_target import GenRuleTarget  # noqa: E402
 
 
 class GenRuleSelectTest(unittest.TestCase):
-    def _select(self, cmd, cmd_bash, cmd_bat, osname, bash):
-        with mock.patch.object(grt.os, 'name', osname), \
-             mock.patch.object(grt.shutil, 'which', return_value=bash):
+    # Windows = cmd.exe only (cmd_bat -> cmd); POSIX = cmd_bash(bash) -> cmd.
+    # No bash auto-detection (selection logic lives in gen_command).
+    def _select(self, cmd, cmd_bash, cmd_bat, osname):
+        with mock.patch.object(gc.os, 'name', osname):
             return GenRuleTarget._select_command(cmd, cmd_bash, cmd_bat)
 
     def test_windows_prefers_bat(self):
-        self.assertEqual(self._select('c', 'cb', 'bat', 'nt', 'bash')[:2], ('bat', 'bat'))
+        self.assertEqual(self._select('c', 'cb', 'bat', 'nt')[:2], ('bat', 'bat'))
 
-    def test_windows_bash_when_no_bat_and_bash_available(self):
-        self.assertEqual(self._select('c', 'cb', '', 'nt', 'bash')[:2], ('cb', 'bash'))
+    def test_windows_falls_back_to_cmd(self):
+        self.assertEqual(self._select('c', 'cb', '', 'nt')[:2], ('c', 'raw'))
 
-    def test_windows_falls_back_to_cmd_without_bash(self):
-        self.assertEqual(self._select('c', 'cb', '', 'nt', None)[:2], ('c', 'raw'))
-
-    def test_windows_cmd_bash_raw_when_no_cmd_no_bash(self):
-        self.assertEqual(self._select('', 'cb', '', 'nt', None)[:2], ('cb', 'raw'))
+    def test_windows_cmd_bash_not_usable(self):
+        # cmd_bash alone is NOT usable on Windows (cmd.exe only)
+        self.assertIsNone(self._select('', 'cb', '', 'nt')[0])
 
     def test_posix_prefers_bash(self):
-        self.assertEqual(self._select('c', 'cb', '', 'posix', '/bin/bash')[:2], ('cb', 'bash'))
+        self.assertEqual(self._select('c', 'cb', '', 'posix')[:2], ('cb', 'bash'))
 
-    def test_posix_falls_back_to_cmd_without_bash(self):
-        self.assertEqual(self._select('c', 'cb', '', 'posix', None)[:2], ('c', 'raw'))
+    def test_posix_falls_back_to_cmd(self):
+        self.assertEqual(self._select('c', '', '', 'posix')[:2], ('c', 'raw'))
 
     def test_none_usable(self):
-        self.assertIsNone(self._select('', '', '', 'posix', '/bin/bash')[0])
-        # cmd_bat is ignored on POSIX
-        self.assertIsNone(self._select('', '', 'bat', 'posix', '/bin/bash')[0])
+        self.assertIsNone(self._select('', '', '', 'posix')[0])
+        self.assertIsNone(self._select('', '', 'bat', 'posix')[0])  # cmd_bat ignored on POSIX
 
 
 class GenRuleWrapTest(unittest.TestCase):

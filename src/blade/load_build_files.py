@@ -40,6 +40,7 @@ def _load_build_rules():
     # pylint: disable=import-outside-toplevel,unused-import
     import blade.cc_targets
     import blade.cu_targets
+    import blade.custom_rule_target
     import blade.gen_rule_target
     import blade.go_targets
     import blade.java_targets

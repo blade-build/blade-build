@@ -40,11 +40,14 @@
     )
     ```
 
-- `cmd_bash`: str，通过 `bash` 执行的命令（带 `set -e -o pipefail`）。POSIX 上优先,Windows 上当
-  `bash` 在 `PATH`（如 Git Bash）时也用。变量同 `cmd`。
+- `cmd_bash`: str，通过 `bash` 执行的命令（带 `set -e -o pipefail`）。POSIX 上优先。
+  （Windows 上不使用——见下。）变量同 `cmd`。
 - `cmd_bat`: str，通过 `cmd.exe /S /E:ON /V:ON /D /c` 执行的 Windows 批处理命令。Windows 上优先。变量同 `cmd`。
-  `cmd` / `cmd_bash` / `cmd_bat` 至少要设一个;按平台自动选（Windows：`cmd_bat` → `cmd_bash` → `cmd`；
-  POSIX：`cmd_bash` → `cmd`）。
+  `cmd` / `cmd_bash` / `cmd_bat` 至少要设一个;按平台自动选（Windows：`cmd_bat` → `cmd`；
+  POSIX：`cmd_bash` → `cmd`）。在一个跨平台 BUILD 文件里**同时**给出 `cmd_bat` 和 `cmd_bash`，
+  blade 会按平台挑对的那个——这样 BUILD 文件**不必自己判断操作系统**（`cmd` 是已经可移植的命令的通用回退）。
+  Windows 上只用 `cmd.exe`——不自动探测 bash（探测脆弱、损害可复现性，减少不确定性）。
+  想在 Windows 上用 bash，就在 POSIX 环境（WSL / msys2 / cygwin）下运行 blade，或在 `cmd_bat` 里自己调 `bash -c "..."`。
 - `cmd_name`: str，命令的名字，用于简略模式下显示，默认为 `COMMAND`
 - generate\_hdrs bool，指示这个目标是否会生成 outs 里列出的文件名之外的 C/C++ 头文件。
   如果一个 C/C++ 目标依赖会生成头文件的 gen\_rule 目标，那么需要这些头文件生成后才能开始编译。

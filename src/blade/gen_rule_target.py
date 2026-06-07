@@ -12,12 +12,12 @@ Allow users defining their custom build rules.
 
 import os
 import re
-import shutil
 
 from blade import build_manager
 from blade import build_rules
 from blade import cc_targets
 from blade import console
+from blade import gen_command
 from blade.blade_types import StrOrListOpt
 from blade.target import Target
 from blade.util import regular_variable_name
@@ -29,11 +29,6 @@ from blade.util import var_to_list, var_to_list_or_none
 # preserved for the positional %s expansion. Group 1 = the optional plural 's',
 # group 2 = the target key, group 3 = the optional output label.
 _LOCATION_RE = re.compile(r'\$\(location(s)?\s+(\S*:\S+)(\s+\w*)?\)')
-
-# $OUTS[i] / $OUTS[name] / $SRCS[i] / $SRCS[name] -- reference a single output or
-# input by index (all-digits) or by declared name / basename.
-_OUTS_INDEX_RE = re.compile(r'\$OUTS\[([^\]]+)\]')
-_SRCS_INDEX_RE = re.compile(r'\$SRCS\[([^\]]+)\]')
 
 
 # The rule template for gen_rule. The command is fully wrapped by
@@ -138,71 +133,18 @@ class GenRuleTarget(Target):
 
     @staticmethod
     def _select_command(cmd, cmd_bash, cmd_bat):
-        """Pick the command + how to run it for the host platform (issue #1204).
-
-        Borrowed from Bazel's per-shell genrule commands, simplified:
-          * Windows: prefer ``cmd_bat`` (cmd.exe); else ``cmd_bash`` if bash is
-            available; else the generic ``cmd``.
-          * POSIX: prefer ``cmd_bash`` if bash is available; else ``cmd``.
-        ``cmd`` is the back-compat generic, run by the host's default shell.
-        Returns ``(command, kind, bash_path)`` with kind in
-        ``{'bat', 'bash', 'raw'}``; ``(None, None, bash)`` if nothing usable.
-        """
-        bash = shutil.which('bash')
-        if os.name == 'nt':
-            if cmd_bat:
-                return cmd_bat, 'bat', bash
-            if cmd_bash and bash:
-                return cmd_bash, 'bash', bash
-            if cmd:
-                return cmd, 'raw', bash
-            if cmd_bash:  # no bash found -- best effort via the host shell
-                return cmd_bash, 'raw', bash
-        else:
-            if cmd_bash and bash:
-                return cmd_bash, 'bash', bash
-            if cmd:
-                return cmd, 'raw', bash
-            if cmd_bash:
-                return cmd_bash, 'raw', bash
-        return None, None, bash
+        """Pick the command + how to run it for the host platform (see
+        :func:`gen_command.select_command`)."""
+        return gen_command.select_command(cmd, cmd_bash, cmd_bat)
 
     def _output_check(self, shell):
-        """A command that fails the build if any declared output is missing.
-
-        Replaces the old POSIX-only ``ls ${out} > /dev/null`` scaffold with an
-        explicit per-output check in the given shell's syntax, using the known
-        output paths (so no ``${out}`` separator / for-loop quirks).
-        """
-        # Absolute paths so the check is immune to any `cd` the user command did
-        # (the old scaffold added an explicit `cd <root>` for this).
-        root = self.blade.get_root_dir()
-        outs = [os.path.join(root, o) for o in self.attr['outputs']]
-        if shell == 'cmd':
-            return ' && '.join('if not exist "%s" exit /b 1' % o for o in outs)
-        # sh/bash: forward slashes so backslashes aren't treated as escapes
-        return ' && '.join('test -e "%s"' % o.replace('\\', '/') for o in outs)
+        """Per-output existence check in the given shell (see gen_command)."""
+        return gen_command.output_check(shell, self.attr['outputs'], self.blade.get_root_dir())
 
     def _wrap_command(self, cmd):
-        """Wrap the user command with the right interpreter + output check.
-
-        Launch arguments follow Bazel: ``cmd.exe /S /E:ON /V:ON /D /c`` for bat,
-        ``bash -c`` with ``set -e -o pipefail`` for bash.
-        """
-        kind = self._gen_kind
-        if kind == 'bash':
-            inner = 'set -e -o pipefail;%s && %s' % (cmd, self._output_check('sh'))
-            # single-quote the bash script so the double-quoted paths in the
-            # output check don't clash with bash -c's own quoting.
-            return '"%s" -c \'%s\'' % (self._bash, inner)
-        if kind == 'bat' or os.name == 'nt':
-            # On Windows wrap in an explicit cmd.exe (Bazel's launch args). This
-            # also gives ninja a clean outer process to pipe -- a raw command
-            # doing its own `>` redirection in ninja's directly-piped cmd can
-            # trip "ninja: fatal: GetOverlappedResult".
-            return 'cmd /S /E:ON /V:ON /D /c "%s && %s"' % (cmd, self._output_check('cmd'))
-        # raw on POSIX: the host's /bin/sh -c runs it directly.
-        return '%s && %s' % (cmd, self._output_check('sh'))
+        """Wrap the user command with the right interpreter + output check."""
+        return gen_command.wrap_command(
+            cmd, self._gen_kind, self._bash, self.attr['outputs'], self.blade.get_root_dir())
 
     def _expand_incs(self, incs):
         """Expand incs"""
@@ -224,21 +166,8 @@ class GenRuleTarget(Target):
         return '%s'  # Will be expanded in `_expand_command`
 
     def _index_ref(self, sel, names, paths, what):
-        """Resolve a single $OUTS[sel] / $SRCS[sel] to one concrete path.
-
-        ``sel`` is an index when all-digits, else a declared name or basename.
-        """
-        if sel.isdigit():
-            i = int(sel)
-            if 0 <= i < len(paths):
-                return paths[i]
-            self.error('$%s index out of range: [%s]' % (what.upper(), sel))
-            return ''
-        for i, n in enumerate(names):
-            if n == sel or os.path.basename(n) == sel:
-                return paths[i]
-        self.error('$%s has no entry named "%s"' % (what.upper(), sel))
-        return ''
+        """Resolve $OUTS[sel] / $SRCS[sel] to one path (see gen_command)."""
+        return gen_command.index_ref(sel, names, paths, what, self.error)
 
     def _allow_duplicate_source(self):
         return True
@@ -252,36 +181,16 @@ class GenRuleTarget(Target):
         ninja would render with backslashes on Windows. cmd/raw keep the ninja
         vars + OS-native separators (correct for cmd.exe / POSIX sh).
         """
-        cmd = self.attr['cmd']
-        # bash treats '\' as an escape, so paths must use '/' for the bash kind.
-        # cmd.exe and POSIX sh both accept '/' in file-path args, so no
-        # conversion is needed for the cmd/raw kinds.
         posix = self._gen_kind == 'bash'
+        cmd = gen_command.expand_vars(
+            self.attr['cmd'], bash=posix,
+            src_names=self.srcs, src_paths=self._expand_srcs(),
+            out_names=self.attr['outs'], out_paths=self.attr['outputs'],
+            path=self.path, build_dir=self.build_dir, error=self.error)
 
         def _p(path):
             return path.replace('\\', '/') if posix else path
 
-        outputs = self.attr['outputs']
-        inputs = self._expand_srcs()
-        # Indexed/named refs first: a bare `$OUTS` replace below would otherwise
-        # turn `$OUTS[0]` into `${out}[0]`.
-        cmd = _OUTS_INDEX_RE.sub(
-            lambda m: _p(self._index_ref(m.group(1), self.attr['outs'], outputs, 'outs')), cmd)
-        cmd = _SRCS_INDEX_RE.sub(
-            lambda m: _p(self._index_ref(m.group(1), self.srcs, inputs, 'srcs')), cmd)
-        if posix:
-            cmd = cmd.replace('$SRCS', ' '.join(_p(i) for i in inputs))
-            cmd = cmd.replace('$OUTS', ' '.join(_p(o) for o in outputs))
-            cmd = cmd.replace('$FIRST_SRC', _p(inputs[0]) if inputs else '')
-            cmd = cmd.replace('$FIRST_OUT', _p(outputs[0]) if outputs else '')
-        else:
-            cmd = cmd.replace('$SRCS', '${in}')
-            cmd = cmd.replace('$OUTS', '${out}')
-            cmd = cmd.replace('$FIRST_SRC', '${_in_1}')
-            cmd = cmd.replace('$FIRST_OUT', '${_out_1}')
-        cmd = cmd.replace('$SRC_DIR', _p(self.path))
-        cmd = cmd.replace('$OUT_DIR', _p(os.path.join(self.build_dir, self.path)))
-        cmd = cmd.replace('$BUILD_DIR', _p(self.build_dir))
         locations = self.attr['locations']
         if locations:
             targets = self.blade.get_build_targets()

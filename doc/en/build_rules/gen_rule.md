@@ -53,13 +53,19 @@ Used to customize your own construction rules, parameters:
     ```
 
 - cmd\_bash: str, a command run via `bash` (with `set -e -o pipefail`). Preferred
-  on POSIX, and on Windows when `bash` is on `PATH` (e.g. Git Bash). Same
-  variables as `cmd`.
+  on POSIX. (Not used on Windows — see below.) Same variables as `cmd`.
 - cmd\_bat: str, a Windows batch command run via `cmd.exe /S /E:ON /V:ON /D /c`.
   Preferred on Windows. Same variables as `cmd`.
   At least one of `cmd` / `cmd_bash` / `cmd_bat` must be set; the
-  platform-appropriate one is chosen automatically (Windows: `cmd_bat` →
-  `cmd_bash` → `cmd`; POSIX: `cmd_bash` → `cmd`).
+  platform-appropriate one is chosen automatically (Windows: `cmd_bat` → `cmd`;
+  POSIX: `cmd_bash` → `cmd`). Provide **both** `cmd_bat` and `cmd_bash` in a
+  single BUILD file for a cross-platform target — blade picks the right one per
+  platform, so the BUILD never has to branch on the OS itself (`cmd` is the
+  generic fallback for commands that are already portable). On Windows only
+  `cmd.exe` is used — there is no
+  bash auto-detection (it was fragile and hurt reproducibility). To use bash on
+  Windows, run blade under a POSIX environment (WSL / msys2 / cygwin), or invoke
+  `bash -c "..."` yourself inside `cmd_bat`.
 - cmd\_name: str, the name of the command, used to display in simplified mode, the default is `COMMAND`
 - generate\_hdrs: bool, indicates whether this target will generate C/C++ header files other than the file names already listed in `outs`.
   If a C/C ++ target depends on the gen\_rule target that generates header files, then these header files need to be generated before compilation can begin.
