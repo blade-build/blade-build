@@ -609,7 +609,7 @@ class Target:
         """Expand the generation process and generated rules of dependencies.
 
         Such as, given a proto_library target, it should generate Java rules
-        in addition to C++ rules once it's depended by a java_library target.
+        in addition to C++ rules once it's depended on by a java_library target.
         """
 
     def _get_java_pack_deps(self):

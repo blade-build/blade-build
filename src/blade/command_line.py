@@ -309,11 +309,11 @@ class CommandLineParser:
         parser.add_argument(
             '--deps', dest='deps',
             action='store_true', default=False,
-            help='Show all targets that depended by the target being queried')
+            help='Show all targets that the target being queried depends on')
         parser.add_argument(
             '--dependents', dest='dependents',
             action='store_true', default=False,
-            help='Show all targets that depends on the target being queried')
+            help='Show all targets that depend on the target being queried')
         parser.add_argument(
             '--path-to', dest='query_path_to', type=str, default='',
             help='The targets to be depended on, comma separated')

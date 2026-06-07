@@ -471,9 +471,9 @@ class Blade:
         if self.__options.dependents:
             for key in query_list:
                 print(file=output_file)
-                depended_by = all_targets[key].expanded_dependents
-                print('//%s is depended by the following targets:' % key, file=output_file)
-                for d in depended_by:
+                dependents = all_targets[key].expanded_dependents
+                print('//%s is depended on by the following targets:' % key, file=output_file)
+                for d in dependents:
                     print('%s' % d, file=output_file)
 
     def print_dot_node(self, output_file, node):

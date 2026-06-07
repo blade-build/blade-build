@@ -1693,8 +1693,8 @@ class PrebuiltCcLibrary(CcTarget):
         tc = self.blade.get_build_toolchain()
         return os.path.join(libpath, f'{tc.lib_prefix}{self.name}{suffix}')
 
-    def _is_depended(self):
-        """Does this library really be used"""
+    def _is_depended_on(self):
+        """Whether this library is actually depended on by any target."""
         build_targets = self.blade.get_build_targets()
         for key in self.expanded_dependents:
             t = build_targets[key]
@@ -1732,9 +1732,9 @@ class PrebuiltCcLibrary(CcTarget):
         """Generate build code for cc object/library."""
         self._check_deprecated_deps()
         # We allow a prebuilt cc_library doesn't exist if it is not used.
-        # So if this library is not depended by any target, don't generate any
+        # So if this library is not depended on by any target, don't generate any
         # rule to avoid runtime error and also avoid unnecessary runtime cost.
-        if not self._is_depended():
+        if not self._is_depended_on():
             return
         objs, inclusion_check_result = self._cc_objects([])
         # Emit ``ccsyms`` for the prebuilt static archive when present. Has to

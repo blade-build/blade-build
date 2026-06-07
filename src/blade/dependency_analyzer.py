@@ -77,7 +77,7 @@ def _unique_deps(new_deps_list):
 def _expand_target_deps(target_id, targets, root_targets=None):
     """_expand_target_deps.
 
-    Return all targets depended by target_id directly and/or indirectly.
+    Return all targets that target_id depends on, directly and/or indirectly.
     We need the parameter root_target_id to check loopy dependency.
 
     """
