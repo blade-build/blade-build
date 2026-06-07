@@ -14,6 +14,7 @@ touches files), reusing the same machinery as ``gen_rule`` (see ``gen_command``)
 import functools
 import inspect
 import os
+from typing import cast
 
 from blade import build_manager
 from blade import build_rules
@@ -22,6 +23,7 @@ from blade import config
 from blade import console
 from blade import gen_command
 from blade import rule_registry
+from blade.blade_types import StrOrListOpt
 from blade.target import Target
 from blade.util import md5sum, md5sum_file, var_to_list, var_to_list_or_none
 from blade.util import regular_variable_name
@@ -165,9 +167,9 @@ class CustomRuleTarget(Target):
                 missing.append(an)
             val = _coerce(spec, val, bad, an)
             if spec.kind == 'src_list':
-                srcs += val
+                srcs += var_to_list(cast(StrOrListOpt, val))
             elif spec.kind == 'dep_list':
-                dep_labels += val
+                dep_labels += var_to_list(cast(StrOrListOpt, val))
             else:
                 custom[an] = val
         unknown = sorted(attr_values)

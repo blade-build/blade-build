@@ -5,6 +5,7 @@
   "fallbackRetryDelay": "30s",
   "timeout": "20s",
   "ignorePatterns": [
-    { "pattern": "^https?://www\\.gnu\\.org/" }
+    { "pattern": "^https?://www\\.gnu\\.org/" },
+    { "pattern": "^https?://bazel\\.build/" }
   ]
 }
