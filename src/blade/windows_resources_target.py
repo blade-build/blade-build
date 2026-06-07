@@ -150,8 +150,11 @@ class WindowsResourcesTarget(Target):
         # Per-target ninja rule for rc.exe
         rule_name = 'rc_%s' % regular_variable_name(self._source_file_path(self.name))
         rc_command = '"%s" /nologo /fo${out} %s ${in}' % (rc_exe, inc_flags)
-        self._write_rule('rule %s\n  command = %s\n  description = RC ${in}\n' % (
-            rule_name, rc_command))
+        # Color the description like the backend rules (ninja_rule.emit) and
+        # gen_rule do, so it shows up colored in the build progress panel.
+        description = console.colored('RC ${in}', 'dimpurple')
+        self._write_rule('rule %s\n  command = %s\n  description = %s\n' % (
+            rule_name, rc_command, description))
 
         # Build edges: one per .rc file
         rc_inputs = [self._source_file_path(rc) for rc in self.attr['rc_files']]
