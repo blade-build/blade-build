@@ -443,7 +443,6 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
 
     def generate(self):
         """Generate build code for proto files."""
-        self._check_deprecated_deps()
         self._check_proto_deps()
         if not self.srcs:
             return

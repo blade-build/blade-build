@@ -442,15 +442,6 @@ class CcTarget(Target):
         declare_hdrs(self, hdrs)
         self.attr['expanded_hdrs'] += self._expand_sources(hdrs)
 
-    def _check_deprecated_deps(self):
-        """Check whether it depends upon a deprecated library."""
-        for key in self.deps:
-            dep = self.target_database.get(key)
-            if dep and dep.attr.get('deprecated'):
-                replaced_deps = dep.deps
-                if replaced_deps:
-                    self.warning(f'//{dep} is deprecated, please depends on //{replaced_deps[0]}')
-
     __cxx_keyword_list = frozenset([
         'and', 'and_eq', 'alignas', 'alignof', 'asm', 'auto',
         'bitand', 'bitor', 'bool', 'break', 'case', 'catch',
@@ -1573,7 +1564,6 @@ class CcLibrary(CcTarget):
 
     def generate(self):
         """Generate build code for cc object/library."""
-        self._check_deprecated_deps()
         objs, inclusion_check_result = self._cc_objects(self.attr['expanded_srcs'])
         # Don't generate library file for header only library.
         if objs:
@@ -1730,7 +1720,6 @@ class PrebuiltCcLibrary(CcTarget):
 
     def generate(self):
         """Generate build code for cc object/library."""
-        self._check_deprecated_deps()
         # We allow a prebuilt cc_library doesn't exist if it is not used.
         # So if this library is not depended on by any target, don't generate any
         # rule to avoid runtime error and also avoid unnecessary runtime cost.
@@ -2005,7 +1994,6 @@ class ForeignCcLibrary(CcTarget):
 
     def generate(self):
         """Generate build code for cc object/library."""
-        self._check_deprecated_deps()
         self._ninja_rules()
 
 
@@ -2258,7 +2246,6 @@ class CcBinary(CcTarget):
 
     def generate(self):
         """Generate build code for cc binary/test."""
-        self._check_deprecated_deps()
         objs, inclusion_check_result = self._cc_objects(self.attr['expanded_srcs'])
         self._cc_binary(objs, inclusion_check_result, self.attr['dynamic_link'])
 
@@ -2437,7 +2424,6 @@ class CcPlugin(CcTarget):
 
     def generate(self):
         """Generate build code for cc plugin."""
-        self._check_deprecated_deps()
         objs, inclusion_check_result = self._cc_objects(self.attr['expanded_srcs'])
         target_linkflags = self._generate_link_flags()
         sys_libs, usr_libs, link_all_symbols_libs, incchk_deps = self._static_dependencies()

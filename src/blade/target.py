@@ -194,6 +194,12 @@ class Target:
         # TODO: Remove it, make a `TestTargetMixin`
         self.attr['test_timeout'] = config.get_item('global_config', 'test_timeout')
 
+        # 'deprecated' is supported by every target type. Consume it here (before
+        # the unknown-kwargs check) so all rules accept it uniformly; rule classes
+        # that take it as an explicit constructor argument override this after
+        # super().__init__().
+        self.attr['deprecated'] = bool(kwargs.pop('deprecated', False))
+
         self._check_name()
         self._check_kwargs(kwargs)
         self._check_srcs(src_exts)
@@ -597,13 +603,22 @@ class Target:
                     dep.info('which is declared here')
 
     def _check_deprecated_deps(self):
-        """check that whether it depends upon deprecated target.
-        It should be overridden in subclass.
+        """Warn if this target depends on a deprecated target.
+
+        Applies to every target type: called from before_generate(). A
+        deprecated target may list a replacement as its first dependency.
         """
+        for key in self.deps:
+            dep = self.target_database.get(key)
+            if dep and dep.attr.get('deprecated'):
+                replaced_deps = dep.deps
+                if replaced_deps:
+                    self.warning(f'{dep.fullname} is deprecated, please depends on //{replaced_deps[0]}')
 
     def before_generate(self):  # abstract
         """Will be called before generating build code"""
         assert self.__build_code is None
+        self._check_deprecated_deps()
         self._before_generate()
 
     def _before_generate(self):  # abstract

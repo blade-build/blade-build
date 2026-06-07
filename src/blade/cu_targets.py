@@ -256,7 +256,6 @@ class CuLibrary(CuTarget):
         self._check_binary_link_only()
 
     def generate(self):
-        self._check_deprecated_deps()
         objs, inclusion_check_result = self._cuda_objects(self.attr['expanded_srcs'])
         # Don't generate library file for header only library.
         if objs:
@@ -349,7 +348,6 @@ class CuBinary(CuTarget):
         self._add_tags('type:binary')
 
     def generate(self):
-        self._check_deprecated_deps()
         objs, inclusion_check_result = self._cuda_objects(self.attr['expanded_srcs'])
         # Don't generate library file for header only library.
         self._cuda_binary(objs, inclusion_check_result, self.attr.get('dynamic_link', False))

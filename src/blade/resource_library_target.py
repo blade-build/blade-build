@@ -67,7 +67,6 @@ class ResourceLibrary(cc_targets.CcTarget):
         self._set_hdrs([hdr])
 
     def generate(self):
-        self._check_deprecated_deps()
         if not self.srcs:
             return
 
