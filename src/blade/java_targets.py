@@ -771,6 +771,8 @@ class JavaLibrary(JavaTarget):
 class JavaBinary(JavaTarget):
     """JavaBinary"""
 
+    is_executable = True  # also covers JavaTest
+
     def __init__(
             self,
             name: str | None,

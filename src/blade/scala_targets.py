@@ -203,6 +203,8 @@ class ScalaFatLibrary(ScalaTarget):
 class ScalaTest(ScalaFatLibrary):
     """ScalaTest"""
 
+    is_executable = True
+
     def __init__(
             self,
             name: str | None,

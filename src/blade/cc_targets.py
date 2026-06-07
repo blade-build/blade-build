@@ -2064,6 +2064,8 @@ class CcBinary(CcTarget):
     rules according to user options.
     """
 
+    is_executable = True  # also covers CcTest
+
     def __init__(self,
                  name: str | None,
                  srcs: StrOrListOpt,

@@ -32,14 +32,6 @@ class BinaryRunner:
         self._build_targets = build_targets
         self.build_dir = build_manager.instance.get_build_dir()
         self.options = options
-        self.run_list = ['cc_binary',
-                         'cc_test',
-                         'java_binary',
-                         'java_test',
-                         'py_binary',
-                         'py_test',
-                         'scala_test',
-                         'sh_test']
         self.target_database = target_database
 
     def _executable(self, target):
@@ -253,7 +245,7 @@ class BinaryRunner:
     def run_target(self, target_name):
         """Run one single target."""
         target = self._build_targets[target_name]
-        if target.type not in self.run_list:
+        if not target.is_executable:
             target.error('is not a executable target')
             return 126
         run_env = self._prepare_env(target)

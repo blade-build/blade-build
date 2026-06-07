@@ -105,6 +105,10 @@ class Target:
 
     """
 
+    # Whether ``blade run`` can execute this target. Overridden to True by
+    # the executable target classes (binaries and tests).
+    is_executable = False
+
     def __init__(self,
                  name: str | None,
                  type: str,

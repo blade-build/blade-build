@@ -33,6 +33,8 @@ class ShellTest(Target):
     syntax.
     """
 
+    is_executable = True
+
     def __init__(self,
                  name: str | None,
                  srcs: StrOrListOpt,

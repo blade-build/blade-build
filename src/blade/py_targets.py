@@ -187,6 +187,8 @@ class PythonBinary(PythonLibrary):
     This class generates python binary package.
     """
 
+    is_executable = True  # also covers PythonTest
+
     def __init__(self,
                  name: str | None,
                  srcs: StrOrListOpt,
