@@ -95,6 +95,7 @@ Blade 调用后端构建工具（Ninja）执行实际构建，完成后删除生
 - [`proto_library` 的多语言代码生成](develop/protobuf_build.md)
 - [Java 与 Scala 程序的构建](develop/java_scala_build.md)
 - [Python 目标的构建与打包](develop/python_build.md)
+- [console：构建进度面板与 ninja 状态流水线](develop/console.md)
 - [`blade test` 如何运行用户测试](develop/test_execution.md)
 - [blade-build 自身是如何被测试的](develop/self_testing.md)
 

@@ -97,6 +97,7 @@ roughly the order they appear in a `blade build` invocation:
 - [How `proto_library` handles multi-language codegen](develop/protobuf_build.md)
 - [How Java and Scala programs are built](develop/java_scala_build.md)
 - [How Python targets are built and packaged](develop/python_build.md)
+- [The console: the build progress panel and the ninja status pipeline](develop/console.md)
 - [How `blade test` runs user tests](develop/test_execution.md)
 - [How blade-build itself is tested](develop/self_testing.md)
 
