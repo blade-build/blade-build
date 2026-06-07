@@ -11,6 +11,8 @@ emits build commands — use `define_rule`. It is inspired by
 
 ## Quick example
 
+Suppose you've created an *awesome* language whose compiler, `awesomec`, generates C++.
+
 `//myrules/awesome.bld`:
 
 ```python

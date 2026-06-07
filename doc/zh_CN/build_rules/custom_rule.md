@@ -9,6 +9,8 @@
 
 ## 快速示例
 
+假设你开发了一门 awesome 语言，它的编译器是 awesomec，生成 C++。
+
 `//myrules/awesome.bld`：
 
 ```python
