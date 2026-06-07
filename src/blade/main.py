@@ -14,6 +14,7 @@ import cProfile
 import os
 import pstats
 import signal
+import sys
 import time
 import traceback
 
@@ -125,6 +126,14 @@ def _main(blade_path, argv):
     setup_console(options)
 
     ws = workspace.initialize(options)
+
+    # 'root' just prints the workspace root and exits, before any chdir /
+    # config load / build setup. sys.exit short-circuits main() before the
+    # trailing "Cost time" line, so stdout stays clean: cd "$(blade root)".
+    if command == 'root':
+        print(ws.root_dir)
+        sys.exit(0)
+
     ws.switch_to_root_dir()
     load_config(options, ws.root_dir)
 

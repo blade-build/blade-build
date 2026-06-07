@@ -79,10 +79,16 @@ class CommandLineParser:
             'clean': self._check_clean_command,
             'dump': self._check_dump_command,
             'query': self._check_query_command,
+            'root': self._check_root_command,
             'run': self._check_run_command,
             'test': self._check_test_command,
         }
         actions[command](options, targets)
+
+    def _check_root_command(self, options, targets):
+        """check root options: it takes no targets."""
+        if targets:
+            console.fatal('blade root does not accept any targets')
 
     def _check_run_targets(self, options, targets):
         """check that run command should have only one target."""
@@ -488,8 +494,13 @@ class CommandLineParser:
             'dump',
             help='Dump specified internal information')
 
+        root_parser = sub_parser.add_parser(
+            'root',
+            help='Print the workspace root directory')
+
         self._add_common_arguments(build_parser, run_parser, test_parser,
-                                   clean_parser, query_parser, dump_parser)
+                                   clean_parser, query_parser, dump_parser,
+                                   root_parser)
         self._add_build_arguments(build_parser, run_parser, test_parser, dump_parser)
         self._add_run_arguments(run_parser)
         self._add_test_arguments(test_parser)
