@@ -7,30 +7,13 @@
 # REV:    1.0.P (Valid are A, B, D, T and P)
 #               (For Alpha, Beta, Dev, Test and Production)
 #
-# PLATFORM: Linux
-# PURPOSE : A bash wrapper for blade, always run blade of
-#           corresponding version in for given source dir
-#           tree.
+# PLATFORM: Linux, macOS
+# PURPOSE : A bash wrapper that locates the blade core next to this
+#           script and runs it with a suitable Python interpreter.
 # REV LIST:
 #        DATE:    Dec 17 2011
 #        BY  :    Michaelpeng
 #        MODIFICATION: Created
-
-function _info() {
-    if [ -t 1 ]; then
-        echo -e "\033[1;36mBlade(info): $@\033[m" >&2
-    else
-        echo -e "Blade(info): $@" >&2
-    fi
-}
-
-function _warning() {
-    if [ -t 2 ]; then
-        echo -e "\033[1;33mBlade(warning): $@\033[m" >&2
-    else
-        echo -e "Blade(warning): $@" >&2
-    fi
-}
 
 function _fatal() {
     if [ -t 2 ]; then
@@ -42,35 +25,34 @@ function _fatal() {
 }
 
 function _full_real_path() {
-    local o
-    local f
+    local o f
     f="$1"
 
     if [ ! -L "$0" ]; then
-        echo $f
+        echo "$f"
         return 0
     fi
 
-    if o=`readlink -f $f 2>/dev/null`; then
-        echo "$o";
+    if o=$(readlink -f "$f" 2>/dev/null); then
+        echo "$o"
         return 0
     fi
 
     # BSD readlink doesn't support -f
-    if o=`readlink $f`; then
+    if o=$(readlink "$f"); then
         f="$o"
     fi
 
-    echo $(cd $(dirname $f) && pwd)/$(basename $f)
+    echo "$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
     return 0
 }
 
 # Return 0 and echo the interpreter if "$1" is a single executable on PATH
-# whose `-V` reports Python >= 3.10. Return 1 otherwise (silently).
+# whose sys.version_info reports Python >= 3.10. Return 1 otherwise (silently).
 # Multi-word values (e.g. "python -m coverage run ...") are intentionally
 # rejected so that the full-command form stays routed through the final
 # ${BLADE_PYTHON_INTERPRETER:-$python} fallback at the bottom of this
-# script rather than being executed with a bare `-V`.
+# script rather than being executed with a bare `-c`.
 function _probe_python() {
     local candidate="$1"
     [ -n "$candidate" ] || return 1
@@ -80,17 +62,13 @@ function _probe_python() {
     esac
     command -v "$candidate" &> /dev/null || return 1
 
-    local ver major rest minor
-    ver=$("$candidate" -V 2>&1 | sed 's/Python //g')
-    major=${ver%%.*}
-    rest=${ver#*.}
-    minor=${rest%%.*}
-    [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
-    if (( major > 3 )) || (( major == 3 && minor >= 10 )); then
-        echo "$candidate"
-        return 0
-    fi
-    return 1
+    # Let Python judge its own version: sys.version_info is authoritative,
+    # and reading the exit code (not stdout) makes this immune to stderr
+    # banners/warnings that some shims emit.
+    "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' &> /dev/null \
+        || return 1
+    echo "$candidate"
+    return 0
 }
 
 # Check the python version at first, exit blade when python
@@ -108,36 +86,26 @@ function _check_python() {
         return 0
     fi
 
-    local python=""
-    if command -v python3 &> /dev/null; then
-        python="python3"
-    elif command -v python &> /dev/null; then
-        python="python"
-    else
-        _fatal "Please install python 3.10+ in your system"
-    fi
+    # Detection order:
+    # 1. The generic names `python3` then `python` -- if present and >= 3.10.
+    # 2. Specific versioned interpreters, newest first, so a too-old system
+    #    `python3` still lets blade pick up a usable python elsewhere on PATH.
+    local candidate found
+    for candidate in python3 python \
+                     python3.14 python3.13 python3.12 python3.11 python3.10; do
+        if found=$(_probe_python "$candidate"); then
+            echo "$found"
+            return 0
+        fi
+    done
 
-    local python_ver
-    python_ver=$("$python" -V 2>&1 | sed 's/Python //g')
-    local major=${python_ver%%.*}
-    local rest=${python_ver#*.}
-    local minor=${rest%%.*}
-
-    if ! [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]]; then
-        _info "Python version in your machine: $python_ver"
-        _fatal "Cannot parse python version, please install python 3.10+"
-    fi
-
-    if (( major < 3 )) || (( major == 3 && minor < 10 )); then
-        _info "Python version in your machine: $python_ver"
-        _fatal "Please upgrade your python version to 3.10+"
-    fi
-    echo "$python"
+    # Nothing usable found.
+    _fatal "No Python >= 3.10 found (tried python3, python, python3.14 .. python3.10). Please install python 3.10+."
 }
 
 
-blade_path=`_full_real_path $0`
-blade_dir=$(cd $(dirname $blade_path) && pwd)
+blade_path=$(_full_real_path "$0")
+blade_dir=$(cd "$(dirname "$blade_path")" && pwd)
 
 if [[ -d "$blade_dir/src/blade" ]]; then
     blade_file="$blade_dir/src"
@@ -145,8 +113,8 @@ else
     blade_file="$blade_dir/blade.zip"
 fi
 
-if [[ -e $blade_dir/blade_init ]]; then
-    source $blade_dir/blade_init
+if [[ -e "$blade_dir/blade_init" ]]; then
+    source "$blade_dir/blade_init"
 fi
 
 # Note: _fatal inside _check_python runs in a command-substitution
@@ -164,4 +132,7 @@ if [[ ! -e "$blade_file" ]]; then
     _fatal "Cannot find the core file $blade_file"
 fi
 
-${BLADE_PYTHON_INTERPRETER:-$python} $blade_file "$@"
+# BLADE_PYTHON_INTERPRETER is intentionally left unquoted: it may be a
+# multi-word command (e.g. "python -m coverage run"). exec replaces this
+# wrapper so signals propagate straight to blade and the exit code is blade's.
+exec ${BLADE_PYTHON_INTERPRETER:-$python} "$blade_file" "$@"
