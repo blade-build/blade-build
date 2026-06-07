@@ -23,7 +23,7 @@ Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based deve
 
 我们先来看一个简洁的演示：
 
-[![asciicast](https://asciinema.org/a/o9uQ2uia4OVqghXUid7XSNjv1.svg)](https://asciinema.org/a/o9uQ2uia4OVqghXUid7XSNjv1)
+[![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
 
 ## 版本发布
 

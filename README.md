@@ -23,7 +23,7 @@ A modern, high-performance build system optimized for trunk-based development in
 
 First, let's see a cool demo:
 
-[![asciicast](https://asciinema.org/a/o9uQ2uia4OVqghXUid7XSNjv1.svg)](https://asciinema.org/a/o9uQ2uia4OVqghXUid7XSNjv1)
+[![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
 
 ## Releases
 
