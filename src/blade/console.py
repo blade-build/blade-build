@@ -100,6 +100,9 @@ _COLORS = {
 # column 0 and the whole visible line is wiped, including any tail left by a
 # previous, longer frame (e.g. "99/100 99%" -> "1/100 1%").
 _CLEAR_TO_EOL = '\033[K'
+# Erase from the cursor to the end of the screen -- used to wipe the whole
+# multi-line build panel in one shot (the panel always sits at the bottom).
+_CLEAR_TO_DISPLAY_END = '\033[J'
 
 # Cursor visibility. Hide while the progress bar owns the last line so the
 # blinking block at the end of the bar doesn't sit there looking sloppy.
@@ -229,6 +232,12 @@ _PROGRESS_REFRESH_INTERVAL = 0.2
 
 _last_progress_value = -1  # The last progress bar value, -1 means none
 _last_progress_time = 0
+# Number of lines the multi-line build panel currently occupies on screen
+# (0 = none). When > 0 the clear path wipes the whole panel instead of a single
+# bar line. The panel and the single-line bar are mutually exclusive per build.
+_region_height = 0
+# Cap on the sliding window of recent completed steps shown in the panel.
+_PANEL_MAX_RECENT = 10
 # True iff a progress frame is currently on screen and we owe both a clear
 # (\r + \033[K) and a show-cursor (\033[?25h). Tracks "there's a frame to wipe"
 # and "we hid the cursor" together because those two facts are flipped in
@@ -292,12 +301,19 @@ def show_progress_bar(current, total):
 
 
 def _clear_progress_bar_locked():
-    """Erase the progress bar in place. Caller must hold _print_lock."""
-    global _cursor_hidden, _last_progress_value, _last_progress_time
-    if _cursor_hidden and _cursor_control:
+    """Erase the progress bar / panel in place. Caller must hold _print_lock."""
+    global _cursor_hidden, _last_progress_value, _last_progress_time, _region_height
+    if _cursor_control and (_cursor_hidden or _region_height):
         # Wipe the frame and hand the cursor back, in a single flush so that
         # any subsequent message lands on a clean line with a visible cursor.
-        sys.stderr.write('\r' + _CLEAR_TO_EOL + _SHOW_CURSOR)
+        if _region_height:
+            # Multi-line panel: go to its top line and clear it + everything
+            # below (the panel always sits at the bottom of the screen).
+            sys.stderr.write('\033[%dA\r%s%s' % (
+                _region_height, _CLEAR_TO_DISPLAY_END, _SHOW_CURSOR))
+            _region_height = 0
+        else:
+            sys.stderr.write('\r' + _CLEAR_TO_EOL + _SHOW_CURSOR)
         sys.stderr.flush()
     _cursor_hidden = False
     _last_progress_value = -1
@@ -307,6 +323,87 @@ def _clear_progress_bar_locked():
 def clear_progress_bar():
     with _print_lock:
         _clear_progress_bar_locked()
+
+
+# Grayscale ramp for the tri-state bar: done (bright) / running (mid) /
+# remaining (dark). 256-color grays; falls back to shade glyphs without color.
+_GRAY_DONE = '\033[38;5;252m'
+_GRAY_RUNNING = '\033[38;5;245m'
+_GRAY_REMAINING = '\033[38;5;238m'
+_GRAY_RESET = '\033[0m'
+_BLOCK = '█'  # full block
+
+
+def _tri_state_bar(finished, running, total, width):
+    """A progress bar split into done / running / remaining zones, shaded by
+    grayscale when color is on, or by block glyphs (full/medium/light) otherwise.
+    Segment widths use a cumulative floor so they always sum to ``width``.
+    """
+    if total <= 0:
+        total = 1
+    done_w = width * finished // total
+    run_w = width * (finished + running) // total - done_w
+    rem_w = width - done_w - run_w
+    if _color_enabled:
+        return (_GRAY_DONE + _BLOCK * done_w + _GRAY_RUNNING + _BLOCK * run_w +
+                _GRAY_REMAINING + _BLOCK * rem_w + _GRAY_RESET)
+    return _BLOCK * done_w + '▒' * run_w + '░' * rem_w
+
+
+def _format_eta(seconds):
+    if seconds is None or seconds < 0:
+        return ''
+    seconds = int(seconds)
+    if seconds >= 3600:
+        return '  ETA %d:%02d:%02d' % (seconds // 3600, seconds % 3600 // 60, seconds % 60)
+    return '  ETA %d:%02d' % (seconds // 60, seconds % 60)
+
+
+def _truncate(text, width):
+    """Clip a plain (uncolored) line to ``width`` columns with an ellipsis."""
+    if width <= 0:
+        return ''
+    return text if len(text) <= width else text[:width - 1] + '…'
+
+
+def _build_panel_lines(finished, running, total, recent, eta):
+    size = shutil.get_terminal_size((80, 24))
+    pct = finished * 100 // total if total else 0
+    head = ' %d/%d %d%% ·%d running%s' % (finished, total, pct, running, _format_eta(eta))
+    # Size the bar so the header fits one line (the bar glyphs are 1 column each;
+    # color codes are zero-width). 1 column of right margin avoids auto-wrap.
+    bar_w = max(_MIN_PROGRESS_BAR_WIDTH,
+                min(_MAX_PROGRESS_BAR_WIDTH, size.columns - len(head) - 1))
+    lines = [_tri_state_bar(finished, running, total, bar_w) + head]
+    # Cap the recent-window height to both the configured max and the terminal.
+    max_recent = max(1, min(len(recent), _PANEL_MAX_RECENT, size.lines - 2))
+    for desc in list(recent)[-max_recent:]:
+        lines.append(_truncate('  ' + desc, size.columns - 1))
+    return lines
+
+
+def render_build_panel(finished, running, total, recent, eta=None):
+    """Draw the live build panel: a tri-state grayscale bar + a sliding window of
+    the most recent completed steps. Redrawn in place at the bottom of the
+    screen; throttled, but always paints the final 100% frame.
+    """
+    global _region_height, _last_progress_time
+    if not _cursor_control or total <= 0:
+        return
+    now = time.time()
+    if finished != total and now - _last_progress_time < _PROGRESS_REFRESH_INTERVAL:
+        return
+    lines = _build_panel_lines(finished, running, total, recent, eta)
+    with _print_lock:
+        _hide_cursor_locked()
+        if _region_height:
+            sys.stderr.write('\033[%dA' % _region_height)  # to top of old panel
+        # Clear the old panel + anything below, then paint; park the cursor on
+        # the empty line under the panel so the next redraw moves up exactly N.
+        sys.stderr.write('\r' + _CLEAR_TO_DISPLAY_END + '\n'.join(lines) + '\n')
+        sys.stderr.flush()
+        _region_height = len(lines)
+        _last_progress_time = now
 
 
 def _restore_cursor_at_exit():

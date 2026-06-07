@@ -55,6 +55,7 @@ class _ConsoleStateMixin:
             '_last_progress_value': console._last_progress_value,
             '_last_progress_time': console._last_progress_time,
             '_cursor_hidden': console._cursor_hidden,
+            '_region_height': console._region_height,
             '_log': console._log,
         }
         console._cursor_control = True
@@ -62,6 +63,7 @@ class _ConsoleStateMixin:
         console._last_progress_value = -1
         console._last_progress_time = 0
         console._cursor_hidden = False
+        console._region_height = 0
         self._real_stderr = sys.stderr
         self._real_stdout = sys.stdout
         self.stderr = io.StringIO()

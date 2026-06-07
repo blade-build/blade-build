@@ -9,6 +9,7 @@ The ninja runner module.
 """
 
 
+import collections
 import os
 import re
 import subprocess
@@ -58,12 +59,15 @@ def _build_options(options):
 def _run_ninja_build(cmd, options):
     """Run the "ninja" program with interactive."""
     cmdstr = ' '.join(cmd)
-    if options.verbosity > console.Verbosity.QUIET:
+    if options.verbosity >= console.Verbosity.VERBOSE:
+        # Verbose: let ninja own the terminal and print every command in full.
         return _run_ninja_command(cmdstr)
-    # In quiet mode, redirect ninja output to the file
+    # Otherwise capture ninja's output and render our own build panel: ninja,
+    # writing to a pipe/file (not a smart terminal), emits one line per finished
+    # edge as '[finished/total](running) <desc>' -- easy to parse.
     ninja_output = 'blade-bin/ninja_output.log'
+    os.environ['NINJA_STATUS'] = '[%f/%t](%r) '  # the panel parser depends on this
     with open(ninja_output, 'w', buffering=1) as wf, open(ninja_output, buffering=1) as rf:
-        os.environ['NINJA_STATUS'] = '[%f/%t] '  # The progress depends on this format
         p = subprocess.Popen(cmdstr, shell=True, stdout=wf, stderr=subprocess.STDOUT)
         _show_progress(p, rf)
     return p.returncode
@@ -81,28 +85,43 @@ def _run_ninja_command(cmdstr):
 
 
 def _show_progress(process, file_reader):
+    """Render ninja's '[finished/total](running) <desc>' status stream as a live
+    build panel: a tri-state grayscale bar + a sliding window of recent steps.
+
+    Each parsed line drives the panel; anything else (compiler warnings/errors,
+    'ninja: ...') is printed permanently -- console.output auto-clears the panel
+    first, so those messages scroll above it and are never overwritten. On clean
+    success a one-line summary replaces the panel.
     """
-    Convert description message such as '[1/123] CC xxx.cc' into progress bar.
-    """
-    progress_re = re.compile(r'^\[(\d+)/(\d+)\]\s+')
+    progress_re = re.compile(r'^\[(\d+)/(\d+)\]\((\d+)\)\s+(.*)$')
+    recent = collections.deque(maxlen=console._PANEL_MAX_RECENT)
+    total = finished = 0
+    start = time.time()
     try:
         while True:
             process.poll()
-            line = file_reader.readline().strip()
+            line = file_reader.readline()
             if line:
+                line = line.rstrip('\r\n')  # keep leading indent of error output
                 m = progress_re.match(line)
                 if m:
-                    console.show_progress_bar(int(m.group(1)), int(m.group(2)))
-                else:
-                    console.clear_progress_bar()
+                    finished, total = int(m.group(1)), int(m.group(2))
+                    running = max(0, int(m.group(3)) - 1)  # %r counts the finishing edge
+                    recent.append(m.group(4))
+                    elapsed = time.time() - start
+                    eta = (total - finished) * elapsed / finished if finished else None
+                    console.render_build_panel(finished, running, total, recent, eta)
+                elif line:
                     console.output(line)
             elif process.returncode is not None:
                 break
             else:
                 # Avoid cost too much cpu
-                time.sleep(0.1)
+                time.sleep(0.05)
     finally:
-        console.clear_progress_bar()
+        console.clear_progress_bar()  # wipe the panel
+        if process.returncode == 0 and total:
+            console.output('%d build steps completed' % total)
 
 
 def _show_slow_builds(build_dir, build_start_time, show_builds_slower_than):
