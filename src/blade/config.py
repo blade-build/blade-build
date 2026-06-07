@@ -86,6 +86,13 @@ _CONFIG_TEMPLATE = {
         'c_warnings': [],
         'cxx_warnings': [],
         'warnings': [],
+        'no_warning_allowed_paths': [
+            'thirdparty', 'third_party', 'third-party',
+            '3rdparty', '3rd_party', 'vendor',
+        ],
+        'no_warning_allowed_paths__help__':
+            "Path keywords under which \"warning='no'\" may be used without a "
+            'misuse warning (substring match against the target path and srcs)',
         'optimize': [],
         'benchmark_libs': [],
         'benchmark_main_libs': [],

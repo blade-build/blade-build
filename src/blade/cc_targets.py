@@ -485,7 +485,7 @@ class CcTarget(Target):
         if not srcs or warning != 'no':
             return
 
-        keywords_list = self.blade.get_sources_keyword_list()
+        keywords_list = config.get_item('cc_config', 'no_warning_allowed_paths')
         for keyword in keywords_list:
             if keyword in self.path:
                 return

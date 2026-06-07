@@ -318,5 +318,57 @@ class CcLinkPlatformGuardTest(unittest.TestCase):
         self.assertEqual([], target.warnings)
 
 
+class CheckIncorrectNoWarningTest(unittest.TestCase):
+    """Cover ``CcTarget._check_incorrect_no_warning`` and its config knob.
+
+    ``warning='no'`` is legitimate only for third-party code; using it
+    elsewhere silences real warnings. The set of allowed path keywords is
+    configurable via ``cc_config.no_warning_allowed_paths`` (issues #646,
+    #805) -- these tests pin both the gate and the config plumbing.
+    """
+
+    def _target(self, srcs, path):
+        target = _bare_cc_target()
+        target.srcs = srcs
+        target.path = path
+        target.warning = mock.Mock()
+        return target
+
+    def _check(self, target, warning, allowed):
+        with mock.patch.object(cc_targets.config, 'get_item',
+                               return_value=allowed) as get_item:
+            target._check_incorrect_no_warning(warning)
+        return get_item
+
+    def test_no_warning_outside_allowed_paths_warns(self):
+        target = self._target(['src/foo.cc'], 'src')
+        self._check(target, 'no', ['thirdparty'])
+        target.warning.assert_called_once()
+
+    def test_no_warning_under_allowed_path_is_silent(self):
+        target = self._target(['thirdparty/zlib/z.c'], 'thirdparty/zlib')
+        self._check(target, 'no', ['thirdparty'])
+        target.warning.assert_not_called()
+
+    def test_custom_allowed_path_is_honoured(self):
+        # A path the default would reject is accepted once configured.
+        target = self._target(['vendor/lib/a.cc'], 'vendor/lib')
+        self._check(target, 'no', ['vendor'])
+        target.warning.assert_not_called()
+
+    def test_warning_other_than_no_short_circuits(self):
+        # Must return before consulting the config at all.
+        target = self._target(['src/foo.cc'], 'src')
+        get_item = self._check(target, 'yes', ['thirdparty'])
+        get_item.assert_not_called()
+        target.warning.assert_not_called()
+
+    def test_empty_srcs_short_circuits(self):
+        target = self._target([], 'src')
+        get_item = self._check(target, 'no', ['thirdparty'])
+        get_item.assert_not_called()
+        target.warning.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

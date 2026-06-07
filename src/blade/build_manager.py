@@ -717,17 +717,6 @@ class Blade:
         """Return build toolchain instance."""
         return self.__build_toolchain
 
-    def get_sources_keyword_list(self):
-        """This keywords list is used to check the source files path.
-
-        Ex, when users specifies warning=no, it could be used to check that
-        the source files is under thirdparty or not. If not, it will warn
-        users that this flag is used incorrectly.
-
-        """
-        keywords = ['thirdparty']
-        return keywords
-
     def _build_jobs_num(self):
         """Calculate build jobs num."""
         # User has the highest priority
