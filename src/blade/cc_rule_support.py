@@ -208,6 +208,29 @@ sys.exit(p.wait())
 '''
 
 
+# A tiny shell wrapper for the macOS archive step. Apple's libtool/ranlib warns
+# "... the table of contents is empty (no object file members in the library
+# define global symbols)" for a symbol-less static library (an all-inline/
+# template lib whose stub `.cc` compiles to no global symbols). Such an `.a`
+# links fine as a header carrier, the warning is pure noise, and unlike "has no
+# symbols" it has no suppression flag (`-no_warning_for_no_symbols` does not
+# cover it). So drop just that one line from stderr while preserving stdout,
+# every other diagnostic, and the archive command's exit code.
+#
+# Process substitution streams stderr through `grep` live (no temp file), and
+# `exec` replaces the shell with the archive command so the only process beyond
+# the unavoidable `grep` is gone -- and the exit code is naturally the command's.
+# This needs bash, not `/bin/sh`: macOS's `/bin/sh` is bash in POSIX mode, which
+# rejects `>( )` as a syntax error. A shell wrapper (not a `builtin_tools` Python
+# helper) keeps the per-archive cost to a `/bin/bash` spawn instead of a Python
+# interpreter + `blade` package import on every `cc_library`. darwin-only --
+# Linux `ar` never emits this warning, so the rule wraps the command on macOS
+# alone.
+_DARWIN_AR_WRAPPER_SH = r'''#!/bin/bash
+exec "$@" 2> >(grep -v 'table of contents is empty' >&2)
+'''
+
+
 class CcRuleGenerator:
     """Generate cc/cuda ninja rules from a RuleContext (see module docstring)."""
 
@@ -222,6 +245,7 @@ class CcRuleGenerator:
         self.__inclusion_wrapper_path = None
         self.__msvc_wrapper_py_path = None
         self.__msvc_link_wrapper_py_path = None
+        self.__darwin_ar_wrapper_path = None
 
     def _add_line(self, line):
         self._ctx.add_line(line)
@@ -266,6 +290,14 @@ class CcRuleGenerator:
             util.write_if_changed(path, _MSVC_LINK_WRAPPER_PY)
             self.__msvc_link_wrapper_py_path = path
         return self.__msvc_link_wrapper_py_path
+
+    def _darwin_ar_wrapper_sh(self):
+        """Path to the macOS archive-output filter wrapper, written on first use."""
+        if self.__darwin_ar_wrapper_path is None:
+            path = os.path.join(self.build_dir, 'ar_wrapper.sh')
+            util.write_if_changed(path, _DARWIN_AR_WRAPPER_SH)
+            self.__darwin_ar_wrapper_path = path
+        return self.__darwin_ar_wrapper_path
 
     def _get_intrinsic_cc_flags(self):
         """Get the common c/c++ flags."""
@@ -742,11 +774,16 @@ class CcRuleGenerator:
             if thin:
                 console.error('cc_library_config.thin=True is not supported on macOS '
                               '(Apple ar does not support thin archives)')
+            # Route the archive through a shell wrapper that drops Apple's benign
+            # "table of contents is empty" warning for symbol-less libraries
+            # (no suppression flag exists for it). See _DARWIN_AR_WRAPPER_SH.
+            wrap = f'/bin/bash {self._darwin_ar_wrapper_sh()}'
             if deterministic:
-                command = 'rm -f $out; libtool -static -no_warning_for_no_symbols -o $out $in'
+                command = (f'rm -f $out; {wrap} libtool -static '
+                           '-no_warning_for_no_symbols -o $out $in')
             else:
                 ar = self.build_accelerator.get_ar_command()
-                command = f'rm -f $out; {ar} rcs $out $in'
+                command = f'rm -f $out; {wrap} {ar} rcs $out $in'
         elif target_os == 'linux':
             ar = self.build_accelerator.get_ar_command()
             extra = ''

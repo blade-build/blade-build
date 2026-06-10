@@ -112,6 +112,10 @@ class CcArchiveRulesTest(unittest.TestCase):
         gen.build_toolchain.target_os = target_os
         gen.build_accelerator = mock.Mock()
         gen.build_accelerator.get_ar_command.return_value = 'ar'
+        # The darwin ar path wraps the command via a generated shell script;
+        # stub it to a fixed path so the test asserts the wiring without
+        # touching the filesystem.
+        gen._darwin_ar_wrapper_sh = mock.Mock(return_value='BUILD/ar_wrapper.sh')
         return gen
 
     def _capture_ar_command(self, gen, deterministic=False, thin=False):
@@ -145,6 +149,8 @@ class CcArchiveRulesTest(unittest.TestCase):
         gen = self._make_gen('linux')
         cmd = self._capture_ar_command(gen, deterministic=False, thin=False)
         self.assertIn('ar rcs ', cmd)
+        # The warning-filter wrapper is macOS-only; Linux ar never emits it.
+        self.assertNotIn('ar_wrapper.sh', cmd)
 
     def test_linux_deterministic(self):
         gen = self._make_gen('linux')
@@ -166,12 +172,14 @@ class CcArchiveRulesTest(unittest.TestCase):
     def test_darwin_default(self):
         gen = self._make_gen('darwin')
         cmd = self._capture_ar_command(gen, deterministic=False, thin=False)
-        self.assertIn('ar rcs ', cmd)
+        # Archive routed through the warning-filter wrapper (see #1295).
+        self.assertIn('/bin/bash BUILD/ar_wrapper.sh ar rcs ', cmd)
 
     def test_darwin_deterministic_uses_libtool(self):
         gen = self._make_gen('darwin')
         cmd = self._capture_ar_command(gen, deterministic=True, thin=False)
-        self.assertIn('libtool -static -no_warning_for_no_symbols -o $out $in', cmd)
+        self.assertIn('/bin/bash BUILD/ar_wrapper.sh libtool -static '
+                      '-no_warning_for_no_symbols -o $out $in', cmd)
 
     def test_darwin_thin_logs_error(self):
         gen = self._make_gen('darwin')
