@@ -46,6 +46,31 @@ _TARGET_RE = re.compile(r'(?P<path>((//)?[\w./+-]+)?:|#)(?P<name>[\w.+-]*)$')
 LOCATION_RE = re.compile(r'\$\(location\s+(\S*:\S+)(\s+\w*)?\)')
 
 
+# Provider-qualified external library references (issue #1236). A dependency of
+# the form `<scheme>#<coordinate>` resolves to a library NOT built from source
+# in this workspace, supplied by a package-manager provider (vcpkg first; later
+# maven, conan, ...). This extends blade's existing `#name` system-library
+# family: a *bare* `#name` (empty scheme) stays an ambient system lib, while a
+# scheme before the `#` says where the library comes from.
+#
+# Each provider registers a handler `(referrer, coordinate) -> dep_key` that
+# validates the provider-specific coordinate (e.g. vcpkg's `port:lib`),
+# registers the backing Target on first use (like `_add_system_library`), and
+# returns its database key. Providers register themselves at startup, so
+# target.py stays free of provider-specific imports.
+_SCHEME_RE = re.compile(r'[a-z][a-z0-9]*$')
+_dep_scheme_providers = {}
+
+
+def register_dep_scheme(scheme, handler):
+    """Register a ``<scheme>#...`` dependency provider (issue #1236).
+
+    handler(referrer_target, coordinate) -> dep_key str (or None on error,
+    after reporting via referrer_target.error()).
+    """
+    _dep_scheme_providers[scheme] = handler
+
+
 def _check_path(path):
     msg = []
     if path.startswith('//'):
@@ -492,6 +517,13 @@ class Target:
             self._add_system_library(dkey, dep)
             return dkey
 
+        # `<scheme>#<coordinate>` provider-qualified reference (issue #1236).
+        # A '#' past the first character marks a provider (vcpkg#port:lib, ...);
+        # a leading '#' (empty scheme) is an ambient system lib, handled below.
+        hash_pos = dep.find('#')
+        if hash_pos > 0:
+            return self._unify_scheme_dep(dep, dep[:hash_pos], dep[hash_pos + 1:])
+
         (path, name, msgs) = _parse_target(dep)
 
         if msgs:
@@ -517,6 +549,29 @@ class Target:
             path = self.path
 
         return f'{path}:{name}'
+
+    def _unify_scheme_dep(self, dep, scheme, coordinate):
+        """Resolve a ``<scheme>#<coordinate>`` provider reference (issue #1236).
+
+        Dispatches to the registered provider for `scheme`; the provider
+        validates `coordinate`, registers the backing Target on first use, and
+        returns its database key. Returns None (after reporting) on any error.
+        """
+        if not _SCHEME_RE.match(scheme):
+            self.error('Invalid dependency "%s": scheme "%s" must be lowercase, '
+                       'matching [a-z][a-z0-9]*' % (dep, scheme))
+            return None
+        if not coordinate:
+            self.error('Invalid dependency "%s": empty coordinate after "%s#"'
+                       % (dep, scheme))
+            return None
+        handler = _dep_scheme_providers.get(scheme)
+        if handler is None:
+            known = ', '.join(sorted(_dep_scheme_providers)) or '(none registered)'
+            self.error('Unknown dependency scheme "%s#" in "%s"; registered '
+                       'schemes: %s' % (scheme, dep, known))
+            return None
+        return handler(self, coordinate)
 
     def _init_target_deps(self, deps):
         """Init the target deps.
