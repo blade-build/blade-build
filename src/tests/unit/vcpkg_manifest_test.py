@@ -123,6 +123,13 @@ class PortOptionsTest(unittest.TestCase):
             vcpkg.port_options({'snappy': {'include_prefix': 'snappy'}}, 'snappy'),
             ('static', False, 'snappy'))
 
+    def test_include_prefix_dict(self):
+        # prefix -> vcpkg subdir mapping (e.g. "thirdparty/glog" -> include/glog).
+        self.assertEqual(
+            vcpkg.port_options(
+                {'glog': {'include_prefix': {'thirdparty/glog': 'glog'}}}, 'glog'),
+            ('static', False, {'thirdparty/glog': 'glog'}))
+
     def test_dynamic_ports_sorted(self):
         pkgs = {'fmt': '7', 'gflags': {'linkage': 'dynamic'},
                 'glog': {'linkage': 'dynamic'}, 'z': {'linkage': 'static'}}
