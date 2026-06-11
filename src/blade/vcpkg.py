@@ -17,7 +17,10 @@ chainload blade's compiler belong to the orchestration phase and are added
 later.
 """
 
+import os
 import re
+
+from blade import target as _blade_target
 
 # blade target_arch (canonical, from `cc -dumpmachine`) / MSVC arch -> vcpkg
 # architecture token.
@@ -168,3 +171,91 @@ def parse_pkgconfig(text):
         'l_libs': _extract_l_libs(libs),
         'l_private': _extract_l_libs(libs_private),
     }
+
+
+class VcpkgError(Exception):
+    """A `vcpkg#...` reference could not be resolved (issue #1236)."""
+
+
+def resolve_reference(coordinate, packages, root, triplet):
+    """Resolve a `vcpkg#<coordinate>` reference to install-tree locations.
+
+    Pure validation + path computation (no toolchain / Target / filesystem):
+    the handler derives `triplet`/`root` from the toolchain + config and passes
+    them in. Raises VcpkgError (with a user-facing message) on any problem.
+
+    Returns a dict: port, lib, key, header_only, lib_dir, include_dir.
+    """
+    if ':' not in coordinate:
+        raise VcpkgError(
+            'invalid dependency "vcpkg#%s": a port must name a library, e.g. '
+            '"vcpkg#%s:<lib>" (or "vcpkg#%s:hdrs" for a header-only port)'
+            % (coordinate, coordinate, coordinate))
+    port, lib = coordinate.split(':', 1)
+    if not port or not lib:
+        raise VcpkgError('invalid dependency "vcpkg#%s": expected "<port>:<lib>"'
+                         % coordinate)
+    # Strict by default: the workspace whitelist is the single source of truth
+    # for which ports may be referenced.
+    if port not in packages:
+        raise VcpkgError(
+            'vcpkg port "%s" is not in the vcpkg_config.packages whitelist; '
+            'declare it in BLADE_ROOT, e.g. '
+            'vcpkg_config(packages={"%s": "<version>"})' % (port, port))
+    if not root:
+        raise VcpkgError(
+            'vcpkg: no install root for "vcpkg#%s"; set vcpkg_config(root=...) '
+            'or the VCPKG_ROOT environment variable' % coordinate)
+    if not triplet:
+        raise VcpkgError(
+            'vcpkg: could not determine a triplet for "vcpkg#%s"; set '
+            'vcpkg_config(triplet=...)' % coordinate)
+    installed = os.path.join(root, 'installed', triplet)
+    return {
+        'port': port,
+        'lib': lib,
+        'key': 'vcpkg#%s:%s' % (port, lib),
+        'header_only': lib == 'hdrs',
+        'lib_dir': os.path.join(installed, 'lib'),
+        'include_dir': os.path.join(installed, 'include'),
+    }
+
+
+def triplet_for_toolchain(toolchain, dynamic=False):
+    """Derive the vcpkg triplet from a blade ToolChain instance."""
+    vendor = next((v for v in ('gcc', 'clang', 'msvc') if toolchain.cc_is(v)), None)
+    return triplet_for(toolchain.target_os, toolchain.target_arch, vendor, dynamic)
+
+
+def _vcpkg_dep_handler(referrer, coordinate):
+    """`<scheme>#...` provider for vcpkg (registered below).
+
+    Resolves the reference against the workspace whitelist + install tree and
+    auto-creates a VcpkgLibrary target (like _add_system_library), returning its
+    database key. Reports via referrer.error() and returns None on failure.
+    """
+    from blade import config
+    cfg = config.get_section('vcpkg_config')
+    toolchain = referrer.blade.get_build_toolchain()
+    triplet = cfg.get('triplet') or 'auto'
+    if triplet == 'auto':
+        triplet = triplet_for_toolchain(toolchain)
+    root = cfg.get('root') or os.environ.get('VCPKG_ROOT', '')
+    try:
+        info = resolve_reference(coordinate, cfg.get('packages', {}), root, triplet)
+    except VcpkgError as e:
+        referrer.error(str(e))
+        return None
+    key = info['key']
+    if key in referrer.target_database:
+        return key
+    # Lazy import: cc_targets is loaded before this module, but keeping the
+    # import local avoids a hard module-level cycle (cc_targets -> ... -> here).
+    from blade.cc_targets import VcpkgLibrary
+    target = VcpkgLibrary(info['port'], info['lib'], key,
+                          info['lib_dir'], info['include_dir'], info['header_only'])
+    referrer.blade.register_target(target)
+    return key
+
+
+_blade_target.register_dep_scheme('vcpkg', _vcpkg_dep_handler)
