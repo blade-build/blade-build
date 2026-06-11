@@ -1741,6 +1741,85 @@ class PrebuiltCcLibrary(CcTarget):
                                 order_only_deps=inclusion_check_result)
 
 
+class VcpkgLibrary(PrebuiltCcLibrary):
+    """A library resolved from a vcpkg install tree (issue #1236).
+
+    Auto-created by the vcpkg dependency provider (NOT declared in a BUILD
+    file) for a `vcpkg#<port>:<lib>` reference -- the same lifecycle as a
+    SystemLibrary. It wraps a pre-existing static archive under
+    `<root>/installed/<triplet>/lib/` plus the install tree's include dir;
+    `vcpkg#<port>:hdrs` is a header-only port (include dir only, no archive).
+
+    The backing `.a` lives outside the build tree, so `_setup` is overridden to
+    look at the resolved absolute path directly rather than the source-relative
+    path PrebuiltCcLibrary computes.
+    """
+
+    def __init__(self, port, lib, key, lib_dir, include_dir, header_only):
+        # Stash the vcpkg-resolved locations before super().__init__, which
+        # calls our _setup() at the end of construction.
+        self._vcpkg_port = port
+        self._vcpkg_lib_dir = lib_dir
+        self._vcpkg_header_only = header_only
+        super().__init__(
+                name=lib,
+                deps=[],
+                hdrs=[],
+                visibility=['PUBLIC'],
+                tags=['lang:cc', 'type:library', 'type:vcpkg'],
+                export_incs=[],
+                libpath_pattern=None,
+                link_all_symbols=False,
+                binary_link_only=False,
+                deprecated=False,
+                kwargs={})
+        # Re-key as the canonical provider reference. The path sentinel must not
+        # be '#' -- that marks a `-l` system lib in the link/incs resolution.
+        # Done before declare_hdr_dir below so the headers register under the
+        # final key.
+        self.type = 'vcpkg_library'
+        self.path = 'vcpkg#' + port
+        self.key = key
+        self.fullname = '//' + key
+        if include_dir:
+            # External headers go via -isystem so third-party warnings don't
+            # trip the consumer's -Werror (same posture as foreign_cc_library);
+            # absolute paths survive _incs_to_fullpath unchanged.
+            self.attr['system_export_incs'] = self._incs_to_fullpath([include_dir])
+        # Exempt from the unused-deps check: vcpkg headers live in an absolute,
+        # out-of-tree `-isystem` dir, which blade's inclusion scanner can't
+        # attribute back to this target (declare_hdr_dir works only for
+        # in-tree dirs). Flagging every vcpkg dep as "unused" would be pure
+        # noise; precise external-header attribution is a follow-up.
+        declare_header_less(self)
+
+    def _setup(self):  # override PrebuiltCcLibrary._setup
+        tc = self.blade.get_build_toolchain()
+        if self._vcpkg_header_only:
+            return
+        archive = os.path.join(
+            self._vcpkg_lib_dir,
+            f'{tc.lib_prefix}{self.name}{tc.static_lib_suffix}')
+        if not os.path.exists(archive):
+            self.error(
+                'vcpkg#%s:%s: static library not found at %s; run '
+                '`vcpkg install %s` for this triplet' % (
+                    self._vcpkg_port, self.name, archive, self._vcpkg_port))
+            return
+        self.attr['static_source'] = archive
+        self._add_target_file(tc.STATIC_LIB_LABEL, archive)
+        # No separate shared lib is resolved in this phase; the static archive
+        # serves both link modes (consumers that dynamic_link still get it).
+        self._add_target_file(tc.DYNAMIC_LIB_LABEL, archive)
+
+    def generate(self):  # override
+        # The static archive + include dir are pure metadata resolved in
+        # _setup(); there is nothing to build. (Emitting archive-syms for
+        # cc_check_undefined would write `<archive>.syms` into the shared vcpkg
+        # tree; redirecting that into the build dir is a follow-up.)
+        pass
+
+
 def prebuilt_cc_library(
         name: str,
         deps: 'StrOrListOpt' = None,

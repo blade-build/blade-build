@@ -39,6 +39,7 @@ import posixpath
 def _load_build_rules():
     # pylint: disable=import-outside-toplevel,unused-import
     import blade.cc_targets
+    import blade.vcpkg  # registers the `vcpkg#...` dep scheme (issue #1236)
     import blade.cu_targets
     import blade.custom_rule_target
     import blade.gen_rule_target
@@ -593,12 +594,15 @@ def _load_related_build_files(blade, command_targets, processed_dirs):
 
     while cited_targets:
         target_id = cited_targets.pop()
-        source_dir, target_name = target_id.split(':')
+        source_dir, target_name = target_id.split(':', 1)
 
         if target_id in related_targets:
             continue
 
-        if source_dir == '#':
+        # System libs ('#name') and provider-qualified external libs
+        # ('vcpkg#port:lib', ...) are pre-registered in the database and have no
+        # BUILD file to load. A normal workspace source dir never contains '#'.
+        if '#' in source_dir:
             related_targets[target_id] = target_database[target_id]
             continue
 
