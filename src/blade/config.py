@@ -419,6 +419,36 @@ _CONFIG_TEMPLATE = {
         },
     },
 
+    # vcpkg package-manager integration (issue #1236). A single workspace-level
+    # section: vcpkg's manifest model allows one version and one feature set per
+    # package per workspace, so these map 1:1 onto vcpkg.json fields.
+    'vcpkg_config': {
+        '__help__': 'vcpkg C/C++ package manager configuration (issue #1236)',
+        # Pins the ports tree (git SHA or date) -> vcpkg.json "builtin-baseline".
+        # Empty means unpinned (not reproducible); a warning is emitted later.
+        'baseline': '',
+        # The allow-list of packages: the single source of truth for what a
+        # `vcpkg#<port>:<lib>` reference may resolve to. Each value is either a
+        # version string ('fmt': '10.2.1') or a dict with version/features
+        # ('curl': {'version': '8.5.0', 'features': ['ssl', 'http2']}).
+        'packages': {},
+        # Optional private registries -> vcpkg-configuration.json "registries".
+        'registries': [],
+        # vcpkg tool + ports tree. Empty = use $VCPKG_ROOT (a later phase may
+        # bootstrap one when unset).
+        'root': '',
+        # Target triplet; 'auto' derives it from the resolved cc_toolchain.
+        'triplet': 'auto',
+        # Per-workspace install root, relative to the build dir.
+        'install_dir': '.cache/vcpkg',
+        # Binary-cache backend (the cross-workspace time-saver). 'auto' uses a
+        # shared local dir; full vcpkg backend strings are accepted (later phase).
+        'binary_cache': 'auto',
+        # Governance: subtrees where bare `vcpkg#...` references are allowed.
+        # Empty = anywhere (enforcement lands in a later phase).
+        'direct_use_allowed': [],
+    },
+
 }
 
 
@@ -787,6 +817,37 @@ def _check_kwarg_enum_value(kwargs, name, valid_values):
         _blade_config.error(f'Invalid config item "{name}" value "{value}", can only be in {valid_values}')
 
 
+def _check_vcpkg_packages(packages):
+    """Validate the shape of vcpkg_config.packages entries (issue #1236).
+
+    Each value is either a version string or a dict with the keys ``version``
+    and/or ``features`` (a list). The top-level dict type is enforced by the
+    normal config machinery; this catches malformed per-port specs early.
+    """
+    if packages is None or callable(packages):
+        return
+    if not isinstance(packages, dict):
+        _blade_config.error('vcpkg_config.packages must be a dict of {port: version|spec}')
+        return
+    for port, spec in packages.items():
+        if isinstance(spec, str):
+            continue
+        if isinstance(spec, dict):
+            unknown = set(spec) - {'version', 'features'}
+            if unknown:
+                _blade_config.error(
+                    'vcpkg_config.packages["%s"]: unknown key(s) %s; allowed: version, features'
+                    % (port, ', '.join(sorted(unknown))))
+            features = spec.get('features')
+            if features is not None and not isinstance(features, list):
+                _blade_config.error(
+                    'vcpkg_config.packages["%s"].features must be a list' % port)
+            continue
+        _blade_config.error(
+            'vcpkg_config.packages["%s"] must be a version string or a dict with '
+            'version/features, got "%s"' % (port, type(spec).__name__))
+
+
 def _check_test_related_envs(kwargs):
     value = kwargs.get('test_related_envs')
     if value is None or callable(value):
@@ -913,6 +974,25 @@ def cc_config(append=None, **kwargs):
 def link_config(append=None, **kwargs):
     """link_config."""
     _blade_config.update_config('link_config', append, kwargs)
+
+
+@config_rule
+def vcpkg_config(append=None, **kwargs):
+    """vcpkg package-manager configuration (issue #1236).
+
+    Workspace-level allow-list and infrastructure for ``vcpkg#<port>:<lib>``
+    dependencies. Example::
+
+        vcpkg_config(
+            baseline = '2024-12-15',
+            packages = {
+                'fmt': '10.2.1',
+                'curl': {'version': '8.5.0', 'features': ['ssl', 'http2']},
+            },
+        )
+    """
+    _check_vcpkg_packages(kwargs.get('packages'))
+    _blade_config.update_config('vcpkg_config', append, kwargs)
 
 
 @config_rule
