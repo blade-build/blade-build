@@ -173,6 +173,92 @@ def parse_pkgconfig(text):
     }
 
 
+# --- Phase 2 orchestration inputs: synthetic manifest + overlay triplet ------
+#
+# When blade drives `vcpkg install` itself, it generates a manifest from the
+# vcpkg_config whitelist and an overlay triplet that chainloads blade's resolved
+# compiler, so vcpkg's artifacts stay ABI-compatible with the rest of the build.
+# These are pure generators over plain inputs; writing the files + invoking
+# vcpkg is wired separately.
+
+# blade target_os -> CMAKE_SYSTEM_NAME for the overlay triplet ('' = native,
+# i.e. Windows, where vcpkg omits the cross-compile system name).
+_VCPKG_SYSTEM_NAME = {'linux': 'Linux', 'darwin': 'Darwin', 'windows': ''}
+
+
+def overlay_triplet_name(triplet):
+    """The blade overlay triplet name for a vanilla vcpkg triplet."""
+    return 'blade-' + triplet
+
+
+def manifest_json(packages, baseline=''):
+    """Build the synthetic vcpkg.json manifest from vcpkg_config (issue #1236).
+
+    A bare version -> a dependency + an `overrides` pin; a dict with features ->
+    a dependency object carrying them. Maps vcpkg_config 1:1 onto vcpkg's
+    manifest model (one version / feature set per package per workspace).
+    """
+    dependencies = []
+    overrides = []
+    for port in sorted(packages):
+        spec = packages[port]
+        if isinstance(spec, str):
+            version, features = spec, None
+        else:
+            version, features = spec.get('version'), spec.get('features')
+        if features:
+            dependencies.append({'name': port, 'features': list(features)})
+        else:
+            dependencies.append(port)
+        if version:
+            overrides.append({'name': port, 'version': version})
+    manifest = {'dependencies': dependencies}
+    if baseline:
+        manifest['builtin-baseline'] = baseline
+    if overrides:
+        manifest['overrides'] = overrides
+    return manifest
+
+
+def configuration_json(registries):
+    """Build vcpkg-configuration.json for private registries, or None."""
+    if not registries:
+        return None
+    return {'registries': [dict(r) for r in registries]}
+
+
+def chainload_cmake(cc, cxx, c_flags='', cxx_flags=''):
+    """CMake toolchain file pinning vcpkg's compiler to blade's resolved one."""
+    return (
+        'set(CMAKE_C_COMPILER "%s")\n'
+        'set(CMAKE_CXX_COMPILER "%s")\n'
+        'set(CMAKE_C_FLAGS_INIT "%s")\n'
+        'set(CMAKE_CXX_FLAGS_INIT "%s")\n' % (cc, cxx, c_flags, cxx_flags))
+
+
+def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
+                          chainload_rel='../blade-chainload.cmake'):
+    """The overlay triplet `.cmake` that chainloads blade's compiler.
+
+    Returns None if os/arch is unsupported. `library_linkage` is 'static'
+    (default, blade links static) or 'dynamic'.
+    """
+    arch = _VCPKG_ARCH.get(target_arch)
+    if arch is None or target_os not in _VCPKG_SYSTEM_NAME:
+        return None
+    lines = [
+        'set(VCPKG_TARGET_ARCHITECTURE %s)' % arch,
+        'set(VCPKG_CRT_LINKAGE dynamic)',
+        'set(VCPKG_LIBRARY_LINKAGE %s)' % library_linkage,
+    ]
+    system = _VCPKG_SYSTEM_NAME[target_os]
+    if system:
+        lines.append('set(VCPKG_CMAKE_SYSTEM_NAME %s)' % system)
+    lines.append('set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE '
+                 '${CMAKE_CURRENT_LIST_DIR}/%s)' % chainload_rel)
+    return '\n'.join(lines) + '\n'
+
+
 class VcpkgError(Exception):
     """A `vcpkg#...` reference could not be resolved (issue #1236)."""
 
