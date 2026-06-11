@@ -263,15 +263,23 @@ def dynamic_ports(packages):
                   if isinstance(s, dict) and s.get('linkage') == 'dynamic')
 
 
+def port_cmake_options(packages):
+    """{port: [cmake_options]} for ports that request extra configure options."""
+    return {p: s['cmake_options'] for p, s in packages.items()
+            if isinstance(s, dict) and s.get('cmake_options')}
+
+
 def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
-                          dynamic_ports=(), chainload_rel='../blade-chainload.cmake'):
+                          dynamic_ports=(), cmake_options=None,
+                          chainload_rel='../blade-chainload.cmake'):
     """The overlay triplet `.cmake` that chainloads blade's compiler.
 
     Mirrors vcpkg's stock triplet for the OS (so ports detect the target
     correctly) and adds the chainload toolchain. `library_linkage` is the
-    default ('static'); ports in `dynamic_ports` are overridden to dynamic
-    (vcpkg re-evaluates the triplet per port, so an `if(PORT ...)` guard gives
-    per-port linkage). Returns None if os/arch is unsupported.
+    default ('static'); ports in `dynamic_ports` are overridden to dynamic, and
+    `cmake_options` ({port: [opts]}) sets per-port VCPKG_CMAKE_CONFIGURE_OPTIONS.
+    vcpkg re-evaluates the triplet per port, so `if(PORT ...)` guards give
+    per-port behavior. Returns None if os/arch is unsupported.
     """
     arch = _VCPKG_ARCH.get(target_arch)
     if arch is None or target_os not in _VCPKG_OS:
@@ -284,6 +292,11 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
     for port in dynamic_ports:
         lines.append('if(PORT STREQUAL "%s")' % port)
         lines.append('    set(VCPKG_LIBRARY_LINKAGE dynamic)')
+        lines.append('endif()')
+    for port, opts in sorted((cmake_options or {}).items()):
+        lines.append('if(PORT STREQUAL "%s")' % port)
+        lines.append('    set(VCPKG_CMAKE_CONFIGURE_OPTIONS %s)'
+                     % ' '.join('"%s"' % o for o in opts))
         lines.append('endif()')
     system = _VCPKG_SYSTEM_NAME.get(target_os)
     if system:
@@ -444,7 +457,8 @@ def setup(builder):
         vanilla = triplet_for_toolchain(toolchain)
     triplet_cmake = (overlay_triplet_cmake(
         toolchain.target_os, toolchain.target_arch,
-        dynamic_ports=dynamic_ports(packages)) if vanilla else None)
+        dynamic_ports=dynamic_ports(packages),
+        cmake_options=port_cmake_options(packages)) if vanilla else None)
     if not vanilla or triplet_cmake is None:
         console.error('vcpkg: cannot derive a triplet for os=%s arch=%s; set '
                       'vcpkg_config(triplet=...)'
