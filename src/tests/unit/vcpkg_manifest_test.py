@@ -105,17 +105,23 @@ class OverlayTripletTest(unittest.TestCase):
 class PortOptionsTest(unittest.TestCase):
 
     def test_bare_version_defaults(self):
-        self.assertEqual(vcpkg.port_options({'fmt': '7.1.3'}, 'fmt'), ('static', False))
+        self.assertEqual(vcpkg.port_options({'fmt': '7.1.3'}, 'fmt'),
+                         ('static', False, None))
 
     def test_dynamic_linkage(self):
         self.assertEqual(
             vcpkg.port_options({'gflags': {'linkage': 'dynamic'}}, 'gflags'),
-            ('dynamic', False))
+            ('dynamic', False, None))
 
     def test_link_all_symbols(self):
         self.assertEqual(
             vcpkg.port_options({'g': {'link_all_symbols': True}}, 'g'),
-            ('static', True))
+            ('static', True, None))
+
+    def test_include_prefix(self):
+        self.assertEqual(
+            vcpkg.port_options({'snappy': {'include_prefix': 'snappy'}}, 'snappy'),
+            ('static', False, 'snappy'))
 
     def test_dynamic_ports_sorted(self):
         pkgs = {'fmt': '7', 'gflags': {'linkage': 'dynamic'},
