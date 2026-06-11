@@ -231,17 +231,23 @@ def chainload_cmake(cc, cxx, c_flags='', cxx_flags=''):
         'set(CMAKE_CXX_FLAGS_INIT "%s")\n' % (cc, cxx, c_flags, cxx_flags))
 
 
+# Overlay triplet target-OS settings, mirroring vcpkg's stock triplets. Linux
+# and osx set VCPKG_CMAKE_SYSTEM_NAME (which is how vcpkg derives
+# VCPKG_TARGET_IS_LINUX / _OSX -- ports branch on it; openssl uses the Windows
+# portfile without it). On macOS that name is the *native* system, not a cross
+# build. Windows omits it (it is vcpkg's default host). osx also pins
+# VCPKG_OSX_ARCHITECTURES to the Apple arch name.
+_VCPKG_SYSTEM_NAME = {'linux': 'Linux', 'darwin': 'Darwin'}
+_VCPKG_OSX_ARCH = {'x64': 'x86_64', 'arm64': 'arm64', 'x86': 'i386'}
+
+
 def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
                           chainload_rel='../blade-chainload.cmake'):
     """The overlay triplet `.cmake` that chainloads blade's compiler.
 
-    Returns None if os/arch is unsupported. `library_linkage` is 'static'
-    (default, blade links static) or 'dynamic'.
-
-    Deliberately omits VCPKG_CMAKE_SYSTEM_NAME: blade's overlay triplets are
-    always native (host == target), and setting the system name would flip
-    CMake into cross-compile mode and break a native `vcpkg install`. Stock
-    native triplets omit it too.
+    Mirrors vcpkg's stock triplet for the OS (so ports detect the target
+    correctly) and adds the chainload toolchain. Returns None if os/arch is
+    unsupported. `library_linkage` is 'static' (default) or 'dynamic'.
     """
     arch = _VCPKG_ARCH.get(target_arch)
     if arch is None or target_os not in _VCPKG_OS:
@@ -250,9 +256,15 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
         'set(VCPKG_TARGET_ARCHITECTURE %s)' % arch,
         'set(VCPKG_CRT_LINKAGE dynamic)',
         'set(VCPKG_LIBRARY_LINKAGE %s)' % library_linkage,
-        'set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE '
-        '${CMAKE_CURRENT_LIST_DIR}/%s)' % chainload_rel,
     ]
+    system = _VCPKG_SYSTEM_NAME.get(target_os)
+    if system:
+        lines.append('set(VCPKG_CMAKE_SYSTEM_NAME %s)' % system)
+    if target_os == 'darwin':
+        lines.append('set(VCPKG_OSX_ARCHITECTURES %s)'
+                     % _VCPKG_OSX_ARCH.get(arch, arch))
+    lines.append('set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE '
+                 '${CMAKE_CURRENT_LIST_DIR}/%s)' % chainload_rel)
     return '\n'.join(lines) + '\n'
 
 
