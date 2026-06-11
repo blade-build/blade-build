@@ -1755,12 +1755,18 @@ class VcpkgLibrary(PrebuiltCcLibrary):
     path PrebuiltCcLibrary computes.
     """
 
-    def __init__(self, port, lib, key, lib_dir, include_dir, header_only):
+    def __init__(self, port, lib, key, lib_dir, include_dir, header_only,
+                 dynamic=False, link_all_symbols=False):
         # Stash the vcpkg-resolved locations before super().__init__, which
         # calls our _setup() at the end of construction.
         self._vcpkg_port = port
         self._vcpkg_lib_dir = lib_dir
         self._vcpkg_header_only = header_only
+        # A dynamic port (vcpkg_config linkage='dynamic') installs a shared lib
+        # instead of a `.a` -- used for singleton libs (gflags/glog/protobuf/
+        # gtest) so there is a single instance across the build, not one copy
+        # per dylib (which would double-register flags / descriptors / tests).
+        self._vcpkg_dynamic = dynamic
         super().__init__(
                 name=lib,
                 deps=[],
@@ -1769,7 +1775,9 @@ class VcpkgLibrary(PrebuiltCcLibrary):
                 tags=['lang:cc', 'type:library', 'type:vcpkg'],
                 export_incs=[],
                 libpath_pattern=None,
-                link_all_symbols=False,
+                # whole-archive the static lib when requested, so all of its
+                # static initializers (registration) run even if unreferenced.
+                link_all_symbols=link_all_symbols,
                 binary_link_only=False,
                 deprecated=False,
                 kwargs={})
@@ -1804,6 +1812,12 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         tc = self.blade.get_build_toolchain()
         if self._vcpkg_header_only:
             return
+        if self._vcpkg_dynamic:
+            self._setup_dynamic(tc)
+        else:
+            self._setup_static(tc)
+
+    def _setup_static(self, tc):
         archive = os.path.join(
             self._vcpkg_lib_dir,
             f'{tc.lib_prefix}{self.name}{tc.static_lib_suffix}')
@@ -1815,19 +1829,51 @@ class VcpkgLibrary(PrebuiltCcLibrary):
             return
         self.attr['static_source'] = archive
         self._add_target_file(tc.STATIC_LIB_LABEL, archive)
-        # No separate shared lib is resolved in this phase; the static archive
-        # serves both link modes (consumers that dynamic_link still get it).
+        # No separate shared lib is resolved here; the static archive serves
+        # both link modes (consumers that dynamic_link still get it).
         self._add_target_file(tc.DYNAMIC_LIB_LABEL, archive)
+
+    def _setup_dynamic(self, tc):
+        shared = os.path.join(
+            self._vcpkg_lib_dir,
+            f'{tc.lib_prefix}{self.name}{tc.dynamic_lib_suffix}')
+        if not os.path.exists(shared):
+            self.error(
+                'vcpkg#%s:%s: shared library not found at %s. The port is marked '
+                'linkage="dynamic" in vcpkg_config but produced no shared lib '
+                '(it may not support dynamic linkage).' % (
+                    self._vcpkg_port, self.name, shared))
+            return
+        # Reuse PrebuiltCcLibrary's shared-lib machinery: copy the vcpkg .dylib
+        # into this target's dir and resolve its soname so consumers link a
+        # single instance with correct rpath/soname.
+        dynamic_target = self._target_file_path(os.path.basename(shared))
+        self.attr['dynamic_source'] = shared
+        self.attr['dynamic_target'] = dynamic_target
+        self._add_target_file(tc.DYNAMIC_LIB_LABEL, dynamic_target)
+        # Dynamic-only: the shared lib serves static linking too.
+        self._add_target_file(tc.STATIC_LIB_LABEL, dynamic_target)
+        soname = self._soname_of(shared)
+        if soname:
+            self.data['soname_and_full_path'] = (soname, dynamic_target)
 
     def generate(self):  # override
         # The static archive + include dir are pure metadata resolved in
-        # _setup(); there is nothing to build. Emit archive-syms (for the
-        # cc_check_undefined static check) only when the archive lives under the
-        # build dir -- i.e. blade-managed installs. For an unmanaged tree the
-        # `.syms` would land in the user's shared $VCPKG_ROOT, so skip it there.
+        # _setup(). For a static lib, emit archive-syms (for cc_check_undefined)
+        # when the archive lives under the build dir (managed installs); an
+        # unmanaged tree's `.syms` would pollute the user's shared $VCPKG_ROOT.
         static = self.attr.get('static_source')
         if static and static.startswith(os.path.abspath(self.build_dir) + os.sep):
             self._emit_archive_syms(static)
+        # For a dynamic port, copy the vcpkg shared lib into the build tree and
+        # expose its exported symbols to cc_check_undefined (nm reads a .dylib
+        # the same as a .a).
+        dynamic_source = self.attr.get('dynamic_source')
+        dynamic_target = self.attr.get('dynamic_target')
+        if dynamic_source and dynamic_target:
+            self.generate_build('copy', dynamic_target, inputs=dynamic_source)
+            if dynamic_source.startswith(os.path.abspath(self.build_dir) + os.sep):
+                self._emit_archive_syms(dynamic_source)
 
 
 def prebuilt_cc_library(

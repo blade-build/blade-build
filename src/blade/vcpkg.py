@@ -241,13 +241,33 @@ _VCPKG_SYSTEM_NAME = {'linux': 'Linux', 'darwin': 'Darwin'}
 _VCPKG_OSX_ARCH = {'x64': 'x86_64', 'arm64': 'arm64', 'x86': 'i386'}
 
 
+def port_options(packages, port):
+    """Per-port (linkage, link_all_symbols) from the whitelist spec.
+
+    A bare version string -> defaults ('static', False). A dict spec may carry
+    `linkage` ('static'|'dynamic') and `link_all_symbols` (bool).
+    """
+    spec = packages.get(port)
+    if isinstance(spec, dict):
+        return spec.get('linkage') or 'static', bool(spec.get('link_all_symbols'))
+    return 'static', False
+
+
+def dynamic_ports(packages):
+    """Ports whose spec requests linkage='dynamic' (sorted, deterministic)."""
+    return sorted(p for p, s in packages.items()
+                  if isinstance(s, dict) and s.get('linkage') == 'dynamic')
+
+
 def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
-                          chainload_rel='../blade-chainload.cmake'):
+                          dynamic_ports=(), chainload_rel='../blade-chainload.cmake'):
     """The overlay triplet `.cmake` that chainloads blade's compiler.
 
     Mirrors vcpkg's stock triplet for the OS (so ports detect the target
-    correctly) and adds the chainload toolchain. Returns None if os/arch is
-    unsupported. `library_linkage` is 'static' (default) or 'dynamic'.
+    correctly) and adds the chainload toolchain. `library_linkage` is the
+    default ('static'); ports in `dynamic_ports` are overridden to dynamic
+    (vcpkg re-evaluates the triplet per port, so an `if(PORT ...)` guard gives
+    per-port linkage). Returns None if os/arch is unsupported.
     """
     arch = _VCPKG_ARCH.get(target_arch)
     if arch is None or target_os not in _VCPKG_OS:
@@ -257,6 +277,10 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
         'set(VCPKG_CRT_LINKAGE dynamic)',
         'set(VCPKG_LIBRARY_LINKAGE %s)' % library_linkage,
     ]
+    for port in dynamic_ports:
+        lines.append('if(PORT STREQUAL "%s")' % port)
+        lines.append('    set(VCPKG_LIBRARY_LINKAGE dynamic)')
+        lines.append('endif()')
     system = _VCPKG_SYSTEM_NAME.get(target_os)
     if system:
         lines.append('set(VCPKG_CMAKE_SYSTEM_NAME %s)' % system)
@@ -359,19 +383,23 @@ def _vcpkg_dep_handler(referrer, coordinate):
     if not vanilla or vanilla == 'auto':
         vanilla = triplet_for_toolchain(toolchain)
     root, triplet = install_location(cfg, vanilla, referrer.blade.get_build_dir())
+    packages = cfg.get('packages', {})
     try:
-        info = resolve_reference(coordinate, cfg.get('packages', {}), root, triplet)
+        info = resolve_reference(coordinate, packages, root, triplet)
     except VcpkgError as e:
         referrer.error(str(e))
         return None
     key = info['key']
     if key in referrer.target_database:
         return key
+    linkage, link_all_symbols = port_options(packages, info['port'])
     # Lazy import: cc_targets is loaded before this module, but keeping the
     # import local avoids a hard module-level cycle (cc_targets -> ... -> here).
     from blade.cc_targets import VcpkgLibrary
     target = VcpkgLibrary(info['port'], info['lib'], key,
-                          info['lib_dir'], info['include_dir'], info['header_only'])
+                          info['lib_dir'], info['include_dir'], info['header_only'],
+                          dynamic=(linkage == 'dynamic'),
+                          link_all_symbols=link_all_symbols)
     referrer.blade.register_target(target)
     return key
 
@@ -409,8 +437,9 @@ def setup(builder):
     vanilla = cfg.get('triplet')
     if not vanilla or vanilla == 'auto':
         vanilla = triplet_for_toolchain(toolchain)
-    triplet_cmake = (overlay_triplet_cmake(toolchain.target_os, toolchain.target_arch)
-                     if vanilla else None)
+    triplet_cmake = (overlay_triplet_cmake(
+        toolchain.target_os, toolchain.target_arch,
+        dynamic_ports=dynamic_ports(packages)) if vanilla else None)
     if not vanilla or triplet_cmake is None:
         console.error('vcpkg: cannot derive a triplet for os=%s arch=%s; set '
                       'vcpkg_config(triplet=...)'

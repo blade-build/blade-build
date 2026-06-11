@@ -102,6 +102,38 @@ class OverlayTripletTest(unittest.TestCase):
         self.assertIsNone(vcpkg.overlay_triplet_cmake('linux', 'sparc'))
 
 
+class PortOptionsTest(unittest.TestCase):
+
+    def test_bare_version_defaults(self):
+        self.assertEqual(vcpkg.port_options({'fmt': '7.1.3'}, 'fmt'), ('static', False))
+
+    def test_dynamic_linkage(self):
+        self.assertEqual(
+            vcpkg.port_options({'gflags': {'linkage': 'dynamic'}}, 'gflags'),
+            ('dynamic', False))
+
+    def test_link_all_symbols(self):
+        self.assertEqual(
+            vcpkg.port_options({'g': {'link_all_symbols': True}}, 'g'),
+            ('static', True))
+
+    def test_dynamic_ports_sorted(self):
+        pkgs = {'fmt': '7', 'gflags': {'linkage': 'dynamic'},
+                'glog': {'linkage': 'dynamic'}, 'z': {'linkage': 'static'}}
+        self.assertEqual(vcpkg.dynamic_ports(pkgs), ['gflags', 'glog'])
+
+    def test_overlay_per_port_dynamic_override(self):
+        t = vcpkg.overlay_triplet_cmake('darwin', 'aarch64', dynamic_ports=['gflags'])
+        self.assertIn('set(VCPKG_LIBRARY_LINKAGE static)', t)
+        self.assertIn('if(PORT STREQUAL "gflags")', t)
+        self.assertIn('    set(VCPKG_LIBRARY_LINKAGE dynamic)', t)
+        self.assertIn('endif()', t)
+
+    def test_overlay_no_dynamic_ports_has_no_guard(self):
+        self.assertNotIn('if(PORT STREQUAL',
+                         vcpkg.overlay_triplet_cmake('linux', 'x86_64'))
+
+
 class ChainloadTest(unittest.TestCase):
 
     def test_compiler_and_flags(self):
