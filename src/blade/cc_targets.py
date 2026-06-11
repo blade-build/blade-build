@@ -1165,9 +1165,24 @@ class CcTarget(Target):
         self.data['windows_dll'] = dll
 
     def _soname_of(self, so_path):
-        """Get the `soname` of a shared library."""
+        """Get the `soname` of a shared library (its leaf lookup name).
+
+        On macOS a dylib has no ELF soname; use the leaf of its install_name
+        instead. A binary linking `@rpath/libfoo.N.dylib` resolves that leaf via
+        DYLD_LIBRARY_PATH (dyld consults it by leaf name even for @rpath
+        installs), which the run harness points at the runfiles dir -- the same
+        scheme as the ELF soname symlink.
+        """
         if os.name == 'nt':
             return None  # Windows DLLs don't have ELF-style soname
+        if sys.platform == 'darwin':
+            returncode, output, unused_stderr = run_command(['otool', '-D', so_path])
+            if returncode != 0:
+                return None
+            # `otool -D` prints "<path>:" then the install_name line(s).
+            names = [line.strip() for line in output.splitlines()
+                     if line.strip() and not line.strip().endswith(':')]
+            return os.path.basename(names[-1]) if names else None
         returncode, output, unused_stderr = run_command(['objdump', '-p', so_path])
         if returncode != 0:
             return None

@@ -79,6 +79,11 @@ class BinaryRunner:
         # Prepare environments
         run_env = dict(os.environ)
         environ_add_path(run_env, 'LD_LIBRARY_PATH', runfiles_dir)
+        if sys.platform == 'darwin':
+            # dyld ignores LD_LIBRARY_PATH; it searches DYLD_LIBRARY_PATH by leaf
+            # name even for @rpath installs, so the runfiles soname symlinks
+            # resolve prebuilt dylibs (e.g. vcpkg shared libs) at run time.
+            environ_add_path(run_env, 'DYLD_LIBRARY_PATH', runfiles_dir)
         if os.name == 'nt':
             # Windows analog of LD_LIBRARY_PATH: the loader searches PATH for the
             # flattened dependency DLLs placed in runfiles (see
