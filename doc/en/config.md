@@ -863,3 +863,71 @@ cc_toolchain_config(
 ```
 
 This skips Visual Studio auto-detection and uses clang-cl with MSVC-style flags.
+
+### vcpkg_config
+
+Configuration for consuming [vcpkg](https://github.com/microsoft/vcpkg)
+packages as `vcpkg#<port>:<lib>` dependencies. See [Using vcpkg
+packages](vcpkg.md) for the full guide. A single workspace-level section:
+vcpkg allows one version and one feature set per package per workspace.
+
+#### `manage`: bool = True
+
+**Purpose:** When `True` (default), Blade runs `vcpkg install` itself into a
+hermetic tree under the build directory, using an overlay triplet that
+chainloads Blade's compiler. When `False`, Blade only resolves artifacts that
+you installed yourself under `<root>/installed/<triplet>`.
+
+#### `packages`: dict = {}
+
+**Purpose:** The whitelist of allowed ports — the single source of truth for
+what a `vcpkg#<port>:<lib>` reference may resolve to. Referencing a port that
+is not listed is a hard error. Each value is a version string or a dict with
+`version` and/or `features`:
+
+```python
+vcpkg_config(
+    packages = {
+        'fmt': '10.2.1',
+        'curl': {'version': '8.5.0', 'features': ['ssl', 'http2']},
+    },
+)
+```
+
+#### `baseline`: str = ""
+
+**Purpose:** Pins the ports tree to a date or git SHA
+(vcpkg.json `builtin-baseline`). Leaving it empty is not reproducible; pin it
+for consistent versions.
+
+#### `registries`: list = []
+
+**Purpose:** Optional private vcpkg registries
+(vcpkg-configuration.json `registries`).
+
+#### `root`: str = ""
+
+**Purpose:** The vcpkg installation (tool + ports tree). Empty means
+`$VCPKG_ROOT`. In managed mode this locates the `vcpkg` tool; in unmanaged mode
+it is also the root of the install tree that is read.
+
+#### `triplet`: str = "auto"
+
+**Purpose:** The vcpkg triplet. `auto` derives it from the resolved
+`cc_toolchain` (e.g. `x64-linux`, `arm64-osx`, `x64-windows-static`); set an
+explicit triplet to override.
+
+#### `install_dir`: str = ".cache/vcpkg"
+
+**Purpose:** The per-workspace install root for managed mode, relative to the
+build directory. Cleared by `blade clean`.
+
+#### `binary_cache`: str = "auto"
+
+**Purpose:** The vcpkg binary-cache backend used to reuse compiled packages
+across workspaces.
+
+#### `direct_use_allowed`: list = []
+
+**Purpose:** Governance — subtrees where bare `vcpkg#...` references are
+allowed. Empty means anywhere.
