@@ -839,12 +839,20 @@ def _check_vcpkg_packages(packages):
             continue
         if isinstance(spec, dict):
             unknown = set(spec) - {'version', 'features', 'linkage',
-                                   'link_all_symbols', 'include_prefix'}
+                                   'link_all_symbols', 'include_prefix',
+                                   'cmake_options'}
             if unknown:
                 _blade_config.error(
                     'vcpkg_config.packages["%s"]: unknown key(s) %s; allowed: '
-                    'version, features, linkage, link_all_symbols, include_prefix'
+                    'version, features, linkage, link_all_symbols, '
+                    'include_prefix, cmake_options'
                     % (port, ', '.join(sorted(unknown))))
+            copts = spec.get('cmake_options')
+            if copts is not None and not (
+                    isinstance(copts, list) and all(isinstance(o, str) for o in copts)):
+                _blade_config.error(
+                    'vcpkg_config.packages["%s"].cmake_options must be a list of '
+                    'strings' % port)
             prefix = spec.get('include_prefix')
             if prefix is not None and not (
                     isinstance(prefix, str) or

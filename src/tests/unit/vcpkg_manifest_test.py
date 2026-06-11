@@ -139,6 +139,18 @@ class PortOptionsTest(unittest.TestCase):
         self.assertNotIn('if(PORT STREQUAL',
                          vcpkg.overlay_triplet_cmake('linux', 'x86_64'))
 
+    def test_port_cmake_options(self):
+        pkgs = {'fmt': '7', 'snappy': {'cmake_options': ['-DSNAPPY_WITH_RTTI=ON']}}
+        self.assertEqual(vcpkg.port_cmake_options(pkgs),
+                         {'snappy': ['-DSNAPPY_WITH_RTTI=ON']})
+
+    def test_overlay_per_port_cmake_options(self):
+        t = vcpkg.overlay_triplet_cmake(
+            'darwin', 'aarch64',
+            cmake_options={'snappy': ['-DSNAPPY_WITH_RTTI=ON']})
+        self.assertIn('if(PORT STREQUAL "snappy")', t)
+        self.assertIn('set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DSNAPPY_WITH_RTTI=ON")', t)
+
 
 class ChainloadTest(unittest.TestCase):
 
