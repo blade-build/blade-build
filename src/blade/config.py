@@ -838,15 +838,26 @@ def _check_vcpkg_packages(packages):
         if isinstance(spec, str):
             continue
         if isinstance(spec, dict):
-            unknown = set(spec) - {'version', 'features'}
+            unknown = set(spec) - {'version', 'features', 'linkage', 'link_all_symbols'}
             if unknown:
                 _blade_config.error(
-                    'vcpkg_config.packages["%s"]: unknown key(s) %s; allowed: version, features'
+                    'vcpkg_config.packages["%s"]: unknown key(s) %s; allowed: '
+                    'version, features, linkage, link_all_symbols'
                     % (port, ', '.join(sorted(unknown))))
             features = spec.get('features')
             if features is not None and not isinstance(features, list):
                 _blade_config.error(
                     'vcpkg_config.packages["%s"].features must be a list' % port)
+            linkage = spec.get('linkage')
+            if linkage is not None and linkage not in ('static', 'dynamic'):
+                _blade_config.error(
+                    'vcpkg_config.packages["%s"].linkage must be "static" or '
+                    '"dynamic"' % port)
+            las = spec.get('link_all_symbols')
+            if las is not None and not isinstance(las, bool):
+                _blade_config.error(
+                    'vcpkg_config.packages["%s"].link_all_symbols must be a bool'
+                    % port)
             continue
         _blade_config.error(
             'vcpkg_config.packages["%s"] must be a version string or a dict with '
