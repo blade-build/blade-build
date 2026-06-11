@@ -110,6 +110,7 @@ class _Referrer:
         self.errors = []
         self.blade = mock.Mock()
         self.blade.get_build_toolchain.return_value = mock.Mock()
+        self.blade.get_build_dir.return_value = 'build64'
 
     def error(self, msg):
         self.errors.append(msg)
@@ -118,7 +119,11 @@ class _Referrer:
 class HandlerTest(unittest.TestCase):
 
     def _cfg(self, **over):
-        cfg = {'packages': _WHITELIST, 'triplet': 'x64-linux', 'root': '/vc'}
+        # manage=False here pins the install location to root='/vc' so the
+        # handler-logic assertions stay deterministic; install_location's
+        # manage=True path is covered in vcpkg_setup_test + the case below.
+        cfg = {'packages': _WHITELIST, 'triplet': 'x64-linux', 'root': '/vc',
+               'manage': False, 'install_dir': '.cache/vcpkg'}
         cfg.update(over)
         return cfg
 
@@ -167,6 +172,18 @@ class HandlerTest(unittest.TestCase):
             vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
         # lib_dir reflects the auto-derived x64-linux triplet.
         self.assertEqual(MockVL.call_args[0][3], '/vc/installed/x64-linux/lib')
+
+    def test_manage_true_uses_hermetic_tree(self):
+        r = _Referrer()
+        with mock.patch('blade.config.get_section',
+                        return_value=self._cfg(manage=True, triplet='x64-linux')), \
+             mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
+            vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
+        lib_dir = MockVL.call_args[0][3]
+        # Hermetic tree under the build dir, with the blade- overlay triplet.
+        self.assertTrue(lib_dir.endswith(
+            os.path.join('build64', '.cache/vcpkg', 'installed',
+                         'blade-x64-linux', 'lib')))
 
     def test_registered_as_vcpkg_scheme(self):
         # Importing blade.vcpkg wires the provider into target's registry.

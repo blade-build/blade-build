@@ -424,6 +424,11 @@ _CONFIG_TEMPLATE = {
     # package per workspace, so these map 1:1 onto vcpkg.json fields.
     'vcpkg_config': {
         '__help__': 'vcpkg C/C++ package manager configuration (issue #1236)',
+        # True (default): blade orchestrates `vcpkg install` into a hermetic
+        # tree under the build dir, using an overlay triplet that chainloads
+        # blade's compiler. False: read artifacts the user installed themselves
+        # under <root>/installed/<triplet> (root = vcpkg_config.root/$VCPKG_ROOT).
+        'manage': True,
         # Pins the ports tree (git SHA or date) -> vcpkg.json "builtin-baseline".
         # Empty means unpinned (not reproducible); a warning is emitted later.
         'baseline': '',
