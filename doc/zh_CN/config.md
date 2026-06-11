@@ -865,3 +865,61 @@ cc_toolchain_config(
 ```
 
 这会跳过 Visual Studio 自动检测，直接使用 clang-cl 并采用 MSVC 风格的编译选项。
+
+### vcpkg_config
+
+用于把 [vcpkg](https://github.com/microsoft/vcpkg) 包作为 `vcpkg#<port>:<lib>`
+依赖使用的配置。完整说明见[使用 vcpkg 包](vcpkg.md)。这是一个工作区级别的单一
+节：vcpkg 每个包每个工作区只允许一个版本、一组 features。
+
+#### `manage`: bool = True
+
+**作用：** 为 `True`（默认）时，Blade 自己把 `vcpkg install` 安装到构建目录下的
+隔离目录，并使用 chainload 编译器的 overlay triplet。为 `False` 时，Blade 只解析
+你自己安装在 `<root>/installed/<triplet>` 下的产物。
+
+#### `packages`: dict = {}
+
+**作用：** 允许的 port 白名单——`vcpkg#<port>:<lib>` 可解析到什么的唯一事实来源。
+引用未列出的 port 是硬错误。每个值是版本字符串，或带 `version` 和/或 `features`
+的字典：
+
+```python
+vcpkg_config(
+    packages = {
+        'fmt': '10.2.1',
+        'curl': {'version': '8.5.0', 'features': ['ssl', 'http2']},
+    },
+)
+```
+
+#### `baseline`: str = ""
+
+**作用：** 把 ports 树固定到某个日期或 git SHA（vcpkg.json `builtin-baseline`）。
+留空则不可复现；固定它以获得一致的版本。
+
+#### `registries`: list = []
+
+**作用：** 可选的私有 vcpkg registry（vcpkg-configuration.json `registries`）。
+
+#### `root`: str = ""
+
+**作用：** vcpkg 安装位置（工具 + ports 树）。留空表示 `$VCPKG_ROOT`。托管模式下
+用于定位 `vcpkg` 工具；非托管模式下同时是被读取的安装树根目录。
+
+#### `triplet`: str = "auto"
+
+**作用：** vcpkg triplet。`auto` 根据解析出的 `cc_toolchain` 推导（如
+`x64-linux`、`arm64-osx`、`x64-windows-static`）；指定具体 triplet 可覆盖。
+
+#### `install_dir`: str = ".cache/vcpkg"
+
+**作用：** 托管模式下按工作区的安装根目录，相对于构建目录。`blade clean` 会清除。
+
+#### `binary_cache`: str = "auto"
+
+**作用：** vcpkg 二进制缓存后端，用于跨工作区复用已编译的包。
+
+#### `direct_use_allowed`: list = []
+
+**作用：** 治理项——允许裸写 `vcpkg#...` 引用的子树。留空表示任意位置。
