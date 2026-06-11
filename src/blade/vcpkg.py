@@ -181,11 +181,6 @@ def parse_pkgconfig(text):
 # These are pure generators over plain inputs; writing the files + invoking
 # vcpkg is wired separately.
 
-# blade target_os -> CMAKE_SYSTEM_NAME for the overlay triplet ('' = native,
-# i.e. Windows, where vcpkg omits the cross-compile system name).
-_VCPKG_SYSTEM_NAME = {'linux': 'Linux', 'darwin': 'Darwin', 'windows': ''}
-
-
 def overlay_triplet_name(triplet):
     """The blade overlay triplet name for a vanilla vcpkg triplet."""
     return 'blade-' + triplet
@@ -242,21 +237,46 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
 
     Returns None if os/arch is unsupported. `library_linkage` is 'static'
     (default, blade links static) or 'dynamic'.
+
+    Deliberately omits VCPKG_CMAKE_SYSTEM_NAME: blade's overlay triplets are
+    always native (host == target), and setting the system name would flip
+    CMake into cross-compile mode and break a native `vcpkg install`. Stock
+    native triplets omit it too.
     """
     arch = _VCPKG_ARCH.get(target_arch)
-    if arch is None or target_os not in _VCPKG_SYSTEM_NAME:
+    if arch is None or target_os not in _VCPKG_OS:
         return None
     lines = [
         'set(VCPKG_TARGET_ARCHITECTURE %s)' % arch,
         'set(VCPKG_CRT_LINKAGE dynamic)',
         'set(VCPKG_LIBRARY_LINKAGE %s)' % library_linkage,
+        'set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE '
+        '${CMAKE_CURRENT_LIST_DIR}/%s)' % chainload_rel,
     ]
-    system = _VCPKG_SYSTEM_NAME[target_os]
-    if system:
-        lines.append('set(VCPKG_CMAKE_SYSTEM_NAME %s)' % system)
-    lines.append('set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE '
-                 '${CMAKE_CURRENT_LIST_DIR}/%s)' % chainload_rel)
     return '\n'.join(lines) + '\n'
+
+
+def install_location(cfg, vanilla_triplet, build_dir):
+    """Return (artifacts_root, triplet) for resolving a `vcpkg#...` reference.
+
+    manage=True (default): the blade-managed hermetic tree under the build dir,
+    with the overlay triplet `blade-<vanilla>`. manage=False: the tree the user
+    installed themselves (vcpkg_config.root or $VCPKG_ROOT) with the vanilla
+    triplet. `installed/<triplet>/` is appended by resolve_reference.
+    """
+    if cfg.get('manage', True):
+        root = os.path.join(build_dir, cfg.get('install_dir') or '.cache/vcpkg')
+        triplet = overlay_triplet_name(vanilla_triplet)
+    else:
+        root = cfg.get('root') or os.environ.get('VCPKG_ROOT', '')
+        triplet = vanilla_triplet
+    # Absolute so the resolved include dir survives _incs_to_fullpath (which
+    # would otherwise prepend the target's path sentinel to a relative dir) and
+    # so the .a path is independent of the compiler's working directory. blade
+    # has chdir'd to the workspace root, so abspath resolves against it.
+    if root:
+        root = os.path.abspath(root)
+    return root, triplet
 
 
 class VcpkgError(Exception):
@@ -323,10 +343,10 @@ def _vcpkg_dep_handler(referrer, coordinate):
     from blade import config
     cfg = config.get_section('vcpkg_config')
     toolchain = referrer.blade.get_build_toolchain()
-    triplet = cfg.get('triplet') or 'auto'
-    if triplet == 'auto':
-        triplet = triplet_for_toolchain(toolchain)
-    root = cfg.get('root') or os.environ.get('VCPKG_ROOT', '')
+    vanilla = cfg.get('triplet')
+    if not vanilla or vanilla == 'auto':
+        vanilla = triplet_for_toolchain(toolchain)
+    root, triplet = install_location(cfg, vanilla, referrer.blade.get_build_dir())
     try:
         info = resolve_reference(coordinate, cfg.get('packages', {}), root, triplet)
     except VcpkgError as e:
@@ -342,6 +362,99 @@ def _vcpkg_dep_handler(referrer, coordinate):
                           info['lib_dir'], info['include_dir'], info['header_only'])
     referrer.blade.register_target(target)
     return key
+
+
+def _find_vcpkg_tool(cfg):
+    """Locate the vcpkg executable: vcpkg_config.root / $VCPKG_ROOT / PATH."""
+    import shutil
+    tool_root = cfg.get('root') or os.environ.get('VCPKG_ROOT', '')
+    if tool_root:
+        candidate = os.path.join(tool_root, 'vcpkg')
+        if os.path.exists(candidate):
+            return candidate
+    return shutil.which('vcpkg')
+
+
+def setup(builder):
+    """Phase 2: blade-managed `vcpkg install` (issue #1236).
+
+    Runs once, after config load and before BUILD files are parsed, so the
+    installed artifacts exist on disk by the time VcpkgLibrary targets resolve.
+    A no-op unless vcpkg_config(manage=True) (the default) with a non-empty
+    packages whitelist. Returns True on success or no-op, False on failure
+    (after reporting). An MD5 stamp over the generated inputs skips the install
+    when nothing relevant changed.
+    """
+    import hashlib
+    import json
+    from blade import config, console, util
+    cfg = config.get_section('vcpkg_config')
+    packages = cfg.get('packages') or {}
+    if not cfg.get('manage', True) or not packages:
+        return True
+
+    toolchain = builder.get_build_toolchain()
+    vanilla = cfg.get('triplet')
+    if not vanilla or vanilla == 'auto':
+        vanilla = triplet_for_toolchain(toolchain)
+    triplet_cmake = (overlay_triplet_cmake(toolchain.target_os, toolchain.target_arch)
+                     if vanilla else None)
+    if not vanilla or triplet_cmake is None:
+        console.error('vcpkg: cannot derive a triplet for os=%s arch=%s; set '
+                      'vcpkg_config(triplet=...)'
+                      % (toolchain.target_os, toolchain.target_arch))
+        return False
+    overlay = overlay_triplet_name(vanilla)
+
+    base = os.path.join(builder.get_build_dir(), cfg.get('install_dir') or '.cache/vcpkg')
+    triplets_dir = os.path.join(base, 'triplets')
+    installed_root = os.path.join(base, 'installed')
+    os.makedirs(triplets_dir, exist_ok=True)
+
+    manifest = json.dumps(manifest_json(packages, cfg.get('baseline', '')),
+                          indent=2, sort_keys=True)
+    chainload = chainload_cmake(toolchain.tool('cc') or 'cc',
+                                toolchain.tool('cxx') or 'c++')
+    files = {
+        os.path.join(base, 'vcpkg.json'): manifest,
+        os.path.join(base, 'blade-chainload.cmake'): chainload,
+        os.path.join(triplets_dir, overlay + '.cmake'): triplet_cmake,
+    }
+    configuration = configuration_json(cfg.get('registries') or [])
+    if configuration is not None:
+        files[os.path.join(base, 'vcpkg-configuration.json')] = json.dumps(
+            configuration, indent=2, sort_keys=True)
+    for path, content in files.items():
+        util.write_if_changed(path, content)
+
+    stamp = hashlib.md5(
+        (manifest + chainload + triplet_cmake + overlay).encode()).hexdigest()
+    stamp_file = os.path.join(base, '.blade-vcpkg-stamp')
+    if os.path.isdir(installed_root) and os.path.exists(stamp_file):
+        with open(stamp_file) as f:
+            if f.read().strip() == stamp:
+                return True
+
+    vcpkg_bin = _find_vcpkg_tool(cfg)
+    if vcpkg_bin is None:
+        console.error('vcpkg: the vcpkg tool was not found; set '
+                      'vcpkg_config(root=...), $VCPKG_ROOT, or put vcpkg on PATH')
+        return False
+
+    cmd = [vcpkg_bin, 'install',
+           '--triplet', overlay,
+           '--x-manifest-root', base,
+           '--x-install-root', installed_root,
+           '--overlay-triplets', triplets_dir]
+    console.info('vcpkg: installing %d package(s) for %s ...'
+                 % (len(packages), overlay))
+    returncode, stdout, stderr = util.run_command(cmd)
+    if returncode != 0:
+        console.error('vcpkg install failed:\n%s' % (stderr or stdout))
+        return False
+    with open(stamp_file, 'w') as f:
+        f.write(stamp)
+    return True
 
 
 _blade_target.register_dep_scheme('vcpkg', _vcpkg_dep_handler)

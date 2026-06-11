@@ -73,6 +73,14 @@ def run_subcommand(blade_path, command, options, ws, targets):
         config.dump(output_file_name)
         return _check_error_log('dump')
 
+    # vcpkg orchestration (issue #1236): blade-managed `vcpkg install` runs once
+    # here -- config is loaded and the build dir exists, but BUILD files are not
+    # parsed yet, so installed artifacts are present before any VcpkgLibrary
+    # resolves them. A no-op unless vcpkg_config(manage=True) with packages.
+    from blade import vcpkg
+    if not vcpkg.setup(builder):
+        return 1
+
     # Prepare the targets
     stages = [
         ('load', builder.load_targets),
