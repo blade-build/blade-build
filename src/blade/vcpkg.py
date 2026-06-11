@@ -242,15 +242,19 @@ _VCPKG_OSX_ARCH = {'x64': 'x86_64', 'arm64': 'arm64', 'x86': 'i386'}
 
 
 def port_options(packages, port):
-    """Per-port (linkage, link_all_symbols) from the whitelist spec.
+    """Per-port (linkage, link_all_symbols, include_prefix) from the spec.
 
-    A bare version string -> defaults ('static', False). A dict spec may carry
-    `linkage` ('static'|'dynamic') and `link_all_symbols` (bool).
+    A bare version string -> defaults ('static', False, None). A dict spec may
+    carry `linkage` ('static'|'dynamic'), `link_all_symbols` (bool) and
+    `include_prefix` (str: expose vcpkg's include dir under this subdir, for
+    libs flare includes as "<prefix>/<header>" but vcpkg ships at include top).
     """
     spec = packages.get(port)
     if isinstance(spec, dict):
-        return spec.get('linkage') or 'static', bool(spec.get('link_all_symbols'))
-    return 'static', False
+        return (spec.get('linkage') or 'static',
+                bool(spec.get('link_all_symbols')),
+                spec.get('include_prefix') or None)
+    return 'static', False, None
 
 
 def dynamic_ports(packages):
@@ -392,14 +396,15 @@ def _vcpkg_dep_handler(referrer, coordinate):
     key = info['key']
     if key in referrer.target_database:
         return key
-    linkage, link_all_symbols = port_options(packages, info['port'])
+    linkage, link_all_symbols, include_prefix = port_options(packages, info['port'])
     # Lazy import: cc_targets is loaded before this module, but keeping the
     # import local avoids a hard module-level cycle (cc_targets -> ... -> here).
     from blade.cc_targets import VcpkgLibrary
     target = VcpkgLibrary(info['port'], info['lib'], key,
                           info['lib_dir'], info['include_dir'], info['header_only'],
                           dynamic=(linkage == 'dynamic'),
-                          link_all_symbols=link_all_symbols)
+                          link_all_symbols=link_all_symbols,
+                          include_prefix=include_prefix)
     referrer.blade.register_target(target)
     return key
 

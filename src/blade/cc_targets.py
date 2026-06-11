@@ -1756,7 +1756,7 @@ class VcpkgLibrary(PrebuiltCcLibrary):
     """
 
     def __init__(self, port, lib, key, lib_dir, include_dir, header_only,
-                 dynamic=False, link_all_symbols=False):
+                 dynamic=False, link_all_symbols=False, include_prefix=None):
         # Stash the vcpkg-resolved locations before super().__init__, which
         # calls our _setup() at the end of construction.
         self._vcpkg_port = port
@@ -1800,13 +1800,43 @@ class VcpkgLibrary(PrebuiltCcLibrary):
             # External headers go via -isystem so third-party warnings don't
             # trip the consumer's -Werror (same posture as foreign_cc_library);
             # absolute paths survive _incs_to_fullpath unchanged.
-            self.attr['system_export_incs'] = self._incs_to_fullpath([include_dir])
+            inc = os.path.abspath(include_dir)
+            if include_prefix:
+                # flare includes "<prefix>/<header>" but vcpkg ships the headers
+                # at include/ top level. Expose include/ under <prefix> via a
+                # symlink dir and -isystem that, so "<prefix>/h" resolves.
+                inc = self._vcpkg_prefixed_incdir(include_prefix, include_dir)
+            self.attr['system_export_incs'] = self._incs_to_fullpath([inc])
         # Exempt from the unused-deps check: vcpkg headers live in an absolute,
         # out-of-tree `-isystem` dir, which blade's inclusion scanner can't
         # attribute back to this target (declare_hdr_dir works only for
         # in-tree dirs). Flagging every vcpkg dep as "unused" would be pure
         # noise; precise external-header attribution is a follow-up.
         declare_header_less(self)
+
+    def _vcpkg_prefixed_incdir(self, prefixes, include_dir):
+        """Expose the vcpkg include dir under each `<prefix>/` via a symlink, so
+        a consumer's `#include "<prefix>/h"` resolves to the port's `include/h`.
+        `prefixes` is a str or list (a port may be included under more than one
+        path, e.g. flare's "zlib/" and protobuf's "thirdparty/zlib/"). Nested
+        prefixes are supported. Returns the absolute prefix-root -isystem dir."""
+        prefix_root = os.path.abspath(os.path.join(self.target_dir, 'include-prefix'))
+        target_inc = os.path.abspath(include_dir)
+        for prefix in ([prefixes] if isinstance(prefixes, str) else prefixes):
+            link = os.path.join(prefix_root, prefix)
+            try:
+                os.makedirs(os.path.dirname(link), exist_ok=True)
+                if os.path.islink(link):
+                    if os.readlink(link) != target_inc:
+                        os.remove(link)
+                        os.symlink(target_inc, link)
+                elif not os.path.exists(link):
+                    os.symlink(target_inc, link)
+            except OSError as e:
+                self.error('vcpkg#%s:%s: could not create include-prefix symlink '
+                           '%s -> %s: %s' % (self._vcpkg_port, self.name, link,
+                                             target_inc, e))
+        return prefix_root
 
     def _setup(self):  # override PrebuiltCcLibrary._setup
         tc = self.blade.get_build_toolchain()

@@ -838,12 +838,20 @@ def _check_vcpkg_packages(packages):
         if isinstance(spec, str):
             continue
         if isinstance(spec, dict):
-            unknown = set(spec) - {'version', 'features', 'linkage', 'link_all_symbols'}
+            unknown = set(spec) - {'version', 'features', 'linkage',
+                                   'link_all_symbols', 'include_prefix'}
             if unknown:
                 _blade_config.error(
                     'vcpkg_config.packages["%s"]: unknown key(s) %s; allowed: '
-                    'version, features, linkage, link_all_symbols'
+                    'version, features, linkage, link_all_symbols, include_prefix'
                     % (port, ', '.join(sorted(unknown))))
+            prefix = spec.get('include_prefix')
+            if prefix is not None and not (
+                    isinstance(prefix, str) or
+                    (isinstance(prefix, list) and all(isinstance(p, str) for p in prefix))):
+                _blade_config.error(
+                    'vcpkg_config.packages["%s"].include_prefix must be a string '
+                    'or a list of strings' % port)
             features = spec.get('features')
             if features is not None and not isinstance(features, list):
                 _blade_config.error(
