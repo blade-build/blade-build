@@ -1781,6 +1781,13 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         self.path = 'vcpkg#' + port
         self.key = key
         self.fullname = '//' + key
+        # Target.__init__ derived target_dir from the *referrer's* source path
+        # (the BUILD file that first named this lib). That collides with the
+        # referrer's own outputs when it is e.g. a //thirdparty/<port> wrapper
+        # named after the lib. Redirect this auto-created target's outputs to a
+        # unique per-(port, lib) dir under the build tree.
+        self.target_dir = os.path.normpath(os.path.join(
+            self.build_dir, '.cache', 'vcpkg', 'targets', port, lib))
         if include_dir:
             # External headers go via -isystem so third-party warnings don't
             # trip the consumer's -Werror (same posture as foreign_cc_library);
@@ -1814,10 +1821,13 @@ class VcpkgLibrary(PrebuiltCcLibrary):
 
     def generate(self):  # override
         # The static archive + include dir are pure metadata resolved in
-        # _setup(); there is nothing to build. (Emitting archive-syms for
-        # cc_check_undefined would write `<archive>.syms` into the shared vcpkg
-        # tree; redirecting that into the build dir is a follow-up.)
-        pass
+        # _setup(); there is nothing to build. Emit archive-syms (for the
+        # cc_check_undefined static check) only when the archive lives under the
+        # build dir -- i.e. blade-managed installs. For an unmanaged tree the
+        # `.syms` would land in the user's shared $VCPKG_ROOT, so skip it there.
+        static = self.attr.get('static_source')
+        if static and static.startswith(os.path.abspath(self.build_dir) + os.sep):
+            self._emit_archive_syms(static)
 
 
 def prebuilt_cc_library(
