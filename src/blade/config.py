@@ -856,10 +856,12 @@ def _check_vcpkg_packages(packages):
             prefix = spec.get('include_prefix')
             if prefix is not None and not (
                     isinstance(prefix, str) or
-                    (isinstance(prefix, list) and all(isinstance(p, str) for p in prefix))):
+                    (isinstance(prefix, list) and all(isinstance(p, str) for p in prefix)) or
+                    (isinstance(prefix, dict) and all(
+                        isinstance(k, str) and isinstance(v, str) for k, v in prefix.items()))):
                 _blade_config.error(
-                    'vcpkg_config.packages["%s"].include_prefix must be a string '
-                    'or a list of strings' % port)
+                    'vcpkg_config.packages["%s"].include_prefix must be a string, '
+                    'a list of strings, or a {prefix: vcpkg_subdir} dict' % port)
             features = spec.get('features')
             if features is not None and not isinstance(features, list):
                 _blade_config.error(

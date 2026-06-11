@@ -1814,14 +1814,14 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         if include_dir:
             # External headers go via -isystem so third-party warnings don't
             # trip the consumer's -Werror (same posture as foreign_cc_library);
-            # absolute paths survive _incs_to_fullpath unchanged.
-            inc = os.path.abspath(include_dir)
+            # absolute paths survive _incs_to_fullpath unchanged. Always export
+            # the raw include dir (native "<port>/h" includes resolve directly);
+            # include_prefix adds a remapped view for consumers that include the
+            # port under a different path.
+            incs = [os.path.abspath(include_dir)]
             if include_prefix:
-                # flare includes "<prefix>/<header>" but vcpkg ships the headers
-                # at include/ top level. Expose include/ under <prefix> via a
-                # symlink dir and -isystem that, so "<prefix>/h" resolves.
-                inc = self._vcpkg_prefixed_incdir(include_prefix, include_dir)
-            self.attr['system_export_incs'] = self._incs_to_fullpath([inc])
+                incs.append(self._vcpkg_prefixed_incdir(include_prefix, include_dir))
+            self.attr['system_export_incs'] = self._incs_to_fullpath(incs)
         # Exempt from the unused-deps check: vcpkg headers live in an absolute,
         # out-of-tree `-isystem` dir, which blade's inclusion scanner can't
         # attribute back to this target (declare_hdr_dir works only for
@@ -1829,28 +1829,37 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         # noise; precise external-header attribution is a follow-up.
         declare_header_less(self)
 
-    def _vcpkg_prefixed_incdir(self, prefixes, include_dir):
-        """Expose the vcpkg include dir under each `<prefix>/` via a symlink, so
-        a consumer's `#include "<prefix>/h"` resolves to the port's `include/h`.
-        `prefixes` is a str or list (a port may be included under more than one
-        path, e.g. flare's "zlib/" and protobuf's "thirdparty/zlib/"). Nested
-        prefixes are supported. Returns the absolute prefix-root -isystem dir."""
+    def _vcpkg_prefixed_incdir(self, include_prefix, include_dir):
+        """Expose the vcpkg include dir under remapped prefixes via symlinks, so
+        a consumer's `#include "<prefix>/h"` resolves to the port's headers.
+
+        `include_prefix` is a str / list[str] (each prefix -> the include root,
+        for libs vcpkg ships flat, e.g. snappy "snappy/" -> include/snappy.h),
+        or a {prefix: subdir} dict (prefix -> include/<subdir>, for a header
+        already under a subdir, e.g. protobuf's "thirdparty/glog/" -> the port's
+        include/glog/). Returns the absolute prefix-root -isystem dir."""
+        if isinstance(include_prefix, str):
+            mapping = {include_prefix: ''}
+        elif isinstance(include_prefix, dict):
+            mapping = dict(include_prefix)
+        else:
+            mapping = {p: '' for p in include_prefix}
         prefix_root = os.path.abspath(os.path.join(self.target_dir, 'include-prefix'))
-        target_inc = os.path.abspath(include_dir)
-        for prefix in ([prefixes] if isinstance(prefixes, str) else prefixes):
+        for prefix, subdir in mapping.items():
             link = os.path.join(prefix_root, prefix)
+            target = os.path.abspath(os.path.join(include_dir, subdir))
             try:
                 os.makedirs(os.path.dirname(link), exist_ok=True)
                 if os.path.islink(link):
-                    if os.readlink(link) != target_inc:
+                    if os.readlink(link) != target:
                         os.remove(link)
-                        os.symlink(target_inc, link)
+                        os.symlink(target, link)
                 elif not os.path.exists(link):
-                    os.symlink(target_inc, link)
+                    os.symlink(target, link)
             except OSError as e:
                 self.error('vcpkg#%s:%s: could not create include-prefix symlink '
                            '%s -> %s: %s' % (self._vcpkg_port, self.name, link,
-                                             target_inc, e))
+                                             target, e))
         return prefix_root
 
     def _setup(self):  # override PrebuiltCcLibrary._setup
