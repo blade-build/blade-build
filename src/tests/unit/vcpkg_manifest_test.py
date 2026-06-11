@@ -71,23 +71,27 @@ class OverlayTripletTest(unittest.TestCase):
         self.assertEqual(vcpkg.overlay_triplet_name('x64-linux'), 'blade-x64-linux')
 
     def test_linux(self):
+        # Mirrors vcpkg's stock x64-linux triplet (+ chainload). The system
+        # name is how vcpkg sets VCPKG_TARGET_IS_LINUX, which ports branch on.
         t = vcpkg.overlay_triplet_cmake('linux', 'x86_64')
         self.assertIn('set(VCPKG_TARGET_ARCHITECTURE x64)', t)
         self.assertIn('set(VCPKG_LIBRARY_LINKAGE static)', t)
+        self.assertIn('set(VCPKG_CMAKE_SYSTEM_NAME Linux)', t)
         self.assertIn('VCPKG_CHAINLOAD_TOOLCHAIN_FILE', t)
         self.assertIn('../blade-chainload.cmake', t)
 
     def test_darwin_arm(self):
+        # Mirrors stock arm64-osx: Darwin (native, not cross) + OSX arch.
         t = vcpkg.overlay_triplet_cmake('darwin', 'aarch64')
         self.assertIn('set(VCPKG_TARGET_ARCHITECTURE arm64)', t)
+        self.assertIn('set(VCPKG_CMAKE_SYSTEM_NAME Darwin)', t)
+        self.assertIn('set(VCPKG_OSX_ARCHITECTURES arm64)', t)
 
-    def test_native_omits_system_name(self):
-        # blade overlays are always native; a CMAKE_SYSTEM_NAME would flip CMake
-        # into cross-compile mode and break a native `vcpkg install`.
-        for os_name, arch in (('linux', 'x86_64'), ('darwin', 'aarch64'),
-                              ('windows', 'x64')):
-            self.assertNotIn('VCPKG_CMAKE_SYSTEM_NAME',
-                             vcpkg.overlay_triplet_cmake(os_name, arch))
+    def test_windows_omits_system_name(self):
+        # Windows is vcpkg's default host; its stock triplets set no system name.
+        t = vcpkg.overlay_triplet_cmake('windows', 'x64')
+        self.assertNotIn('VCPKG_CMAKE_SYSTEM_NAME', t)
+        self.assertIn('set(VCPKG_TARGET_ARCHITECTURE x64)', t)
 
     def test_dynamic_linkage(self):
         t = vcpkg.overlay_triplet_cmake('linux', 'x86_64', library_linkage='dynamic')
