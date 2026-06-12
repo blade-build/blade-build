@@ -207,7 +207,7 @@ def manifest_json(packages, baseline=''):
             dependencies.append(port)
         if version:
             overrides.append({'name': port, 'version': version})
-    manifest = {'dependencies': dependencies}
+    manifest: dict = {'dependencies': dependencies}
     if baseline:
         manifest['builtin-baseline'] = baseline
     if overrides:
