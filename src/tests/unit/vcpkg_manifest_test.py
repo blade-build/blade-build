@@ -137,10 +137,26 @@ class PortOptionsTest(unittest.TestCase):
                 {'glog': {'include_prefix': {'thirdparty/glog': 'glog'}}}, 'glog'),
             ('static', False, {'thirdparty/glog': 'glog'}))
 
+    def test_auto_linkage(self):
+        self.assertEqual(
+            vcpkg.port_options({'glog': {'linkage': 'auto'}}, 'glog'),
+            ('auto', False, None))
+
     def test_dynamic_ports_sorted(self):
         pkgs = {'fmt': '7', 'gflags': {'linkage': 'dynamic'},
                 'glog': {'linkage': 'dynamic'}, 'z': {'linkage': 'static'}}
         self.assertEqual(vcpkg.dynamic_ports(pkgs), ['gflags', 'glog'])
+
+    def test_auto_ports_sorted_and_excluded_from_dynamic(self):
+        pkgs = {'fmt': '7', 'glog': {'linkage': 'auto'},
+                'gflags': {'linkage': 'auto'}, 'z': {'linkage': 'dynamic'}}
+        # 'auto' ports build static in the main tree -> not in dynamic_ports.
+        self.assertEqual(vcpkg.auto_ports(pkgs), ['gflags', 'glog'])
+        self.assertEqual(vcpkg.dynamic_ports(pkgs), ['z'])
+
+    def test_shared_overlay_triplet_name(self):
+        self.assertEqual(vcpkg.shared_overlay_triplet_name('x64-linux'),
+                         'blade-x64-linux-shared')
 
     def test_overlay_per_port_dynamic_override(self):
         t = _overlay('darwin', 'aarch64', dynamic_ports=['gflags'])
