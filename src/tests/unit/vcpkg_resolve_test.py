@@ -197,7 +197,7 @@ class HandlerTest(unittest.TestCase):
         kw = MockVL.call_args[1]
         self.assertEqual(kw['linkage'], 'auto')
         self.assertTrue(kw['dynamic_lib_dir'].endswith(
-            os.path.join('installed', 'blade-x64-linux-shared', 'lib')),
+            os.path.join('shared', 'installed', 'blade-x64-linux-shared', 'lib')),
             kw['dynamic_lib_dir'])
 
     def test_static_port_dynamic_lib_dir_falls_back_to_main(self):

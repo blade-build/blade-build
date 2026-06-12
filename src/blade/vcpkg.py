@@ -446,7 +446,7 @@ def _vcpkg_dep_handler(referrer, coordinate):
     # so deriving the shared sibling here keeps the path computation co-located.
     if linkage == 'auto' and cfg.get('manage', True):
         dynamic_lib_dir = os.path.join(
-            root, 'installed', shared_overlay_triplet_name(vanilla), 'lib')
+            shared_install_root(root), shared_overlay_triplet_name(vanilla), 'lib')
     else:
         dynamic_lib_dir = info['lib_dir']
     # Lazy import: cc_targets is loaded before this module, but keeping the
@@ -565,7 +565,7 @@ def setup(builder):
     # debug build).
     if demanded and not _install_shared(
             vcpkg_bin, cfg, vanilla, demanded, packages,
-            base, triplets_dir, installed_root, toolchain):
+            base, triplets_dir, toolchain):
         return False
     return True
 
@@ -598,11 +598,20 @@ def _auto_dynamic_ports(builder, packages):
     return sorted(demanded)
 
 
+def shared_install_root(base):
+    """Install root for the shared (`-shared` triplet) tree.
+
+    A SEPARATE root from the main install: vcpkg manifest mode "owns" its
+    install root and prunes anything not in the current manifest, so sharing one
+    root would make the second (subset) install wipe the first."""
+    return os.path.join(base, 'shared', 'installed')
+
+
 def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
-                    base, triplets_dir, installed_root, toolchain):
+                    base, triplets_dir, toolchain):
     """Install `ports` as shared libraries into the `blade-<triplet>-shared`
-    tree (a separate manifest + overlay triplet, since vcpkg builds one linkage
-    per triplet). Returns True on success or a stamp-skip."""
+    tree (a separate manifest + overlay triplet + install root, since vcpkg
+    builds one linkage per triplet). Returns True on success or a stamp-skip."""
     import hashlib
     import json
     from blade import console, util
@@ -614,6 +623,7 @@ def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
     if triplet_cmake is None:  # pragma: no cover - main triplet already validated
         return True
     shared_base = os.path.join(base, 'shared')
+    shared_installed = shared_install_root(base)
     os.makedirs(shared_base, exist_ok=True)
     subset = {p: packages[p] for p in ports}
     manifest = json.dumps(manifest_json(subset, cfg.get('baseline', '')),
@@ -632,7 +642,7 @@ def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
     stamp = hashlib.md5(
         (manifest + triplet_cmake + shared_overlay).encode()).hexdigest()
     stamp_file = os.path.join(shared_base, '.blade-vcpkg-stamp')
-    if (os.path.isdir(os.path.join(installed_root, shared_overlay))
+    if (os.path.isdir(os.path.join(shared_installed, shared_overlay))
             and os.path.exists(stamp_file)
             and _read_text(stamp_file).strip() == stamp):
         return True
@@ -640,7 +650,7 @@ def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
     cmd = [vcpkg_bin, 'install',
            '--triplet', shared_overlay,
            '--x-manifest-root', shared_base,
-           '--x-install-root', installed_root,
+           '--x-install-root', shared_installed,
            '--overlay-triplets', triplets_dir]
     console.info('vcpkg: installing %d shared package(s) for %s ...'
                  % (len(ports), shared_overlay))
