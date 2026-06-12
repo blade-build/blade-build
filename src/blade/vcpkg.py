@@ -233,6 +233,12 @@ def configuration_json(registries):
 
 def chainload_cmake(cc, cxx, c_flags='', cxx_flags=''):
     """CMake toolchain file pinning vcpkg's compiler to blade's resolved one."""
+    # CMake parses backslashes in a string as escapes, so a Windows compiler
+    # path (C:\...\cl.exe) must use forward slashes (CMake accepts them on
+    # Windows). Without this the chainload file is a CMake syntax error and every
+    # vcpkg port configure fails ("Invalid character escape").
+    cc = cc.replace('\\', '/')
+    cxx = cxx.replace('\\', '/')
     return (
         'set(CMAKE_C_COMPILER "%s")\n'
         'set(CMAKE_CXX_COMPILER "%s")\n'
@@ -299,8 +305,44 @@ def port_cmake_options(packages):
             if isinstance(s, dict) and s.get('cmake_options')}
 
 
+def is_msvc_abi_triplet(triplet: str | None) -> bool:
+    """True for vcpkg triplets that use the MSVC CRT + MSVC STL -- the
+    `*-windows*` family (cl.exe and clang-cl both target it). MinGW is
+    `*-mingw-*` (libstdc++, no debug/release ABI split) and is excluded.
+
+    Gate on the triplet, not the compiler name: blade classifies clang-cl as
+    'clang', so a `cc_is('msvc')` gate would miss it -- but its triplet is still
+    `*-windows*`."""
+    return '-windows' in (triplet or '')
+
+
+def vcpkg_build_type(triplet: str | None, profile: str) -> str | None:
+    """The `VCPKG_BUILD_TYPE` for an overlay triplet, or None to build both.
+
+    blade only links the release tree, so default to release-only (half the
+    install time/disk). The exception is an MSVC-ABI **debug** build: debug and
+    release are ABI-incompatible there -- the CRT differs (`/MDd` ucrtbased vs
+    `/MD` ucrtbase) and MSVC STL's `_ITERATOR_DEBUG_LEVEL` changes `std::`
+    container layout -- so a debug MSVC/clang-cl program must link debug libs.
+    For that case return None: build BOTH (the debug tree is needed, and headers
+    only ship with the release install, so a debug-only build would lose them).
+    clang/gcc/MinGW are unaffected (release libs work in debug)."""
+    if profile == 'debug' and is_msvc_abi_triplet(triplet):
+        return None
+    return 'release'
+
+
+def lib_subdir(triplet: str | None, profile: str) -> str:
+    """The install-tree lib subdir to link from: `debug/lib` for an MSVC-ABI
+    debug build (matching vcpkg_build_type building both), else `lib`."""
+    if profile == 'debug' and is_msvc_abi_triplet(triplet):
+        return os.path.join('debug', 'lib')
+    return 'lib'
+
+
 def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
                           dynamic_ports=(), cmake_options=None,
+                          build_type: str | None = 'release',
                           chainload_rel='../blade-chainload.cmake'):
     """The overlay triplet `.cmake` that chainloads blade's compiler.
 
@@ -318,11 +360,13 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
         'set(VCPKG_TARGET_ARCHITECTURE %s)' % arch,
         'set(VCPKG_CRT_LINKAGE dynamic)',
         'set(VCPKG_LIBRARY_LINKAGE %s)' % library_linkage,
-        # vcpkg builds both release and debug by default; blade only ever links
-        # the release tree (installed/<triplet>/lib), so building debug doubles
-        # the install time and disk for nothing. Release-only.
-        'set(VCPKG_BUILD_TYPE release)',
     ]
+    # vcpkg builds both release and debug by default; blade only links the
+    # release tree, so default to release-only (half the install time/disk).
+    # build_type=None means build both -- needed for an MSVC-ABI debug build,
+    # whose ABI-incompatible debug libs must be linked (see vcpkg_build_type).
+    if build_type:
+        lines.append('set(VCPKG_BUILD_TYPE %s)' % build_type)
     for port in dynamic_ports:
         lines.append('if(PORT STREQUAL "%s")' % port)
         lines.append('    set(VCPKG_LIBRARY_LINKAGE dynamic)')
@@ -370,12 +414,17 @@ class VcpkgError(Exception):
     """A `vcpkg#...` reference could not be resolved (issue #1236)."""
 
 
-def resolve_reference(coordinate, packages, root, triplet):
+def resolve_reference(coordinate, packages, root, triplet, profile: str = 'release'):
     """Resolve a `vcpkg#<coordinate>` reference to install-tree locations.
 
     Pure validation + path computation (no toolchain / Target / filesystem):
-    the handler derives `triplet`/`root` from the toolchain + config and passes
-    them in. Raises VcpkgError (with a user-facing message) on any problem.
+    the handler derives `triplet`/`root`/`profile` from the toolchain + config
+    and passes them in. Raises VcpkgError (with a user-facing message) on any
+    problem.
+
+    An MSVC-ABI debug build links the `debug/lib` subtree (its debug CRT/STL is
+    ABI-incompatible with release); every other case links `lib`. The include
+    dir is shared (vcpkg installs headers once, with the release build).
 
     Returns a dict: port, lib, key, header_only, lib_dir, include_dir.
     """
@@ -409,7 +458,7 @@ def resolve_reference(coordinate, packages, root, triplet):
         'lib': lib,
         'key': 'vcpkg#%s:%s' % (port, lib),
         'header_only': lib == 'hdrs',
-        'lib_dir': os.path.join(installed, 'lib'),
+        'lib_dir': os.path.join(installed, lib_subdir(triplet, profile)),
         'include_dir': os.path.join(installed, 'include'),
     }
 
@@ -452,9 +501,10 @@ def _vcpkg_dep_handler(referrer, coordinate):
     if not vanilla or vanilla == 'auto':
         vanilla = triplet_for_toolchain(toolchain)
     root, triplet = install_location(cfg, vanilla, referrer.blade.get_build_dir())
+    profile = referrer.blade.get_options().profile
     packages = cfg.get('packages', {})
     try:
-        info = resolve_reference(coordinate, packages, root, triplet)
+        info = resolve_reference(coordinate, packages, root, triplet, profile)
     except VcpkgError as e:
         referrer.error(str(e))
         return None
@@ -467,8 +517,10 @@ def _vcpkg_dep_handler(referrer, coordinate):
     # alongside its lib_dir. install_location built `triplet` from the same cfg,
     # so deriving the shared sibling here keeps the path computation co-located.
     if linkage == 'auto' and cfg.get('manage', True):
+        shared_triplet = shared_overlay_triplet_name(vanilla)
         dynamic_lib_dir = os.path.join(
-            shared_install_root(root), shared_overlay_triplet_name(vanilla), 'lib')
+            shared_install_root(root), shared_triplet,
+            lib_subdir(shared_triplet, profile))
     else:
         dynamic_lib_dir = info['lib_dir']
     # Lazy import: cc_targets is loaded before this module, but keeping the
@@ -488,9 +540,11 @@ def _find_vcpkg_tool(cfg):
     import shutil
     tool_root = cfg.get('root') or os.environ.get('VCPKG_ROOT', '')
     if tool_root:
-        candidate = os.path.join(tool_root, 'vcpkg')
-        if os.path.exists(candidate):
-            return candidate
+        # The executable is `vcpkg.exe` on Windows, `vcpkg` elsewhere.
+        for name in ('vcpkg.exe', 'vcpkg') if os.name == 'nt' else ('vcpkg',):
+            candidate = os.path.join(tool_root, name)
+            if os.path.exists(candidate):
+                return candidate
     return shutil.which('vcpkg')
 
 
@@ -516,10 +570,12 @@ def setup(builder):
     vanilla = cfg.get('triplet')
     if not vanilla or vanilla == 'auto':
         vanilla = triplet_for_toolchain(toolchain)
+    profile = builder.get_options().profile
     triplet_cmake = (overlay_triplet_cmake(
         toolchain.target_os, toolchain.target_arch,
         dynamic_ports=dynamic_ports(packages),
-        cmake_options=port_cmake_options(packages)) if vanilla else None)
+        cmake_options=port_cmake_options(packages),
+        build_type=vcpkg_build_type(vanilla, profile)) if vanilla else None)
     if not vanilla or triplet_cmake is None:
         console.error('vcpkg: cannot derive a triplet for os=%s arch=%s; set '
                       'vcpkg_config(triplet=...)'
@@ -583,7 +639,7 @@ def setup(builder):
             cmd.append('--binarysource=' + binary_cache)
         console.info('vcpkg: installing %d package(s) for %s ...'
                      % (len(packages), overlay))
-        if not _run_install_with_progress(cmd):
+        if not _run_install_with_progress(cmd, install_env(toolchain)):
             return False
         with open(stamp_file, 'w') as f:
             f.write(stamp)
@@ -593,7 +649,7 @@ def setup(builder):
     # debug build).
     if demanded and not _install_shared(
             vcpkg_bin, cfg, vanilla, demanded, packages,
-            base, triplets_dir, toolchain):
+            base, triplets_dir, toolchain, profile):
         return False
     return True
 
@@ -636,7 +692,7 @@ def shared_install_root(base):
 
 
 def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
-                    base, triplets_dir, toolchain):
+                    base, triplets_dir, toolchain, profile):
     """Install `ports` as shared libraries into the `blade-<triplet>-shared`
     tree (a separate manifest + overlay triplet + install root, since vcpkg
     builds one linkage per triplet). Returns True on success or a stamp-skip."""
@@ -647,7 +703,8 @@ def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
     triplet_cmake = overlay_triplet_cmake(
         toolchain.target_os, toolchain.target_arch,
         library_linkage='dynamic',
-        cmake_options=port_cmake_options({p: packages[p] for p in ports}))
+        cmake_options=port_cmake_options({p: packages[p] for p in ports}),
+        build_type=vcpkg_build_type(vanilla, profile))
     if triplet_cmake is None:  # pragma: no cover - main triplet already validated
         return True
     shared_base = os.path.join(base, 'shared')
@@ -685,14 +742,60 @@ def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
         cmd.append('--binarysource=' + binary_cache)
     console.info('vcpkg: installing %d shared package(s) for %s ...'
                  % (len(ports), shared_overlay))
-    if not _run_install_with_progress(cmd):
+    if not _run_install_with_progress(cmd, install_env(toolchain)):
         return False
     with open(stamp_file, 'w') as f:
         f.write(stamp)
     return True
 
 
-def _run_install_with_progress(cmd):
+def install_env(toolchain) -> dict | None:
+    """Subprocess environment for `vcpkg install`, or None to inherit os.environ.
+
+    On MSVC, ports are built by vcpkg's own cmake invoking the chainloaded
+    cl.exe / link.exe / rc.exe -- which need the Developer-Command-Prompt
+    environment that blade is normally launched without. The chainload toolchain
+    only pins the compiler, not the environment, so we reconstruct the essential
+    bits from blade's resolved toolchain:
+
+      * `INCLUDE` / `LIB` -- CRT + Windows SDK headers and libraries. Without LIB
+        every port fails to link (`LNK1104: cannot open file 'LIBCMT.lib'`).
+      * `VCPKG_KEEP_ENV_VARS` -- vcpkg scrubs the build environment; INCLUDE/LIB
+        must be whitelisted or they never reach the compiler.
+      * `PATH` -- the SDK + compiler tool dirs, so `rc.exe` (invoked unqualified
+        by CMake's manifest step) and the compiler's own DLLs resolve. PATH is
+        always inherited by vcpkg builds, so it needs no keep entry.
+
+    Non-MSVC toolchains need nothing (gcc/clang locate their own runtime), so
+    return None there."""
+    if not toolchain.cc_is('msvc'):
+        return None
+    inc = toolchain.get_system_include_paths()
+    lib = toolchain.get_system_lib_paths()
+    if not inc and not lib:
+        return None
+    env = dict(os.environ)
+    if inc:
+        env['INCLUDE'] = os.pathsep.join(inc)
+    if lib:
+        env['LIB'] = os.pathsep.join(lib)
+    keep = [v for v in env.get('VCPKG_KEEP_ENV_VARS', '').split(';') if v]
+    for v in ('INCLUDE', 'LIB'):
+        if v not in keep:
+            keep.append(v)
+    env['VCPKG_KEEP_ENV_VARS'] = ';'.join(keep)
+    bindirs = []
+    for key in ('cc', 'rc'):
+        path = toolchain.tool(key)
+        d = os.path.dirname(path) if path else ''
+        if d and d not in bindirs:
+            bindirs.append(d)
+    if bindirs:
+        env['PATH'] = os.pathsep.join(bindirs + [env.get('PATH', '')])
+    return env
+
+
+def _run_install_with_progress(cmd, env=None):
     """Run `vcpkg install`, rendering its `Installing N/M ...` stream as blade's
     live build panel. Returns True on success; on failure prints the captured
     output and returns False. Off a TTY the panel is a no-op (CI logs show the
@@ -707,7 +810,7 @@ def _run_install_with_progress(cmd):
     total = 0
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True,
-                            errors='replace', bufsize=1)
+                            errors='replace', bufsize=1, env=env)
     start = time.time()
     assert proc.stdout is not None
     for line in proc.stdout:

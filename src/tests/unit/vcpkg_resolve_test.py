@@ -43,6 +43,24 @@ class ResolveReferenceTest(unittest.TestCase):
         self.assertEqual(info['lib_dir'], '/vc/installed/x64-linux/lib')
         self.assertEqual(info['include_dir'], '/vc/installed/x64-linux/include')
 
+    def test_msvc_debug_links_debug_lib_subtree(self):
+        # An MSVC-ABI debug build links debug/lib (ABI-incompatible CRT/STL),
+        # but the include dir is shared (headers ship with the release install).
+        info = vcpkg.resolve_reference('fmt:fmt', _WHITELIST, '/vc',
+                                       'x64-windows', profile='debug')
+        self.assertEqual(info['lib_dir'],
+                         os.path.join('/vc', 'installed', 'x64-windows', 'debug', 'lib'))
+        self.assertEqual(info['include_dir'],
+                         os.path.join('/vc', 'installed', 'x64-windows', 'include'))
+
+    def test_non_msvc_debug_still_links_release_lib(self):
+        # clang/gcc/MinGW debug builds reuse the release tree.
+        for triplet in ('x64-linux', 'x64-mingw-dynamic'):
+            info = vcpkg.resolve_reference('fmt:fmt', _WHITELIST, '/vc',
+                                           triplet, profile='debug')
+            self.assertEqual(info['lib_dir'],
+                             os.path.join('/vc', 'installed', triplet, 'lib'))
+
     def test_lib_basename_differs_from_port(self):
         info = self._resolve('openssl:ssl')
         self.assertEqual(info['key'], 'vcpkg#openssl:ssl')
@@ -152,6 +170,23 @@ class HandlerTest(unittest.TestCase):
         self.assertEqual(args[2], 'vcpkg#fmt:fmt')
         self.assertFalse(args[5])
         r.blade.register_target.assert_called_once()
+
+    def test_msvc_debug_passes_debug_lib_dir(self):
+        # The handler forwards the build profile; an MSVC-ABI debug build must
+        # hand VcpkgLibrary the debug/lib dir (include stays shared).
+        r = _Referrer()
+        r.blade.get_options.return_value.profile = 'debug'
+        with mock.patch('blade.config.get_section',
+                        return_value=self._cfg(triplet='x64-windows')), \
+             mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
+            vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
+        args = MockVL.call_args[0]  # port, lib, key, lib_dir, include_dir, header_only
+        # endswith (not ==): install_location abspath()s the root, which differs
+        # by platform (e.g. '/vc' -> 'C:\\vc' on Windows).
+        self.assertTrue(args[3].endswith(
+            os.path.join('installed', 'x64-windows', 'debug', 'lib')), args[3])
+        self.assertTrue(args[4].endswith(
+            os.path.join('installed', 'x64-windows', 'include')), args[4])
 
     def test_already_registered_is_reused(self):
         r = _Referrer(db={'vcpkg#fmt:fmt': object()})
