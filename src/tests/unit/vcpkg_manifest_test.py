@@ -11,6 +11,7 @@ these files + invoking `vcpkg install` is wired separately (PR6)."""
 import os
 import sys
 import unittest
+import unittest.mock as mock
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
@@ -110,6 +111,45 @@ class OverlayTripletTest(unittest.TestCase):
         self.assertIsNone(vcpkg.overlay_triplet_cmake('plan9', 'x86_64'))
         self.assertIsNone(vcpkg.overlay_triplet_cmake('linux', 'sparc'))
 
+    def test_build_type_release_by_default(self):
+        self.assertIn('set(VCPKG_BUILD_TYPE release)', _overlay('windows', 'x64'))
+
+    def test_build_type_none_omits_the_line(self):
+        # An MSVC-ABI debug build needs both release + debug -> no VCPKG_BUILD_TYPE.
+        self.assertNotIn('VCPKG_BUILD_TYPE',
+                         _overlay('windows', 'x64', build_type=None))
+
+
+class MsvcDebugGateTest(unittest.TestCase):
+    """The MSVC-ABI debug gate (issue #1315): is_msvc_abi_triplet /
+    vcpkg_build_type / lib_subdir."""
+
+    def test_is_msvc_abi_triplet_true_for_windows_family(self):
+        for t in ('x64-windows', 'x64-windows-static', 'blade-x64-windows',
+                  'blade-x64-windows-shared'):
+            self.assertTrue(vcpkg.is_msvc_abi_triplet(t), t)
+
+    def test_is_msvc_abi_triplet_false_for_mingw_posix_none(self):
+        for t in ('x64-mingw-dynamic', 'x64-mingw-static', 'x64-linux',
+                  'arm64-osx', '', None):
+            self.assertFalse(vcpkg.is_msvc_abi_triplet(t), t)
+
+    def test_vcpkg_build_type_release_except_msvc_debug(self):
+        self.assertEqual(vcpkg.vcpkg_build_type('x64-windows', 'release'), 'release')
+        self.assertEqual(vcpkg.vcpkg_build_type('x64-linux', 'debug'), 'release')
+        self.assertEqual(vcpkg.vcpkg_build_type('x64-mingw-dynamic', 'debug'),
+                         'release')
+        # MSVC-ABI debug -> build both (None), so debug libs exist to link.
+        self.assertIsNone(vcpkg.vcpkg_build_type('x64-windows', 'debug'))
+        self.assertIsNone(vcpkg.vcpkg_build_type('blade-x64-windows', 'debug'))
+
+    def test_lib_subdir(self):
+        self.assertEqual(vcpkg.lib_subdir('x64-windows', 'release'), 'lib')
+        self.assertEqual(vcpkg.lib_subdir('x64-linux', 'debug'), 'lib')
+        self.assertEqual(vcpkg.lib_subdir('x64-mingw-dynamic', 'debug'), 'lib')
+        self.assertEqual(vcpkg.lib_subdir('x64-windows', 'debug'),
+                         os.path.join('debug', 'lib'))
+
 
 class PortOptionsTest(unittest.TestCase):
 
@@ -183,6 +223,48 @@ class PortOptionsTest(unittest.TestCase):
         self.assertIn('set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DSNAPPY_WITH_RTTI=ON")', t)
 
 
+class InstallEnvTest(unittest.TestCase):
+    """install_env: reconstruct the MSVC dev environment for `vcpkg install`."""
+
+    def _tc(self, vendor='msvc', inc=None, lib=None, tools=None):
+        tc = mock.Mock()
+        tc.cc_is = lambda v: v == vendor
+        tc.get_system_include_paths.return_value = inc or []
+        tc.get_system_lib_paths.return_value = lib or []
+        tc.tool = lambda k: (tools or {}).get(k)
+        return tc
+
+    def test_non_msvc_inherits_environment(self):
+        self.assertIsNone(vcpkg.install_env(self._tc(vendor='gcc')))
+
+    def test_msvc_without_discovered_paths_returns_none(self):
+        self.assertIsNone(vcpkg.install_env(self._tc()))
+
+    def test_msvc_sets_include_lib_keep_and_path(self):
+        tc = self._tc(inc=['I:/inc'], lib=['L:/lib'],
+                      tools={'cc': 'C:/vs/bin/cl.exe', 'rc': 'C:/sdk/bin/rc.exe'})
+        with mock.patch.dict(os.environ,
+                             {'PATH': 'P:/old', 'INCLUDE': '', 'LIB': '',
+                              'VCPKG_KEEP_ENV_VARS': ''}, clear=True):
+            env = vcpkg.install_env(tc)
+        self.assertEqual(env['INCLUDE'], 'I:/inc')
+        self.assertEqual(env['LIB'], 'L:/lib')
+        # vcpkg scrubs the build env -> INCLUDE/LIB must be whitelisted.
+        self.assertIn('INCLUDE', env['VCPKG_KEEP_ENV_VARS'].split(';'))
+        self.assertIn('LIB', env['VCPKG_KEEP_ENV_VARS'].split(';'))
+        # compiler + rc tool dirs prepended to PATH (so rc.exe etc. resolve).
+        self.assertIn('C:/vs/bin', env['PATH'])
+        self.assertIn('C:/sdk/bin', env['PATH'])
+        self.assertTrue(env['PATH'].endswith('P:/old'))
+
+    def test_keep_env_vars_preserves_existing(self):
+        tc = self._tc(inc=['I:/inc'], lib=['L:/lib'])
+        with mock.patch.dict(os.environ,
+                             {'VCPKG_KEEP_ENV_VARS': 'FOO'}, clear=True):
+            env = vcpkg.install_env(tc)
+        self.assertEqual(env['VCPKG_KEEP_ENV_VARS'].split(';'), ['FOO', 'INCLUDE', 'LIB'])
+
+
 class ChainloadTest(unittest.TestCase):
 
     def test_compiler_and_flags(self):
@@ -192,6 +274,14 @@ class ChainloadTest(unittest.TestCase):
         self.assertIn('set(CMAKE_CXX_COMPILER "/usr/bin/g++")', c)
         self.assertIn('set(CMAKE_C_FLAGS_INIT "-O2")', c)
         self.assertIn('set(CMAKE_CXX_FLAGS_INIT "-O2 -std=c++17")', c)
+
+    def test_windows_compiler_path_uses_forward_slashes(self):
+        # CMake parses '\' as an escape, so a Windows cl.exe path must be written
+        # with forward slashes or every port configure fails to parse the file.
+        c = vcpkg.chainload_cmake(r'C:\VS\bin\cl.exe', r'C:\VS\bin\cl.exe')
+        self.assertIn('set(CMAKE_C_COMPILER "C:/VS/bin/cl.exe")', c)
+        self.assertIn('set(CMAKE_CXX_COMPILER "C:/VS/bin/cl.exe")', c)
+        self.assertNotIn('\\', c)
 
 
 if __name__ == '__main__':
