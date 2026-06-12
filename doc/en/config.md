@@ -925,9 +925,37 @@ build directory. Cleared by `blade clean`.
 #### `binary_cache`: str = "auto"
 
 **Purpose:** The vcpkg binary-cache backend used to reuse compiled packages
-across workspaces.
+across runs and machines. `"auto"` keeps vcpkg's built-in default (a local
+cache under the user's cache directory); any other value is passed straight
+through to `vcpkg install --binarysource=<value>`, so it accepts the full
+[vcpkg binary-caching](https://learn.microsoft.com/vcpkg/users/binarycaching)
+source syntax, for example:
+
+```python
+vcpkg_config(
+    # A shared directory cache (read+write).
+    binary_cache = 'files,/path/to/cache,readwrite',
+    # ... or a NuGet feed, GitHub Actions cache, x-azblob, x-gcs, etc.
+)
+```
+
+Set it to `'clear'` to disable caching entirely. Only consulted in managed
+mode (`manage = True`).
 
 #### `direct_use_allowed`: list = []
 
-**Purpose:** Governance — subtrees where bare `vcpkg#...` references are
-allowed. Empty means anywhere.
+**Purpose:** Governance — the list of source subtrees (e.g. `'thirdparty'` or
+`'//thirdparty'`) where a target may depend on a bare `vcpkg#port:lib`
+reference directly. The default empty list imposes no restriction. When
+non-empty, a `vcpkg#...` dependency is only accepted if the **referring**
+target lives within one of the listed subtrees; anywhere else Blade reports an
+error. This lets a team funnel all third-party usage through curated wrapper
+`cc_library` targets (kept under `thirdparty/`) while business code depends on
+those wrappers rather than on vcpkg ports directly.
+
+```python
+vcpkg_config(
+    # Only BUILD files under thirdparty/ may write `deps = ['vcpkg#fmt:fmt']`.
+    direct_use_allowed = ['thirdparty'],
+)
+```

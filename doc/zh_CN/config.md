@@ -918,8 +918,32 @@ vcpkg_config(
 
 #### `binary_cache`: str = "auto"
 
-**作用：** vcpkg 二进制缓存后端，用于跨工作区复用已编译的包。
+**作用：** vcpkg 二进制缓存后端，用于跨运行、跨机器复用已编译的包。`"auto"`
+保留 vcpkg 内置默认（用户缓存目录下的本地缓存）；其他任何值都会原样传给
+`vcpkg install --binarysource=<value>`，因此支持完整的
+[vcpkg 二进制缓存](https://learn.microsoft.com/vcpkg/users/binarycaching)源语法，例如：
+
+```python
+vcpkg_config(
+    # 共享目录缓存（读写）。
+    binary_cache = 'files,/path/to/cache,readwrite',
+    # ……也可以是 NuGet feed、GitHub Actions 缓存、x-azblob、x-gcs 等。
+)
+```
+
+设为 `'clear'` 可完全禁用缓存。仅在托管模式（`manage = True`）下生效。
 
 #### `direct_use_allowed`: list = []
 
-**作用：** 治理项——允许裸写 `vcpkg#...` 引用的子树。留空表示任意位置。
+**作用：** 治理项——允许直接依赖裸 `vcpkg#port:lib` 引用的源码子树列表（如
+`'thirdparty'` 或 `'//thirdparty'`）。默认空列表不施加任何限制。非空时，只有当
+**发起依赖的**目标位于列表中某个子树内，`vcpkg#...` 依赖才被接受；否则 Blade 报错。
+借此可将所有第三方用法收敛到 `thirdparty/` 下精心维护的包装 `cc_library` 目标，
+业务代码只依赖这些包装而非直接依赖 vcpkg port。
+
+```python
+vcpkg_config(
+    # 仅 thirdparty/ 下的 BUILD 可以写 `deps = ['vcpkg#fmt:fmt']`。
+    direct_use_allowed = ['thirdparty'],
+)
+```

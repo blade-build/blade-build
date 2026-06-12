@@ -103,6 +103,19 @@ class SetupTest(unittest.TestCase):
         self.assertIn('blade-x64-linux', cmd)
         self.assertIn('--x-install-root', cmd)
 
+    def test_binary_cache_auto_omits_binarysource(self):
+        with tempfile.TemporaryDirectory() as d:
+            _, rc = self._run(d, cfg=dict(_CFG, binary_cache='auto'))
+        cmd = rc.call_args[0][0]
+        self.assertFalse(any(c.startswith('--binarysource') for c in cmd))
+
+    def test_binary_cache_custom_passes_binarysource(self):
+        source = 'files,/tmp/vcpkg-cache,readwrite'
+        with tempfile.TemporaryDirectory() as d:
+            _, rc = self._run(d, cfg=dict(_CFG, binary_cache=source))
+        cmd = rc.call_args[0][0]
+        self.assertIn('--binarysource=' + source, cmd)
+
     def test_install_failure_returns_false(self):
         with tempfile.TemporaryDirectory() as d:
             ok, _ = self._run(d, run_result=(1, '', 'boom'))
