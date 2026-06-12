@@ -351,17 +351,20 @@ class Blade:
                     os.path.join(self.__blade_path, 'blade')))
         return self.__blade_revision
 
+    def setup_vcpkg(self):
+        """Run the blade-managed `vcpkg install` (issue #1236).
+
+        Invoked as a stage between analyze and generate for building commands
+        (see main.py), so the installed artifacts exist when VcpkgLibrary
+        resolves its lib filenames during generation -- a port may add a debug
+        postfix (e.g. fmt -> fmtd.lib) that can't be predicted at parse time.
+        A no-op unless vcpkg_config(manage=True) with a non-empty packages list.
+        Errors are reported via console.error (the stage loop checks the log)."""
+        from blade import vcpkg
+        vcpkg.setup(self)
+
     def build(self):
         """Implement the "build" subcommand."""
-        # vcpkg orchestration (issue #1236): blade-managed `vcpkg install` runs
-        # here -- deferred from the load seam to the build phase, so commands
-        # that don't build (query/dump/clean) never install, and the install's
-        # progress shows in the build panel. VcpkgLibrary resolves paths
-        # optimistically during load; the artifacts are produced just before
-        # ninja links them. A no-op unless vcpkg_config(manage=True) with packages.
-        from blade import vcpkg
-        if not vcpkg.setup(self):
-            return 1
         console.info('Building...')
         console.flush()
         start_time = time.time()

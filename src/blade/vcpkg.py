@@ -342,16 +342,22 @@ def lib_subdir(triplet: str | None, profile: str) -> str:
 
 def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
                           dynamic_ports=(), cmake_options=None,
-                          build_type: str | None = 'release',
+                          build_type: str | None = 'release', chainload=True,
                           chainload_rel='../blade-chainload.cmake'):
-    """The overlay triplet `.cmake` that chainloads blade's compiler.
+    """The overlay triplet `.cmake` for a vanilla vcpkg triplet.
 
     Mirrors vcpkg's stock triplet for the OS (so ports detect the target
-    correctly) and adds the chainload toolchain. `library_linkage` is the
-    default ('static'); ports in `dynamic_ports` are overridden to dynamic, and
-    `cmake_options` ({port: [opts]}) sets per-port VCPKG_CMAKE_CONFIGURE_OPTIONS.
-    vcpkg re-evaluates the triplet per port, so `if(PORT ...)` guards give
-    per-port behavior. Returns None if os/arch is unsupported.
+    correctly). `library_linkage` is the default ('static'); ports in
+    `dynamic_ports` are overridden to dynamic, and `cmake_options` ({port:
+    [opts]}) sets per-port VCPKG_CMAKE_CONFIGURE_OPTIONS. vcpkg re-evaluates the
+    triplet per port, so `if(PORT ...)` guards give per-port behavior. Returns
+    None if os/arch is unsupported.
+
+    `chainload` adds the chainload toolchain that pins blade's compiler -- used
+    for gcc/clang/MinGW. For MSVC (cl.exe) it is False: a chainload would put
+    vcpkg in `external` toolset mode and make it SKIP its MSVC environment setup,
+    so CMake never gets mt.exe/rc.exe/INCLUDE/LIB and every port fails to link.
+    Letting vcpkg use its native MSVC support sets all of that up correctly.
     """
     arch = _VCPKG_ARCH.get(target_arch)
     if arch is None or target_os not in _VCPKG_OS:
@@ -382,8 +388,9 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
     if target_os == 'darwin':
         lines.append('set(VCPKG_OSX_ARCHITECTURES %s)'
                      % _VCPKG_OSX_ARCH.get(arch, arch))
-    lines.append('set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE '
-                 '${CMAKE_CURRENT_LIST_DIR}/%s)' % chainload_rel)
+    if chainload:
+        lines.append('set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE '
+                     '${CMAKE_CURRENT_LIST_DIR}/%s)' % chainload_rel)
     return '\n'.join(lines) + '\n'
 
 
@@ -571,11 +578,16 @@ def setup(builder):
     if not vanilla or vanilla == 'auto':
         vanilla = triplet_for_toolchain(toolchain)
     profile = builder.get_options().profile
+    # MSVC (cl.exe) uses vcpkg's native toolchain (no chainload) so vcpkg sets up
+    # the full MSVC environment; gcc/clang/MinGW are chainloaded to pin blade's
+    # compiler.
+    chainload = not toolchain.cc_is('msvc')
     triplet_cmake = (overlay_triplet_cmake(
         toolchain.target_os, toolchain.target_arch,
         dynamic_ports=dynamic_ports(packages),
         cmake_options=port_cmake_options(packages),
-        build_type=vcpkg_build_type(vanilla, profile)) if vanilla else None)
+        build_type=vcpkg_build_type(vanilla, profile),
+        chainload=chainload) if vanilla else None)
     if not vanilla or triplet_cmake is None:
         console.error('vcpkg: cannot derive a triplet for os=%s arch=%s; set '
                       'vcpkg_config(triplet=...)'
@@ -639,7 +651,7 @@ def setup(builder):
             cmd.append('--binarysource=' + binary_cache)
         console.info('vcpkg: installing %d package(s) for %s ...'
                      % (len(packages), overlay))
-        if not _run_install_with_progress(cmd, install_env(toolchain)):
+        if not _run_install_with_progress(cmd):
             return False
         with open(stamp_file, 'w') as f:
             f.write(stamp)
@@ -700,11 +712,13 @@ def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
     import json
     from blade import console, util
     shared_overlay = shared_overlay_triplet_name(vanilla)
+    chainload = not toolchain.cc_is('msvc')
     triplet_cmake = overlay_triplet_cmake(
         toolchain.target_os, toolchain.target_arch,
         library_linkage='dynamic',
         cmake_options=port_cmake_options({p: packages[p] for p in ports}),
-        build_type=vcpkg_build_type(vanilla, profile))
+        build_type=vcpkg_build_type(vanilla, profile),
+        chainload=chainload)
     if triplet_cmake is None:  # pragma: no cover - main triplet already validated
         return True
     shared_base = os.path.join(base, 'shared')
@@ -742,60 +756,14 @@ def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
         cmd.append('--binarysource=' + binary_cache)
     console.info('vcpkg: installing %d shared package(s) for %s ...'
                  % (len(ports), shared_overlay))
-    if not _run_install_with_progress(cmd, install_env(toolchain)):
+    if not _run_install_with_progress(cmd):
         return False
     with open(stamp_file, 'w') as f:
         f.write(stamp)
     return True
 
 
-def install_env(toolchain) -> dict | None:
-    """Subprocess environment for `vcpkg install`, or None to inherit os.environ.
-
-    On MSVC, ports are built by vcpkg's own cmake invoking the chainloaded
-    cl.exe / link.exe / rc.exe -- which need the Developer-Command-Prompt
-    environment that blade is normally launched without. The chainload toolchain
-    only pins the compiler, not the environment, so we reconstruct the essential
-    bits from blade's resolved toolchain:
-
-      * `INCLUDE` / `LIB` -- CRT + Windows SDK headers and libraries. Without LIB
-        every port fails to link (`LNK1104: cannot open file 'LIBCMT.lib'`).
-      * `VCPKG_KEEP_ENV_VARS` -- vcpkg scrubs the build environment; INCLUDE/LIB
-        must be whitelisted or they never reach the compiler.
-      * `PATH` -- the SDK + compiler tool dirs, so `rc.exe` (invoked unqualified
-        by CMake's manifest step) and the compiler's own DLLs resolve. PATH is
-        always inherited by vcpkg builds, so it needs no keep entry.
-
-    Non-MSVC toolchains need nothing (gcc/clang locate their own runtime), so
-    return None there."""
-    if not toolchain.cc_is('msvc'):
-        return None
-    inc = toolchain.get_system_include_paths()
-    lib = toolchain.get_system_lib_paths()
-    if not inc and not lib:
-        return None
-    env = dict(os.environ)
-    if inc:
-        env['INCLUDE'] = os.pathsep.join(inc)
-    if lib:
-        env['LIB'] = os.pathsep.join(lib)
-    keep = [v for v in env.get('VCPKG_KEEP_ENV_VARS', '').split(';') if v]
-    for v in ('INCLUDE', 'LIB'):
-        if v not in keep:
-            keep.append(v)
-    env['VCPKG_KEEP_ENV_VARS'] = ';'.join(keep)
-    bindirs = []
-    for key in ('cc', 'rc'):
-        path = toolchain.tool(key)
-        d = os.path.dirname(path) if path else ''
-        if d and d not in bindirs:
-            bindirs.append(d)
-    if bindirs:
-        env['PATH'] = os.pathsep.join(bindirs + [env.get('PATH', '')])
-    return env
-
-
-def _run_install_with_progress(cmd, env=None):
+def _run_install_with_progress(cmd):
     """Run `vcpkg install`, rendering its `Installing N/M ...` stream as blade's
     live build panel. Returns True on success; on failure prints the captured
     output and returns False. Off a TTY the panel is a no-op (CI logs show the
@@ -810,7 +778,7 @@ def _run_install_with_progress(cmd, env=None):
     total = 0
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True,
-                            errors='replace', bufsize=1, env=env)
+                            errors='replace', bufsize=1)
     start = time.time()
     assert proc.stdout is not None
     for line in proc.stdout:

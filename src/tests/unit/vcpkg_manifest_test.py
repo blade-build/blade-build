@@ -11,7 +11,6 @@ these files + invoking `vcpkg install` is wired separately (PR6)."""
 import os
 import sys
 import unittest
-import unittest.mock as mock
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
@@ -119,6 +118,16 @@ class OverlayTripletTest(unittest.TestCase):
         self.assertNotIn('VCPKG_BUILD_TYPE',
                          _overlay('windows', 'x64', build_type=None))
 
+    def test_chainload_present_by_default(self):
+        self.assertIn('VCPKG_CHAINLOAD_TOOLCHAIN_FILE', _overlay('linux', 'x86_64'))
+
+    def test_chainload_omitted_when_disabled(self):
+        # MSVC uses vcpkg's native toolchain -> no chainload, else vcpkg runs in
+        # `external` toolset mode and skips its MSVC env setup (mt/rc/INCLUDE/LIB),
+        # so ports fail to link.
+        self.assertNotIn('VCPKG_CHAINLOAD_TOOLCHAIN_FILE',
+                         _overlay('windows', 'x64', chainload=False))
+
 
 class MsvcDebugGateTest(unittest.TestCase):
     """The MSVC-ABI debug gate (issue #1315): is_msvc_abi_triplet /
@@ -221,48 +230,6 @@ class PortOptionsTest(unittest.TestCase):
             cmake_options={'snappy': ['-DSNAPPY_WITH_RTTI=ON']})
         self.assertIn('if(PORT STREQUAL "snappy")', t)
         self.assertIn('set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DSNAPPY_WITH_RTTI=ON")', t)
-
-
-class InstallEnvTest(unittest.TestCase):
-    """install_env: reconstruct the MSVC dev environment for `vcpkg install`."""
-
-    def _tc(self, vendor='msvc', inc=None, lib=None, tools=None):
-        tc = mock.Mock()
-        tc.cc_is = lambda v: v == vendor
-        tc.get_system_include_paths.return_value = inc or []
-        tc.get_system_lib_paths.return_value = lib or []
-        tc.tool = lambda k: (tools or {}).get(k)
-        return tc
-
-    def test_non_msvc_inherits_environment(self):
-        self.assertIsNone(vcpkg.install_env(self._tc(vendor='gcc')))
-
-    def test_msvc_without_discovered_paths_returns_none(self):
-        self.assertIsNone(vcpkg.install_env(self._tc()))
-
-    def test_msvc_sets_include_lib_keep_and_path(self):
-        tc = self._tc(inc=['I:/inc'], lib=['L:/lib'],
-                      tools={'cc': 'C:/vs/bin/cl.exe', 'rc': 'C:/sdk/bin/rc.exe'})
-        with mock.patch.dict(os.environ,
-                             {'PATH': 'P:/old', 'INCLUDE': '', 'LIB': '',
-                              'VCPKG_KEEP_ENV_VARS': ''}, clear=True):
-            env = vcpkg.install_env(tc)
-        self.assertEqual(env['INCLUDE'], 'I:/inc')
-        self.assertEqual(env['LIB'], 'L:/lib')
-        # vcpkg scrubs the build env -> INCLUDE/LIB must be whitelisted.
-        self.assertIn('INCLUDE', env['VCPKG_KEEP_ENV_VARS'].split(';'))
-        self.assertIn('LIB', env['VCPKG_KEEP_ENV_VARS'].split(';'))
-        # compiler + rc tool dirs prepended to PATH (so rc.exe etc. resolve).
-        self.assertIn('C:/vs/bin', env['PATH'])
-        self.assertIn('C:/sdk/bin', env['PATH'])
-        self.assertTrue(env['PATH'].endswith('P:/old'))
-
-    def test_keep_env_vars_preserves_existing(self):
-        tc = self._tc(inc=['I:/inc'], lib=['L:/lib'])
-        with mock.patch.dict(os.environ,
-                             {'VCPKG_KEEP_ENV_VARS': 'FOO'}, clear=True):
-            env = vcpkg.install_env(tc)
-        self.assertEqual(env['VCPKG_KEEP_ENV_VARS'].split(';'), ['FOO', 'INCLUDE', 'LIB'])
 
 
 class ChainloadTest(unittest.TestCase):

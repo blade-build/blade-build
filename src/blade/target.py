@@ -833,17 +833,23 @@ class Target:
         """
         outputs = var_to_list(outputs)
         implicit_outputs = var_to_list(implicit_outputs)
-        outs = outputs[:]
+        # Ninja treats ' ' as a token separator, ':' as the outputs/rule
+        # separator and '$' as the escape char, so paths carrying them (e.g. an
+        # absolute Windows path like C:\...\fmt.lib, or a spaced path) must be
+        # escaped. Relative POSIX-style paths are unaffected.
+        def esc(p):
+            return p.replace('$', '$$').replace(' ', '$ ').replace(':', '$:')
+        outs = [esc(o) for o in outputs]
         if implicit_outputs:
             outs.append('|')
-            outs += implicit_outputs
-        ins = var_to_list(inputs)
+            outs += [esc(o) for o in implicit_outputs]
+        ins = [esc(i) for i in var_to_list(inputs)]
         if implicit_deps:
             ins.append('|')
-            ins += var_to_list(implicit_deps)
+            ins += [esc(d) for d in var_to_list(implicit_deps)]
         if order_only_deps:
             ins.append('||')
-            ins += var_to_list(order_only_deps)
+            ins += [esc(d) for d in var_to_list(order_only_deps)]
         self._write_rule('build {}: {} {}'.format(' '.join(outs), rule, ' '.join(ins)))
         clean = (outputs + implicit_outputs) if clean is None else var_to_list(clean)
         if clean:

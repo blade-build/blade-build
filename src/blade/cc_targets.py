@@ -12,6 +12,7 @@ of all of the cc targets, like cc_library, cc_binary.
 """
 
 
+import glob
 import os
 import pickle
 import sys
@@ -1925,6 +1926,43 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         self.attr['dynamic_source'] = shared
         self.attr['dynamic_target'] = dynamic_target
         self._add_target_file(tc.DYNAMIC_LIB_LABEL, dynamic_target)
+
+    def _existing_lib(self, lib_dir, suffix):
+        """Resolve the actual lib file in `lib_dir` once `vcpkg install` has run.
+
+        A vcpkg port may add a debug postfix (CMAKE_DEBUG_POSTFIX -- e.g. fmt's
+        debug lib is fmtd.lib), so the debug/lib filename differs from release
+        and can't be predicted at parse time. Prefer the exact name, then the
+        conventional 'd' postfix, then a unique glob match; fall back to the
+        exact (optimistic) name so a genuinely missing lib still surfaces as
+        ninja's 'missing' error."""
+        tc = self.blade.get_build_toolchain()
+        base = f'{tc.lib_prefix}{self.name}'
+        exact = os.path.join(lib_dir, base + suffix)
+        if os.path.exists(exact):
+            return exact
+        postfixed = os.path.join(lib_dir, base + 'd' + suffix)
+        if os.path.exists(postfixed):
+            return postfixed
+        matches = glob.glob(os.path.join(lib_dir, base + '*' + suffix))
+        return matches[0] if len(matches) == 1 else exact
+
+    def _before_generate(self):  # override
+        super()._before_generate()
+        if self._vcpkg_header_only:
+            return
+        # `vcpkg install` runs before generation (a stage in main.py), so the
+        # real lib files now exist -- re-resolve the static archive in case the
+        # port added a debug postfix we couldn't predict during _setup() at parse
+        # time (e.g. an MSVC debug build's fmt -> fmtd.lib).
+        if self._vcpkg_linkage in ('static', 'auto'):
+            tc = self.blade.get_build_toolchain()
+            archive = self._existing_lib(self._vcpkg_lib_dir, tc.static_lib_suffix)
+            self.attr['static_source'] = archive
+            self._add_target_file(tc.STATIC_LIB_LABEL, archive)
+            if self._vcpkg_linkage == 'static':
+                # static: the archive serves both link modes (see _setup_static).
+                self._add_target_file(tc.DYNAMIC_LIB_LABEL, archive)
 
     def _vcpkg_wants_dynamic(self):
         """Whether this port's shared library should actually be materialized.
