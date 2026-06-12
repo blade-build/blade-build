@@ -318,6 +318,10 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
         'set(VCPKG_TARGET_ARCHITECTURE %s)' % arch,
         'set(VCPKG_CRT_LINKAGE dynamic)',
         'set(VCPKG_LIBRARY_LINKAGE %s)' % library_linkage,
+        # vcpkg builds both release and debug by default; blade only ever links
+        # the release tree (installed/<triplet>/lib), so building debug doubles
+        # the install time and disk for nothing. Release-only.
+        'set(VCPKG_BUILD_TYPE release)',
     ]
     for port in dynamic_ports:
         lines.append('if(PORT STREQUAL "%s")' % port)

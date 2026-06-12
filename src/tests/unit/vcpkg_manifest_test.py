@@ -83,6 +83,8 @@ class OverlayTripletTest(unittest.TestCase):
         t = _overlay('linux', 'x86_64')
         self.assertIn('set(VCPKG_TARGET_ARCHITECTURE x64)', t)
         self.assertIn('set(VCPKG_LIBRARY_LINKAGE static)', t)
+        # Release-only: blade links the release tree, never debug/.
+        self.assertIn('set(VCPKG_BUILD_TYPE release)', t)
         self.assertIn('set(VCPKG_CMAKE_SYSTEM_NAME Linux)', t)
         self.assertIn('VCPKG_CHAINLOAD_TOOLCHAIN_FILE', t)
         self.assertIn('../blade-chainload.cmake', t)
