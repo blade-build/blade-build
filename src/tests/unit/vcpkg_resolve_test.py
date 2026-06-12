@@ -290,5 +290,42 @@ class HandlerTest(unittest.TestCase):
         self.assertIn('vcpkg', target_mod._dep_scheme_providers)
 
 
+class VcpkgExistingLibTest(unittest.TestCase):
+    """VcpkgLibrary._existing_lib resolves the real lib file after install,
+    handling a port's debug postfix (issue #1315: fmt -> fmtd.lib)."""
+
+    def _lib(self):
+        from blade.cc_targets import VcpkgLibrary
+        t = VcpkgLibrary.__new__(VcpkgLibrary)
+        t.name = 'fmt'
+        tc = mock.Mock(); tc.lib_prefix = ''; tc.static_lib_suffix = '.lib'
+        t.blade = mock.Mock()
+        t.blade.get_build_toolchain.return_value = tc
+        return t
+
+    def _with_files(self, *names):
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__('shutil').rmtree, d, True)
+        for n in names:
+            open(os.path.join(d, n), 'w').close()
+        return d
+
+    def test_exact_name_preferred(self):
+        d = self._with_files('fmt.lib', 'fmtd.lib')
+        self.assertEqual(self._lib()._existing_lib(d, '.lib'),
+                         os.path.join(d, 'fmt.lib'))
+
+    def test_debug_postfix_when_no_exact(self):
+        d = self._with_files('fmtd.lib')  # only the 'd'-postfixed debug lib
+        self.assertEqual(self._lib()._existing_lib(d, '.lib'),
+                         os.path.join(d, 'fmtd.lib'))
+
+    def test_missing_falls_back_to_exact(self):
+        d = self._with_files()  # nothing yet -> optimistic exact name
+        self.assertEqual(self._lib()._existing_lib(d, '.lib'),
+                         os.path.join(d, 'fmt.lib'))
+
+
 if __name__ == '__main__':
     unittest.main()

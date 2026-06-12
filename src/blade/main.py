@@ -77,8 +77,15 @@ def run_subcommand(blade_path, command, options, ws, targets):
     stages = [
         ('load', builder.load_targets),
         ('analyze', builder.analyze_targets),
-        ('generate', builder.generate),
     ]
+    # vcpkg-managed install runs after analyze (which marks the demanded shared
+    # ports) and BEFORE generate, so the installed artifacts exist on disk when
+    # VcpkgLibrary resolves its lib filenames -- a port may add a debug postfix
+    # (e.g. fmt's debug lib is fmtd.lib) that can't be predicted at parse time.
+    # Only for building commands; query/clean/dump never install.
+    if command in ('build', 'run', 'test'):
+        stages.append(('vcpkg', builder.setup_vcpkg))
+    stages.append(('generate', builder.generate))
     for stage, action in stages:
         action()
         if _check_error_log(stage):
