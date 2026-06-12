@@ -71,7 +71,8 @@ class SetupTest(unittest.TestCase):
              mock.patch('blade.vcpkg._find_vcpkg_tool', return_value=tool), \
              mock.patch('blade.console.info'), \
              mock.patch('blade.console.error'), \
-             mock.patch('blade.util.run_command', return_value=run_result) as rc:
+             mock.patch('blade.vcpkg._run_install_with_progress',
+                        return_value=run_result[0] == 0) as rc:
             ok = vcpkg.setup(_builder(build_dir))
         return ok, rc
 
