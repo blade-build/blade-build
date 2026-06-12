@@ -105,8 +105,9 @@ class TripletForToolchainTest(unittest.TestCase):
 
 
 class _Referrer:
-    def __init__(self, db=None):
+    def __init__(self, db=None, path='app/foo'):
         self.target_database = db if db is not None else {}
+        self.path = path
         self.errors = []
         self.blade = mock.Mock()
         self.blade.get_build_toolchain.return_value = mock.Mock()
@@ -160,6 +161,44 @@ class HandlerTest(unittest.TestCase):
         self.assertEqual(key, 'vcpkg#fmt:fmt')
         MockVL.assert_not_called()
         r.blade.register_target.assert_not_called()
+
+    def test_direct_use_allowed_blocks_outside_referrer(self):
+        # With an allowlist set, a referrer outside it cannot use vcpkg# directly.
+        r = _Referrer(path='app/foo')
+        with mock.patch('blade.config.get_section',
+                        return_value=self._cfg(direct_use_allowed=['thirdparty'])), \
+             mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
+            key = vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
+        self.assertIsNone(key)
+        self.assertEqual(len(r.errors), 1)
+        self.assertIn('direct_use_allowed', r.errors[0])
+        MockVL.assert_not_called()
+
+    def test_direct_use_allowed_permits_inside_referrer(self):
+        # A referrer under an allowed subtree (here '//thirdparty/...') is fine.
+        r = _Referrer(path='thirdparty/fmt')
+        with mock.patch('blade.config.get_section',
+                        return_value=self._cfg(direct_use_allowed=['//thirdparty'])), \
+             mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
+            key = vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
+        self.assertEqual(key, 'vcpkg#fmt:fmt')
+        MockVL.assert_called_once()
+
+    def test_direct_use_allowed_empty_permits_anywhere(self):
+        # The default empty allowlist imposes no restriction.
+        r = _Referrer(path='app/foo')
+        with mock.patch('blade.config.get_section',
+                        return_value=self._cfg(direct_use_allowed=[])), \
+             mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
+            key = vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
+        self.assertEqual(key, 'vcpkg#fmt:fmt')
+
+    def test_path_under(self):
+        self.assertTrue(vcpkg._path_under('thirdparty/fmt', ['thirdparty']))
+        self.assertTrue(vcpkg._path_under('thirdparty', ['//thirdparty']))
+        self.assertTrue(vcpkg._path_under('a/b/c', ['x', 'a/b']))
+        self.assertFalse(vcpkg._path_under('thirdpartyx/fmt', ['thirdparty']))
+        self.assertFalse(vcpkg._path_under('app/foo', ['thirdparty']))
 
     def test_auto_triplet_derived_from_toolchain(self):
         r = _Referrer()
