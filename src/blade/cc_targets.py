@@ -1871,16 +1871,14 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         else:
             self._setup_static(tc)
 
+    # Paths are resolved optimistically -- the blade-managed `vcpkg install` is
+    # deferred to the build phase, so the artifacts are produced just before
+    # ninja links them, not at parse time. (A genuinely missing lib surfaces as
+    # ninja's "file not found" on the install path.)
     def _setup_static(self, tc):
         archive = os.path.join(
             self._vcpkg_lib_dir,
             f'{tc.lib_prefix}{self.name}{tc.static_lib_suffix}')
-        if not os.path.exists(archive):
-            self.error(
-                'vcpkg#%s:%s: static library not found at %s; run '
-                '`vcpkg install %s` for this triplet' % (
-                    self._vcpkg_port, self.name, archive, self._vcpkg_port))
-            return
         self.attr['static_source'] = archive
         self._add_target_file(tc.STATIC_LIB_LABEL, archive)
         # No separate shared lib is resolved here; the static archive serves
@@ -1891,25 +1889,29 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         shared = os.path.join(
             self._vcpkg_lib_dir,
             f'{tc.lib_prefix}{self.name}{tc.dynamic_lib_suffix}')
-        if not os.path.exists(shared):
-            self.error(
-                'vcpkg#%s:%s: shared library not found at %s. The port is marked '
-                'linkage="dynamic" in vcpkg_config but produced no shared lib '
-                '(it may not support dynamic linkage).' % (
-                    self._vcpkg_port, self.name, shared))
-            return
         # Reuse PrebuiltCcLibrary's shared-lib machinery: copy the vcpkg .dylib
-        # into this target's dir and resolve its soname so consumers link a
-        # single instance with correct rpath/soname.
+        # into this target's dir so consumers link a single instance. The soname
+        # is read from the file lazily (soname_and_full_path), since the install
+        # is deferred and the file isn't present yet at parse time.
         dynamic_target = self._target_file_path(os.path.basename(shared))
         self.attr['dynamic_source'] = shared
         self.attr['dynamic_target'] = dynamic_target
         self._add_target_file(tc.DYNAMIC_LIB_LABEL, dynamic_target)
         # Dynamic-only: the shared lib serves static linking too.
         self._add_target_file(tc.STATIC_LIB_LABEL, dynamic_target)
-        soname = self._soname_of(shared)
-        if soname:
-            self.data['soname_and_full_path'] = (soname, dynamic_target)
+
+    def soname_and_full_path(self):  # override PrebuiltCcLibrary
+        # Lazy: the run harness asks for this after the build (so after the
+        # deferred install), when the .dylib exists to read its install_name.
+        if 'soname_and_full_path' not in self.data:
+            self.data['soname_and_full_path'] = None
+            src = self.attr.get('dynamic_source')
+            target = self.attr.get('dynamic_target')
+            if src and target:
+                soname = self._soname_of(src)
+                if soname:
+                    self.data['soname_and_full_path'] = (soname, target)
+        return self.data['soname_and_full_path']
 
     def generate(self):  # override
         # The static archive + include dir are pure metadata resolved in

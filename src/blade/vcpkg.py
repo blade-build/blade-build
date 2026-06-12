@@ -508,12 +508,49 @@ def setup(builder):
            '--overlay-triplets', triplets_dir]
     console.info('vcpkg: installing %d package(s) for %s ...'
                  % (len(packages), overlay))
-    returncode, stdout, stderr = util.run_command(cmd)
-    if returncode != 0:
-        console.error('vcpkg install failed:\n%s' % (stderr or stdout))
+    if not _run_install_with_progress(cmd):
         return False
     with open(stamp_file, 'w') as f:
         f.write(stamp)
+    return True
+
+
+def _run_install_with_progress(cmd):
+    """Run `vcpkg install`, rendering its `Installing N/M ...` stream as blade's
+    live build panel. Returns True on success; on failure prints the captured
+    output and returns False. Off a TTY the panel is a no-op (CI logs show the
+    output only on failure)."""
+    import collections
+    import subprocess
+    import time
+    from blade import console
+    progress_re = re.compile(r'Installing (\d+)/(\d+)\s+(\S+)')
+    recent = collections.deque(maxlen=4)
+    captured = []
+    total = 0
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True,
+                            errors='replace', bufsize=1)
+    start = time.time()
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        line = line.rstrip('\r\n')
+        captured.append(line)
+        m = progress_re.search(line)
+        if m:
+            current, total = int(m.group(1)), int(m.group(2))
+            recent.append(m.group(3))
+            elapsed = time.time() - start
+            eta = (total - current) * elapsed / current if current else None
+            # `current` is the package now installing -> current-1 finished.
+            console.render_build_panel(current - 1, 1, total, list(recent), eta)
+    proc.wait()
+    if total:
+        console.render_build_panel(total, 0, total, list(recent))
+    console.clear_progress_bar()
+    if proc.returncode != 0:
+        console.error('vcpkg install failed:\n%s' % '\n'.join(captured))
+        return False
     return True
 
 
