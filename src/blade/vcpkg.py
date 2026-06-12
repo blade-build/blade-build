@@ -386,6 +386,16 @@ def triplet_for_toolchain(toolchain, dynamic=False):
     return triplet_for(toolchain.target_os, toolchain.target_arch, vendor, dynamic)
 
 
+def _path_under(path, prefixes):
+    """True if workspace-relative `path` is within one of `prefixes` (each may
+    be written `dir` or `//dir`)."""
+    for prefix in prefixes:
+        prefix = prefix.strip('/')
+        if path == prefix or path.startswith(prefix + '/'):
+            return True
+    return False
+
+
 def _vcpkg_dep_handler(referrer, coordinate):
     """`<scheme>#...` provider for vcpkg (registered below).
 
@@ -395,6 +405,14 @@ def _vcpkg_dep_handler(referrer, coordinate):
     """
     from blade import config
     cfg = config.get_section('vcpkg_config')
+    allowed = cfg.get('direct_use_allowed') or []
+    if allowed and not _path_under(referrer.path, allowed):
+        referrer.error(
+            'vcpkg#%s: direct vcpkg# references are restricted to %s '
+            '(vcpkg_config.direct_use_allowed); route this dependency through a '
+            'wrapper cc_library there' % (
+                coordinate, ', '.join('//%s' % a.strip('/') for a in allowed)))
+        return None
     toolchain = referrer.blade.get_build_toolchain()
     vanilla = cfg.get('triplet')
     if not vanilla or vanilla == 'auto':
@@ -506,6 +524,12 @@ def setup(builder):
            '--x-manifest-root', base,
            '--x-install-root', installed_root,
            '--overlay-triplets', triplets_dir]
+    # Binary cache: 'auto' leaves vcpkg's default local cache on; any other
+    # value is a vcpkg binarysource string (files / nuget / GitHub / x-azblob /
+    # x-gcs / ...), passed through so identical builds are reused across runs.
+    binary_cache = cfg.get('binary_cache') or 'auto'
+    if binary_cache != 'auto':
+        cmd.append('--binarysource=' + binary_cache)
     console.info('vcpkg: installing %d package(s) for %s ...'
                  % (len(packages), overlay))
     if not _run_install_with_progress(cmd):
