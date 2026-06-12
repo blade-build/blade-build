@@ -224,6 +224,31 @@ class HandlerTest(unittest.TestCase):
             os.path.join('build64', '.cache/vcpkg', 'installed',
                          'blade-x64-linux', 'lib')))
 
+    def test_auto_port_passes_shared_dynamic_lib_dir(self):
+        # An 'auto' port (managed mode) gets its shared lib from the separate
+        # `-shared` tree; the handler points dynamic_lib_dir there.
+        r = _Referrer()
+        with mock.patch('blade.config.get_section',
+                        return_value=self._cfg(manage=True, triplet='x64-linux',
+                                               packages={'glog': {'linkage': 'auto'}})), \
+             mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
+            vcpkg._vcpkg_dep_handler(r, 'glog:glog')
+        kw = MockVL.call_args[1]
+        self.assertEqual(kw['linkage'], 'auto')
+        self.assertTrue(kw['dynamic_lib_dir'].endswith(
+            os.path.join('shared', 'installed', 'blade-x64-linux-shared', 'lib')),
+            kw['dynamic_lib_dir'])
+
+    def test_static_port_dynamic_lib_dir_falls_back_to_main(self):
+        r = _Referrer()
+        with mock.patch('blade.config.get_section',
+                        return_value=self._cfg(packages={'fmt': '10.2.1'})), \
+             mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
+            vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
+        kw = MockVL.call_args[1]
+        self.assertEqual(kw['linkage'], 'static')
+        self.assertEqual(kw['dynamic_lib_dir'], MockVL.call_args[0][3])
+
     def test_registered_as_vcpkg_scheme(self):
         # Importing blade.vcpkg wires the provider into target's registry.
         from blade import target as target_mod

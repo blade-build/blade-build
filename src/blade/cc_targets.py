@@ -1771,17 +1771,21 @@ class VcpkgLibrary(PrebuiltCcLibrary):
     """
 
     def __init__(self, port, lib, key, lib_dir, include_dir, header_only,
-                 dynamic=False, link_all_symbols=False, include_prefix=None):
+                 linkage='static', dynamic_lib_dir=None,
+                 link_all_symbols=False, include_prefix=None):
         # Stash the vcpkg-resolved locations before super().__init__, which
         # calls our _setup() at the end of construction.
         self._vcpkg_port = port
         self._vcpkg_lib_dir = lib_dir
         self._vcpkg_header_only = header_only
-        # A dynamic port (vcpkg_config linkage='dynamic') installs a shared lib
-        # instead of a `.a` -- used for singleton libs (gflags/glog/protobuf/
-        # gtest) so there is a single instance across the build, not one copy
-        # per dylib (which would double-register flags / descriptors / tests).
-        self._vcpkg_dynamic = dynamic
+        # linkage (vcpkg_config): 'static' (.a only), 'dynamic' (shared only --
+        # one instance across the build for singletons like gflags/glog/protobuf
+        # so flags/descriptors are not double-registered), or 'auto' (static .a
+        # always; shared lib built on demand when a dynamic_link binary depends
+        # on it). The shared lib of an 'auto' port lives in a separate `-shared`
+        # install tree; `dynamic_lib_dir` points there (else == lib_dir).
+        self._vcpkg_linkage = linkage
+        self._vcpkg_dynamic_lib_dir = dynamic_lib_dir or lib_dir
         super().__init__(
                 name=lib,
                 deps=[],
@@ -1866,8 +1870,10 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         tc = self.blade.get_build_toolchain()
         if self._vcpkg_header_only:
             return
-        if self._vcpkg_dynamic:
+        if self._vcpkg_linkage == 'dynamic':
             self._setup_dynamic(tc)
+        elif self._vcpkg_linkage == 'auto':
+            self._setup_auto(tc)
         else:
             self._setup_static(tc)
 
@@ -1900,17 +1906,68 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         # Dynamic-only: the shared lib serves static linking too.
         self._add_target_file(tc.STATIC_LIB_LABEL, dynamic_target)
 
+    def _setup_auto(self, tc):
+        # Both artifacts are exposed so the consumer's own link mode picks: a
+        # static_link binary takes the STATIC label (the always-built .a from the
+        # main tree), a dynamic_link binary takes the DYNAMIC label (the .dylib
+        # from the `-shared` tree). Whether that .dylib is actually built/copied
+        # is gated on generate_dynamic in generate() (set during analyze only
+        # when a dynamic_link binary depends on this port).
+        archive = os.path.join(
+            self._vcpkg_lib_dir,
+            f'{tc.lib_prefix}{self.name}{tc.static_lib_suffix}')
+        self.attr['static_source'] = archive
+        self._add_target_file(tc.STATIC_LIB_LABEL, archive)
+        shared = os.path.join(
+            self._vcpkg_dynamic_lib_dir,
+            f'{tc.lib_prefix}{self.name}{tc.dynamic_lib_suffix}')
+        dynamic_target = self._target_file_path(os.path.basename(shared))
+        self.attr['dynamic_source'] = shared
+        self.attr['dynamic_target'] = dynamic_target
+        self._add_target_file(tc.DYNAMIC_LIB_LABEL, dynamic_target)
+
+    def _vcpkg_wants_dynamic(self):
+        """Whether this port's shared library should actually be materialized.
+
+        Always for a 'dynamic' port; for an 'auto' port only when a dynamic_link
+        binary depends on it (generate_dynamic, set during analyze) -- mirrors
+        cc_library not emitting a .so nobody dynamically links."""
+        if self._vcpkg_linkage == 'dynamic':
+            return True
+        if self._vcpkg_linkage == 'auto':
+            return bool(self.attr.get('generate_dynamic'))
+        return False
+
+    def vcpkg_runtime_libdir(self, dynamic_link):
+        """Absolute dir of the shared library a consumer loads at runtime, for
+        baking an `-rpath`; None when this consumer links the port statically.
+
+        Points at the *install* lib dir (which also holds the port's vcpkg
+        sibling deps -- e.g. glog's libgflags) so the binary's `@rpath/<leaf>`
+        references resolve the whole closure with no DYLD_LIBRARY_PATH, including
+        when the binary is run as a build-time tool (a protoc plugin)."""
+        if self._vcpkg_header_only:
+            return None
+        if self._vcpkg_linkage == 'dynamic':
+            return os.path.abspath(self._vcpkg_lib_dir)
+        if self._vcpkg_linkage == 'auto' and dynamic_link:
+            return os.path.abspath(self._vcpkg_dynamic_lib_dir)
+        return None
+
     def soname_and_full_path(self):  # override PrebuiltCcLibrary
         # Lazy: the run harness asks for this after the build (so after the
         # deferred install), when the .dylib exists to read its install_name.
+        # Only meaningful when a shared lib was actually built (an 'auto' port
+        # that nothing dynamic-links has no .dylib to read).
         if 'soname_and_full_path' not in self.data:
             self.data['soname_and_full_path'] = None
-            src = self.attr.get('dynamic_source')
-            target = self.attr.get('dynamic_target')
-            if src and target:
-                soname = self._soname_of(src)
-                if soname:
-                    self.data['soname_and_full_path'] = (soname, target)
+            if self._vcpkg_wants_dynamic():
+                src = self.attr.get('dynamic_source')
+                target = self.attr.get('dynamic_target')
+                if src and target:
+                    soname = self._soname_of(src)
+                    if soname:
+                        self.data['soname_and_full_path'] = (soname, target)
         return self.data['soname_and_full_path']
 
     def generate(self):  # override
@@ -1921,12 +1978,13 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         static = self.attr.get('static_source')
         if static and static.startswith(os.path.abspath(self.build_dir) + os.sep):
             self._emit_archive_syms(static)
-        # For a dynamic port, copy the vcpkg shared lib into the build tree and
-        # expose its exported symbols to cc_check_undefined (nm reads a .dylib
-        # the same as a .a).
+        # Copy the vcpkg shared lib into the build tree and expose its exported
+        # symbols to cc_check_undefined (nm reads a .dylib the same as a .a).
+        # Skipped for an 'auto' port that nothing dynamic-links (no .dylib was
+        # built in the `-shared` tree).
         dynamic_source = self.attr.get('dynamic_source')
         dynamic_target = self.attr.get('dynamic_target')
-        if dynamic_source and dynamic_target:
+        if dynamic_source and dynamic_target and self._vcpkg_wants_dynamic():
             self.generate_build('copy', dynamic_target, inputs=dynamic_source)
             if dynamic_source.startswith(os.path.abspath(self.build_dir) + os.sep):
                 self._emit_archive_syms(dynamic_source)
@@ -2374,7 +2432,45 @@ class CcBinary(CcTarget):
         linkflags += self._generate_link_flags()
         for rpath_link in self._get_rpath_links():
             linkflags.append('-Wl,--rpath-link=%s' % rpath_link)
+        linkflags += self._vcpkg_rpath_flags(dynamic_link, toolchain)
         return linkflags
+
+    def _vcpkg_rpath_flags(self, dynamic_link, toolchain):
+        """Bake an `LC_RPATH` (ELF DT_RPATH) so vcpkg shared libraries the binary
+        links resolve their `@rpath/<leaf>` (macOS) / soname (ELF) at runtime
+        with no DYLD/LD_LIBRARY_PATH -- which also covers a binary run as a
+        build-time tool (a protoc plugin), where blade's run-harness env is never
+        set. Windows has no rpath, so emit nothing there.
+
+        Two entries per binary: an absolute path to each install lib dir (fixes
+        in-place runs and build-time tools), and an `@executable_path`-relative
+        path to the binary's runfiles dir (so a relocated binary+runfiles also
+        resolves, replacing the DYLD_LIBRARY_PATH=runfiles hack)."""
+        if os.name == 'nt' or toolchain.cc_is('msvc'):
+            return []
+        build_targets = self.blade.get_build_targets()
+        assert self.expanded_deps is not None, 'expanded_deps not expanded'
+        libdirs = []
+        for lib in self.expanded_deps:
+            getter = getattr(build_targets[lib], 'vcpkg_runtime_libdir', None)
+            if getter is None:
+                continue
+            libdir = getter(dynamic_link)
+            if libdir and libdir not in libdirs:
+                libdirs.append(libdir)
+        if not libdirs:
+            return []
+        flags = ['-Wl,-rpath,%s' % d for d in libdirs]
+        # The runfiles dir sits next to the executable (see binary_runner), so
+        # `@executable_path/<exe>.runfiles` is where blade stages the dylibs --
+        # a relocatable rpath for shipping binary+runfiles. macOS only; ELF's
+        # equivalent is `$ORIGIN`, whose `$` would need ninja-escaping, and on
+        # Linux the absolute rpath above already covers build-time tools.
+        if sys.platform == 'darwin':
+            executable_name = self.attr.get('executable_name', self.name)
+            flags.append(
+                '-Wl,-rpath,@executable_path/%s.runfiles' % executable_name)
+        return flags
 
     def _cc_binary(self, objs, inclusion_check_result, dynamic_link):
         implicit_deps = None

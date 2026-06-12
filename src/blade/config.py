@@ -867,10 +867,10 @@ def _check_vcpkg_packages(packages):
                 _blade_config.error(
                     'vcpkg_config.packages["%s"].features must be a list' % port)
             linkage = spec.get('linkage')
-            if linkage is not None and linkage not in ('static', 'dynamic'):
+            if linkage is not None and linkage not in ('static', 'dynamic', 'auto'):
                 _blade_config.error(
-                    'vcpkg_config.packages["%s"].linkage must be "static" or '
-                    '"dynamic"' % port)
+                    'vcpkg_config.packages["%s"].linkage must be "static", '
+                    '"dynamic" or "auto"' % port)
             las = spec.get('link_all_symbols')
             if las is not None and not isinstance(las, bool):
                 _blade_config.error(

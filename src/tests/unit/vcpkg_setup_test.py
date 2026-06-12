@@ -46,14 +46,24 @@ class InstallLocationTest(unittest.TestCase):
         self.assertEqual(root, '/envroot')
 
 
-def _builder(build_dir):
+def _builder(build_dir, targets=None):
     b = mock.Mock()
     b.get_build_dir.return_value = build_dir
+    b.get_build_targets.return_value = targets or {}
     tc = b.get_build_toolchain.return_value
     tc.target_os, tc.target_arch = 'linux', 'x86_64'
     tc.cc_is = lambda v: v == 'gcc'
     tc.tool = lambda k: {'cc': '/usr/bin/gcc', 'cxx': '/usr/bin/g++'}.get(k)
     return b
+
+
+def _vcpkg_lib(port, generate_dynamic):
+    """A stand-in VcpkgLibrary target as setup() sees it in the build graph."""
+    t = mock.Mock()
+    t.type = 'vcpkg_library'
+    t._vcpkg_port = port
+    t.attr = {'generate_dynamic': generate_dynamic}
+    return t
 
 
 _CFG = {
@@ -65,7 +75,7 @@ _CFG = {
 class SetupTest(unittest.TestCase):
 
     def _run(self, build_dir, cfg=None, run_result=(0, 'ok', ''),
-             tool: 'str | None' = '/vc/vcpkg'):
+             tool: 'str | None' = '/vc/vcpkg', targets=None):
         cfg = dict(_CFG if cfg is None else cfg)
         with mock.patch('blade.config.get_section', return_value=cfg), \
              mock.patch('blade.vcpkg._find_vcpkg_tool', return_value=tool), \
@@ -73,7 +83,7 @@ class SetupTest(unittest.TestCase):
              mock.patch('blade.console.error'), \
              mock.patch('blade.vcpkg._run_install_with_progress',
                         return_value=run_result[0] == 0) as rc:
-            ok = vcpkg.setup(_builder(build_dir))
+            ok = vcpkg.setup(_builder(build_dir, targets))
         return ok, rc
 
     def test_manage_false_is_noop(self):
@@ -133,12 +143,61 @@ class SetupTest(unittest.TestCase):
             ok1, rc1 = self._run(d)
             self.assertTrue(ok1)
             rc1.assert_called_once()
-            # Simulate vcpkg having created the install root.
-            os.makedirs(os.path.join(d, '.cache/vcpkg', 'installed'), exist_ok=True)
+            # Simulate vcpkg having created the per-triplet install tree.
+            os.makedirs(os.path.join(d, '.cache/vcpkg', 'installed',
+                                     'blade-x64-linux'), exist_ok=True)
             # Second run with identical inputs must skip the subprocess.
             ok2, rc2 = self._run(d)
             self.assertTrue(ok2)
             rc2.assert_not_called()
+
+
+_AUTO_CFG = dict(_CFG, packages={'glog': {'linkage': 'auto'}})
+
+
+class SharedInstallTest(unittest.TestCase):
+    """The on-demand second (`-shared`) install for 'auto' ports."""
+
+    def _run(self, build_dir, targets=None):
+        with mock.patch('blade.config.get_section', return_value=dict(_AUTO_CFG)), \
+             mock.patch('blade.vcpkg._find_vcpkg_tool', return_value='/vc/vcpkg'), \
+             mock.patch('blade.console.info'), \
+             mock.patch('blade.console.error'), \
+             mock.patch('blade.vcpkg._run_install_with_progress',
+                        return_value=True) as rc:
+            ok = vcpkg.setup(_builder(build_dir, targets))
+        return ok, rc
+
+    def test_no_dynamic_consumer_skips_shared(self):
+        # 'auto' port present but nothing dynamic-links it -> only the main
+        # (static) tree is installed.
+        with tempfile.TemporaryDirectory() as d:
+            ok, rc = self._run(d, targets={'k': _vcpkg_lib('glog', False)})
+        self.assertTrue(ok)
+        self.assertEqual(rc.call_count, 1)
+        self.assertNotIn('blade-x64-linux-shared', rc.call_args_list[0][0][0])
+
+    def test_dynamic_consumer_runs_shared(self):
+        # A dynamic_link binary set generate_dynamic on the VcpkgLibrary -> the
+        # shared tree is installed too.
+        with tempfile.TemporaryDirectory() as d:
+            ok, rc = self._run(d, targets={'k': _vcpkg_lib('glog', True)})
+            self.assertTrue(ok)
+            self.assertEqual(rc.call_count, 2)
+            shared_cmd = rc.call_args_list[1][0][0]
+            self.assertIn('blade-x64-linux-shared', shared_cmd)
+            base = os.path.join(d, '.cache/vcpkg', 'shared')
+            self.assertTrue(os.path.exists(os.path.join(base, 'vcpkg.json')))
+            self.assertTrue(os.path.exists(os.path.join(
+                d, '.cache/vcpkg', 'triplets', 'blade-x64-linux-shared.cmake')))
+
+    def test_shared_triplet_forces_dynamic_linkage(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._run(d, targets={'k': _vcpkg_lib('glog', True)})
+            cmake = os.path.join(d, '.cache/vcpkg', 'triplets',
+                                 'blade-x64-linux-shared.cmake')
+            with open(cmake) as f:
+                self.assertIn('set(VCPKG_LIBRARY_LINKAGE dynamic)', f.read())
 
 
 if __name__ == '__main__':

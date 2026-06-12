@@ -96,23 +96,38 @@ The dict form of a package accepts these keys:
 | --- | --- | --- |
 | `version` | str | Pin the port version (a vcpkg `overrides` entry). |
 | `features` | list[str] | vcpkg features to enable. |
-| `linkage` | `'static'` (default) / `'dynamic'` | Build the port shared. |
+| `linkage` | `'static'` (default) / `'dynamic'` / `'auto'` | How the port is built (see below). |
 | `link_all_symbols` | bool | Whole-archive the static lib. |
 | `include_prefix` | str / list[str] / dict | Remap the header include path. |
 | `cmake_options` | list[str] | Extra CMake configure options for the port. |
 
-### `linkage: 'dynamic'` — singleton libraries
+### `linkage` — `static` / `dynamic` / `auto`
+
+- **`'static'`** (default) — only the static archive (`.a`) is built.
+- **`'dynamic'`** — only the shared library is built; *every* consumer links
+  that single instance.
+- **`'auto'`** — the static archive is always built, **and** the shared library
+  is built *on demand* — only when a `dynamic_link` binary actually depends on
+  the port (the same rule as `cc_library`'s `generate_dynamic`). A static-link
+  tool then gets a self-contained `.a`, while a `dynamic_link` binary still
+  shares one shared library. vcpkg builds one linkage per triplet, so the shared
+  build of an `'auto'` port lands in a separate `blade-<triplet>-shared` install
+  tree alongside the main static tree.
+
+### `linkage: 'dynamic'` / `'auto'` — singleton libraries
 
 Some libraries keep a process-wide registry behind static initializers — gflags
 (the flag registry), glog, protobuf (the descriptor pool), googletest (the test
 registry). Linked **statically** into several shared libs and the executable,
 each copy gets its own registry and they collide at startup (duplicate flag /
 descriptor / test registration). Build such ports **shared** so there is a
-single instance:
+single instance. Use `'auto'` when some binaries link them statically (e.g. a
+self-contained build-time tool / protoc plugin) while others link dynamically;
+use `'dynamic'` to force shared everywhere:
 
 ```python
-'gflags': {'version': '2.2.2', 'linkage': 'dynamic'},
-'glog':   {'version': '0.7.1', 'linkage': 'dynamic'},
+'gflags': {'version': '2.2.2', 'linkage': 'auto'},
+'glog':   {'version': '0.7.1', 'linkage': 'auto'},
 ```
 
 ### `link_all_symbols: True` — force static initializers

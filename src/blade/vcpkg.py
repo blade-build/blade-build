@@ -186,6 +186,15 @@ def overlay_triplet_name(triplet):
     return 'blade-' + triplet
 
 
+def shared_overlay_triplet_name(triplet):
+    """The overlay triplet that force-builds 'auto' ports as shared libraries.
+
+    A separate triplet (and install subtree) is needed because vcpkg builds a
+    single linkage per triplet: the main `blade-<triplet>` tree holds the
+    static .a, and `blade-<triplet>-shared` holds the on-demand .dylib/.so."""
+    return overlay_triplet_name(triplet) + '-shared'
+
+
 def manifest_json(packages, baseline=''):
     """Build the synthetic vcpkg.json manifest from vcpkg_config (issue #1236).
 
@@ -245,9 +254,20 @@ def port_options(packages, port):
     """Per-port (linkage, link_all_symbols, include_prefix) from the spec.
 
     A bare version string -> defaults ('static', False, None). A dict spec may
-    carry `linkage` ('static'|'dynamic'), `link_all_symbols` (bool) and
-    `include_prefix` (str: expose vcpkg's include dir under this subdir, for
-    libs flare includes as "<prefix>/<header>" but vcpkg ships at include top).
+    carry `linkage`, `link_all_symbols` (bool) and `include_prefix` (str: expose
+    vcpkg's include dir under this subdir, for libs flare includes as
+    "<prefix>/<header>" but vcpkg ships at include top).
+
+    `linkage` is one of:
+      'static'  (default) -- only the static archive (.a) is built.
+      'dynamic'           -- only the shared library (.dylib/.so) is built; both
+                             link modes share that single instance.
+      'auto'              -- the static archive is always built; the shared
+                             library is built *on demand*, only when a
+                             dynamic_link binary actually depends on the port
+                             (mirrors cc_library's generate_dynamic). This gives
+                             a static-link tool a self-contained .a while a
+                             dynamic-link binary still shares one .dylib.
     """
     spec = packages.get(port)
     if isinstance(spec, dict):
@@ -258,9 +278,19 @@ def port_options(packages, port):
 
 
 def dynamic_ports(packages):
-    """Ports whose spec requests linkage='dynamic' (sorted, deterministic)."""
+    """Ports whose spec requests linkage='dynamic' (sorted, deterministic).
+
+    These build their shared library in the *main* install tree. 'auto' ports
+    are excluded here: they build static in the main tree and their shared lib
+    lands in the separate `-shared` tree (see auto_ports / setup)."""
     return sorted(p for p, s in packages.items()
                   if isinstance(s, dict) and s.get('linkage') == 'dynamic')
+
+
+def auto_ports(packages):
+    """Ports whose spec requests linkage='auto' (sorted, deterministic)."""
+    return sorted(p for p, s in packages.items()
+                  if isinstance(s, dict) and s.get('linkage') == 'auto')
 
 
 def port_cmake_options(packages):
@@ -288,6 +318,10 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
         'set(VCPKG_TARGET_ARCHITECTURE %s)' % arch,
         'set(VCPKG_CRT_LINKAGE dynamic)',
         'set(VCPKG_LIBRARY_LINKAGE %s)' % library_linkage,
+        # vcpkg builds both release and debug by default; blade only ever links
+        # the release tree (installed/<triplet>/lib), so building debug doubles
+        # the install time and disk for nothing. Release-only.
+        'set(VCPKG_BUILD_TYPE release)',
     ]
     for port in dynamic_ports:
         lines.append('if(PORT STREQUAL "%s")' % port)
@@ -428,12 +462,21 @@ def _vcpkg_dep_handler(referrer, coordinate):
     if key in referrer.target_database:
         return key
     linkage, link_all_symbols, include_prefix = port_options(packages, info['port'])
+    # For an 'auto' port the shared library lives in the separate `-shared`
+    # install tree (managed mode); a 'dynamic' port's .dylib is in the main tree
+    # alongside its lib_dir. install_location built `triplet` from the same cfg,
+    # so deriving the shared sibling here keeps the path computation co-located.
+    if linkage == 'auto' and cfg.get('manage', True):
+        dynamic_lib_dir = os.path.join(
+            shared_install_root(root), shared_overlay_triplet_name(vanilla), 'lib')
+    else:
+        dynamic_lib_dir = info['lib_dir']
     # Lazy import: cc_targets is loaded before this module, but keeping the
     # import local avoids a hard module-level cycle (cc_targets -> ... -> here).
     from blade.cc_targets import VcpkgLibrary
     target = VcpkgLibrary(info['port'], info['lib'], key,
                           info['lib_dir'], info['include_dir'], info['header_only'],
-                          dynamic=(linkage == 'dynamic'),
+                          linkage=linkage, dynamic_lib_dir=dynamic_lib_dir,
                           link_all_symbols=link_all_symbols,
                           include_prefix=include_prefix)
     referrer.blade.register_target(target)
@@ -508,10 +551,17 @@ def setup(builder):
     stamp = hashlib.md5(
         (manifest + chainload + triplet_cmake + overlay).encode()).hexdigest()
     stamp_file = os.path.join(base, '.blade-vcpkg-stamp')
-    if os.path.isdir(installed_root) and os.path.exists(stamp_file):
-        with open(stamp_file) as f:
-            if f.read().strip() == stamp:
-                return True
+    main_fresh = (os.path.isdir(os.path.join(installed_root, overlay))
+                  and os.path.exists(stamp_file)
+                  and _read_text(stamp_file).strip() == stamp)
+
+    # The 'auto' ports a dynamic_link binary actually depends on (computed from
+    # the analyzed graph -- setup() runs in build(), after analyze) determine
+    # whether the second, shared install is needed at all.
+    demanded = _auto_dynamic_ports(builder, packages)
+
+    if main_fresh and not demanded:
+        return True
 
     vcpkg_bin = _find_vcpkg_tool(cfg)
     if vcpkg_bin is None:
@@ -519,19 +569,122 @@ def setup(builder):
                       'vcpkg_config(root=...), $VCPKG_ROOT, or put vcpkg on PATH')
         return False
 
+    if not main_fresh:
+        cmd = [vcpkg_bin, 'install',
+               '--triplet', overlay,
+               '--x-manifest-root', base,
+               '--x-install-root', installed_root,
+               '--overlay-triplets', triplets_dir]
+        # Binary cache: 'auto' leaves vcpkg's default local cache on; any other
+        # value is a vcpkg binarysource string (files / nuget / GitHub /
+        # x-azblob / x-gcs / ...), reused across runs.
+        binary_cache = cfg.get('binary_cache') or 'auto'
+        if binary_cache != 'auto':
+            cmd.append('--binarysource=' + binary_cache)
+        console.info('vcpkg: installing %d package(s) for %s ...'
+                     % (len(packages), overlay))
+        if not _run_install_with_progress(cmd):
+            return False
+        with open(stamp_file, 'w') as f:
+            f.write(stamp)
+
+    # Second tree: build the demanded 'auto' ports as shared libraries. Skipped
+    # entirely when nothing dynamic-links an 'auto' port (e.g. an all-static
+    # debug build).
+    if demanded and not _install_shared(
+            vcpkg_bin, cfg, vanilla, demanded, packages,
+            base, triplets_dir, toolchain):
+        return False
+    return True
+
+
+def _read_text(path):
+    with open(path) as f:
+        return f.read()
+
+
+def _auto_dynamic_ports(builder, packages):
+    """The 'auto' ports that a dynamic_link binary actually depends on.
+
+    Mirrors cc_library's generate_dynamic: a dynamic_link binary's
+    _expand_deps_generation sets attr['generate_dynamic']=True on each
+    VcpkgLibrary in its dependency closure during analyze (which runs before
+    setup()), so the flag now tells us exactly which 'auto' ports need a shared
+    library built. Returns a sorted, deduplicated port list."""
+    auto = set(auto_ports(packages))
+    if not auto:
+        return []
+    demanded = set()
+    for target in builder.get_build_targets().values():
+        if getattr(target, 'type', None) != 'vcpkg_library':
+            continue
+        if not target.attr.get('generate_dynamic'):
+            continue
+        port = getattr(target, '_vcpkg_port', None)
+        if port in auto:
+            demanded.add(port)
+    return sorted(demanded)
+
+
+def shared_install_root(base):
+    """Install root for the shared (`-shared` triplet) tree.
+
+    A SEPARATE root from the main install: vcpkg manifest mode "owns" its
+    install root and prunes anything not in the current manifest, so sharing one
+    root would make the second (subset) install wipe the first."""
+    return os.path.join(base, 'shared', 'installed')
+
+
+def _install_shared(vcpkg_bin, cfg, vanilla, ports, packages,
+                    base, triplets_dir, toolchain):
+    """Install `ports` as shared libraries into the `blade-<triplet>-shared`
+    tree (a separate manifest + overlay triplet + install root, since vcpkg
+    builds one linkage per triplet). Returns True on success or a stamp-skip."""
+    import hashlib
+    import json
+    from blade import console, util
+    shared_overlay = shared_overlay_triplet_name(vanilla)
+    triplet_cmake = overlay_triplet_cmake(
+        toolchain.target_os, toolchain.target_arch,
+        library_linkage='dynamic',
+        cmake_options=port_cmake_options({p: packages[p] for p in ports}))
+    if triplet_cmake is None:  # pragma: no cover - main triplet already validated
+        return True
+    shared_base = os.path.join(base, 'shared')
+    shared_installed = shared_install_root(base)
+    os.makedirs(shared_base, exist_ok=True)
+    subset = {p: packages[p] for p in ports}
+    manifest = json.dumps(manifest_json(subset, cfg.get('baseline', '')),
+                          indent=2, sort_keys=True)
+    files = {
+        os.path.join(shared_base, 'vcpkg.json'): manifest,
+        os.path.join(triplets_dir, shared_overlay + '.cmake'): triplet_cmake,
+    }
+    configuration = configuration_json(cfg.get('registries') or [])
+    if configuration is not None:
+        files[os.path.join(shared_base, 'vcpkg-configuration.json')] = json.dumps(
+            configuration, indent=2, sort_keys=True)
+    for path, content in files.items():
+        util.write_if_changed(path, content)
+
+    stamp = hashlib.md5(
+        (manifest + triplet_cmake + shared_overlay).encode()).hexdigest()
+    stamp_file = os.path.join(shared_base, '.blade-vcpkg-stamp')
+    if (os.path.isdir(os.path.join(shared_installed, shared_overlay))
+            and os.path.exists(stamp_file)
+            and _read_text(stamp_file).strip() == stamp):
+        return True
+
     cmd = [vcpkg_bin, 'install',
-           '--triplet', overlay,
-           '--x-manifest-root', base,
-           '--x-install-root', installed_root,
+           '--triplet', shared_overlay,
+           '--x-manifest-root', shared_base,
+           '--x-install-root', shared_installed,
            '--overlay-triplets', triplets_dir]
-    # Binary cache: 'auto' leaves vcpkg's default local cache on; any other
-    # value is a vcpkg binarysource string (files / nuget / GitHub / x-azblob /
-    # x-gcs / ...), passed through so identical builds are reused across runs.
     binary_cache = cfg.get('binary_cache') or 'auto'
     if binary_cache != 'auto':
         cmd.append('--binarysource=' + binary_cache)
-    console.info('vcpkg: installing %d package(s) for %s ...'
-                 % (len(packages), overlay))
+    console.info('vcpkg: installing %d shared package(s) for %s ...'
+                 % (len(ports), shared_overlay))
     if not _run_install_with_progress(cmd):
         return False
     with open(stamp_file, 'w') as f:

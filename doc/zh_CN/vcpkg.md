@@ -91,21 +91,34 @@ vcpkg_config(
 | --- | --- | --- |
 | `version` | str | 固定 port 版本（一条 vcpkg `overrides`）。 |
 | `features` | list[str] | 启用的 vcpkg features。 |
-| `linkage` | `'static'`（默认）/ `'dynamic'` | 把该 port 编成共享库。 |
+| `linkage` | `'static'`（默认）/ `'dynamic'` / `'auto'` | 该 port 如何构建（见下）。 |
 | `link_all_symbols` | bool | 对静态库做 whole-archive。 |
 | `include_prefix` | str / list[str] / dict | 重映射头文件包含路径。 |
 | `cmake_options` | list[str] | 该 port 的额外 CMake 配置选项。 |
 
-### `linkage: 'dynamic'`——单例库
+### `linkage`——`static` / `dynamic` / `auto`
+
+- **`'static'`**（默认）——只构建静态库（`.a`）。
+- **`'dynamic'`**——只构建共享库；*所有*消费者都链接这唯一一份实例。
+- **`'auto'`**——静态库总是构建，**且**共享库**按需**构建——仅当某个
+  `dynamic_link` 二进制真正依赖该 port 时才构建（与 `cc_library` 的
+  `generate_dynamic` 同一规则）。这样静态链接的工具拿到自包含的 `.a`，而
+  `dynamic_link` 二进制仍共享同一份共享库。vcpkg 一个 triplet 只构建一种
+  linkage，所以 `'auto'` port 的共享构建落在独立的 `blade-<triplet>-shared`
+  安装树里，与主静态树并列。
+
+### `linkage: 'dynamic'` / `'auto'`——单例库
 
 有些库通过静态初始化维护进程级注册表——gflags（flag 注册表）、glog、protobuf
 （descriptor pool）、googletest（测试注册表）。当它们被**静态**链接进多个共享库
 和可执行文件时，每份拷贝各有一份注册表，启动时冲突（重复注册 flag / descriptor /
-测试）。把这类 port 编成**共享库**，全进程只有一份实例：
+测试）。把这类 port 编成**共享库**，全进程只有一份实例。当一部分二进制静态链接
+它们（如自包含的构建期工具 / protoc 插件）、另一部分动态链接时，用 `'auto'`；要
+全程强制共享，用 `'dynamic'`：
 
 ```python
-'gflags': {'version': '2.2.2', 'linkage': 'dynamic'},
-'glog':   {'version': '0.7.1', 'linkage': 'dynamic'},
+'gflags': {'version': '2.2.2', 'linkage': 'auto'},
+'glog':   {'version': '0.7.1', 'linkage': 'auto'},
 ```
 
 ### `link_all_symbols: True`——强制运行静态初始化
