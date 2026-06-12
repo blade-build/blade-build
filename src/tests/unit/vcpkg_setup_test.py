@@ -64,7 +64,8 @@ _CFG = {
 
 class SetupTest(unittest.TestCase):
 
-    def _run(self, build_dir, cfg=None, run_result=(0, 'ok', ''), tool='/vc/vcpkg'):
+    def _run(self, build_dir, cfg=None, run_result=(0, 'ok', ''),
+             tool: 'str | None' = '/vc/vcpkg'):
         cfg = dict(_CFG if cfg is None else cfg)
         with mock.patch('blade.config.get_section', return_value=cfg), \
              mock.patch('blade.vcpkg._find_vcpkg_tool', return_value=tool), \

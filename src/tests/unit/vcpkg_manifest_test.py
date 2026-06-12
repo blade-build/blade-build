@@ -18,6 +18,13 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 from blade import vcpkg  # noqa: E402
 
 
+def _overlay(*args, **kwargs):
+    """overlay_triplet_cmake for a supported os/arch -- typed non-None."""
+    text = vcpkg.overlay_triplet_cmake(*args, **kwargs)
+    assert text is not None
+    return text
+
+
 class ManifestTest(unittest.TestCase):
 
     def test_string_version_becomes_dep_plus_override(self):
@@ -73,7 +80,7 @@ class OverlayTripletTest(unittest.TestCase):
     def test_linux(self):
         # Mirrors vcpkg's stock x64-linux triplet (+ chainload). The system
         # name is how vcpkg sets VCPKG_TARGET_IS_LINUX, which ports branch on.
-        t = vcpkg.overlay_triplet_cmake('linux', 'x86_64')
+        t = _overlay('linux', 'x86_64')
         self.assertIn('set(VCPKG_TARGET_ARCHITECTURE x64)', t)
         self.assertIn('set(VCPKG_LIBRARY_LINKAGE static)', t)
         self.assertIn('set(VCPKG_CMAKE_SYSTEM_NAME Linux)', t)
@@ -82,19 +89,19 @@ class OverlayTripletTest(unittest.TestCase):
 
     def test_darwin_arm(self):
         # Mirrors stock arm64-osx: Darwin (native, not cross) + OSX arch.
-        t = vcpkg.overlay_triplet_cmake('darwin', 'aarch64')
+        t = _overlay('darwin', 'aarch64')
         self.assertIn('set(VCPKG_TARGET_ARCHITECTURE arm64)', t)
         self.assertIn('set(VCPKG_CMAKE_SYSTEM_NAME Darwin)', t)
         self.assertIn('set(VCPKG_OSX_ARCHITECTURES arm64)', t)
 
     def test_windows_omits_system_name(self):
         # Windows is vcpkg's default host; its stock triplets set no system name.
-        t = vcpkg.overlay_triplet_cmake('windows', 'x64')
+        t = _overlay('windows', 'x64')
         self.assertNotIn('VCPKG_CMAKE_SYSTEM_NAME', t)
         self.assertIn('set(VCPKG_TARGET_ARCHITECTURE x64)', t)
 
     def test_dynamic_linkage(self):
-        t = vcpkg.overlay_triplet_cmake('linux', 'x86_64', library_linkage='dynamic')
+        t = _overlay('linux', 'x86_64', library_linkage='dynamic')
         self.assertIn('set(VCPKG_LIBRARY_LINKAGE dynamic)', t)
 
     def test_unsupported_returns_none(self):
@@ -136,15 +143,14 @@ class PortOptionsTest(unittest.TestCase):
         self.assertEqual(vcpkg.dynamic_ports(pkgs), ['gflags', 'glog'])
 
     def test_overlay_per_port_dynamic_override(self):
-        t = vcpkg.overlay_triplet_cmake('darwin', 'aarch64', dynamic_ports=['gflags'])
+        t = _overlay('darwin', 'aarch64', dynamic_ports=['gflags'])
         self.assertIn('set(VCPKG_LIBRARY_LINKAGE static)', t)
         self.assertIn('if(PORT STREQUAL "gflags")', t)
         self.assertIn('    set(VCPKG_LIBRARY_LINKAGE dynamic)', t)
         self.assertIn('endif()', t)
 
     def test_overlay_no_dynamic_ports_has_no_guard(self):
-        self.assertNotIn('if(PORT STREQUAL',
-                         vcpkg.overlay_triplet_cmake('linux', 'x86_64'))
+        self.assertNotIn('if(PORT STREQUAL', _overlay('linux', 'x86_64'))
 
     def test_port_cmake_options(self):
         pkgs = {'fmt': '7', 'snappy': {'cmake_options': ['-DSNAPPY_WITH_RTTI=ON']}}
@@ -152,7 +158,7 @@ class PortOptionsTest(unittest.TestCase):
                          {'snappy': ['-DSNAPPY_WITH_RTTI=ON']})
 
     def test_overlay_per_port_cmake_options(self):
-        t = vcpkg.overlay_triplet_cmake(
+        t = _overlay(
             'darwin', 'aarch64',
             cmake_options={'snappy': ['-DSNAPPY_WITH_RTTI=ON']})
         self.assertIn('if(PORT STREQUAL "snappy")', t)

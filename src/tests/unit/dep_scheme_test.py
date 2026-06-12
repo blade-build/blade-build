@@ -28,8 +28,15 @@ import unittest.mock as mock
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 
+from typing import cast  # noqa: E402
+
 from blade import target as target_mod  # noqa: E402
 from blade.target import Target  # noqa: E402
+
+
+def _unify_scheme(s, dep, scheme, coord):
+    """Call Target._unify_scheme_dep against a lightweight test stand-in."""
+    return Target._unify_scheme_dep(cast(Target, s), dep, scheme, coord)
 
 
 class _Self:
@@ -62,14 +69,14 @@ class DepSchemeRegistryTest(unittest.TestCase):
 
         target_mod.register_dep_scheme('fake', handler)
         s = _Self()
-        key = Target._unify_scheme_dep(s, 'fake#port:lib', 'fake', 'port:lib')
+        key = _unify_scheme(s, 'fake#port:lib', 'fake', 'port:lib')
         self.assertEqual(key, 'fake#port:lib')
         self.assertEqual(calls, [(s, 'port:lib')])
         self.assertEqual(s.errors, [])
 
     def test_unknown_scheme_errors(self):
         s = _Self()
-        key = Target._unify_scheme_dep(s, 'nope#x:y', 'nope', 'x:y')
+        key = _unify_scheme(s, 'nope#x:y', 'nope', 'x:y')
         self.assertIsNone(key)
         self.assertEqual(len(s.errors), 1)
         self.assertIn('Unknown dependency scheme', s.errors[0])
@@ -78,14 +85,14 @@ class DepSchemeRegistryTest(unittest.TestCase):
         # Uppercase / leading digit are rejected before any provider lookup.
         for bad in ('Vcpkg', '1pkg', 'v_pkg'):
             s = _Self()
-            key = Target._unify_scheme_dep(s, bad + '#x:y', bad, 'x:y')
+            key = _unify_scheme(s, bad + '#x:y', bad, 'x:y')
             self.assertIsNone(key)
             self.assertEqual(len(s.errors), 1)
             self.assertIn('scheme', s.errors[0])
 
     def test_empty_coordinate_errors(self):
         s = _Self()
-        key = Target._unify_scheme_dep(s, 'vcpkg#', 'vcpkg', '')
+        key = _unify_scheme(s, 'vcpkg#', 'vcpkg', '')
         self.assertIsNone(key)
         self.assertEqual(len(s.errors), 1)
         self.assertIn('empty coordinate', s.errors[0])
@@ -93,7 +100,7 @@ class DepSchemeRegistryTest(unittest.TestCase):
     def test_provider_returning_none_propagates(self):
         target_mod.register_dep_scheme('fake', lambda referrer, coord: None)
         s = _Self()
-        self.assertIsNone(Target._unify_scheme_dep(s, 'fake#x', 'fake', 'x'))
+        self.assertIsNone(_unify_scheme(s, 'fake#x', 'fake', 'x'))
 
 
 class DepSchemeRoutingTest(unittest.TestCase):
