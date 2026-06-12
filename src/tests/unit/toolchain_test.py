@@ -312,5 +312,38 @@ class ResolveConfigFallbackTest(unittest.TestCase):
         self.assertEqual(cc, '/opt/clang/bin/clang')
 
 
+class ClangClToolChainTest(unittest.TestCase):
+    """clang-cl is an MSVC-family kind (issue #1236): same MSVC ABI/flags, only
+    the tools differ. Full construction needs a VS install (Windows-only), so
+    here we pin the registration + the pure tool-resolution helpers."""
+
+    def test_kind_registered_and_targets_windows(self):
+        from blade import toolchain
+        self.assertIn('clang-cl', toolchain._CC_TOOLCHAIN_KINDS)
+        self.assertEqual(toolchain._default_target_for_kind('clang-cl'), 'windows')
+
+    def test_llvm_tool_prefers_bindir(self):
+        from blade.toolchain import ClangClToolChain
+        import tempfile
+        import shutil as _sh
+        d = tempfile.mkdtemp()
+        self.addCleanup(_sh.rmtree, d, True)
+        open(os.path.join(d, 'lld-link.exe'), 'w').close()
+        self.assertEqual(ClangClToolChain._llvm_tool(d, 'lld-link'),
+                         os.path.join(d, 'lld-link.exe'))
+
+    def test_llvm_tool_absent_falls_back_to_path_lookup(self):
+        from blade.toolchain import ClangClToolChain
+        import tempfile
+        import shutil as _sh
+        d = tempfile.mkdtemp()
+        self.addCleanup(_sh.rmtree, d, True)
+        with mock.patch('shutil.which', return_value='/usr/bin/lld-link'):
+            self.assertEqual(ClangClToolChain._llvm_tool(d, 'lld-link'),
+                             '/usr/bin/lld-link')
+        with mock.patch('shutil.which', return_value=None):
+            self.assertEqual(ClangClToolChain._llvm_tool(d, 'lld-link'), '')
+
+
 if __name__ == '__main__':
     unittest.main()
