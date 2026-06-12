@@ -118,7 +118,7 @@ Common configuration parameters for all C/C++ build targets:
 **Purpose:** Specifies the default ``cc_toolchain_config`` name to use when
 ``--cc-toolchain=`` is not given on the command line. The value must match
 the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
-(``gcc`` / ``clang`` / ``msvc`` / ``mingw`` / ``cygwin``).
+(``gcc`` / ``clang`` / ``msvc`` / ``clang-cl`` / ``mingw`` / ``cygwin``).
 
 **Override:** ``blade build --cc-toolchain=<name>`` takes precedence.
 
@@ -766,15 +766,16 @@ The `cc_toolchain_config()` function selects the C/C++ compiler toolchain. You c
 
 `kind` determines the **ToolChain class**, **flag syntax**, **deps style**, and **default target platform**:
 
-| kind     | flag syntax | deps style | default target |
-|----------|-------------|------------|----------------|
-| `gcc`    | GCC         | `gcc`      | host platform  |
-| `clang`  | GCC         | `gcc`      | host platform  |
-| `mingw`  | GCC         | `gcc`      | `windows`      |
-| `cygwin` | GCC         | `gcc`      | `windows`      |
-| `msvc`   | MSVC        | `msvc`     | `windows`      |
+| kind       | flag syntax | deps style | default target |
+|------------|-------------|------------|----------------|
+| `gcc`      | GCC         | `gcc`      | host platform  |
+| `clang`    | GCC         | `gcc`      | host platform  |
+| `mingw`    | GCC         | `gcc`      | `windows`      |
+| `cygwin`   | GCC         | `gcc`      | `windows`      |
+| `msvc`     | MSVC        | `msvc`     | `windows`      |
+| `clang-cl` | MSVC        | `msvc`     | `windows`      |
 
-`gcc` and `clang` both use the GCC-family toolchain class — they differ only in the compiler binary and detected vendor. `mingw` and `cygwin` are GCC-family toolchains targeting Windows.
+`gcc` and `clang` both use the GCC-family toolchain class — they differ only in the compiler binary and detected vendor. `mingw` and `cygwin` are GCC-family toolchains targeting Windows. `clang-cl` is LLVM's MSVC-compatible driver: it shares the MSVC ABI, cl-style flags, Windows SDK and vcpkg `*-windows*` triplet with `msvc`, and only swaps the tools (`clang-cl` / `lld-link` / `llvm-lib` for `cl` / `link` / `lib`).
 
 ### `prefix` — install prefix
 
@@ -788,10 +789,10 @@ This ensures a configured toolchain always pins to its own installation and won'
 ```python
 cc_toolchain_config(
     name   = 'gcc-13',      # Optional — used with --cc-toolchain=gcc-13 to select this config
-    kind   = 'gcc',         # 'gcc' | 'clang' | 'msvc' | 'mingw' | 'cygwin' (see table above)
+    kind   = 'gcc',         # 'gcc' | 'clang' | 'msvc' | 'clang-cl' | 'mingw' | 'cygwin' (see table above)
 
     target = 'linux',       # Optional — target platform: 'linux' | 'darwin' | 'windows'
-                            # Default: derived from host (mingw/cygwin/msvc always 'windows')
+                            # Default: derived from host (mingw/cygwin/msvc/clang-cl always 'windows')
 
     prefix     = '/opt/gcc-13',   # Optional — install prefix, scopes tool lookup (no PATH search)
     tool_prefix = '',             # Optional — tool name prefix for cross-compilation
@@ -802,7 +803,7 @@ cc_toolchain_config(
     ld     = ...,                 # Optional — derived from kind/target by default
     ar     = ...,
 
-    # MSVC-only (when kind='msvc')
+    # MSVC family only (when kind='msvc' or kind='clang-cl')
     msvc_version = '14.44',       # 'auto' or MSVC version prefix like '14.44'
     target_arch  = 'x64',         # 'auto' | 'x64' | 'x86' | 'arm64' | 'arm64ec'
 )
@@ -852,17 +853,27 @@ cc_toolchain_config(kind='clang')   # default toolchain
 
 ### Using clang-cl on Windows
 
-No special `kind` is needed — use `kind='msvc'` with a custom compiler:
+Use `kind='clang-cl'`. This reuses the whole MSVC path — ABI, cl-style flags,
+Windows SDK discovery and the vcpkg `*-windows*` triplet — but compiles with
+`clang-cl` and links/archives with `lld-link` / `llvm-lib` when available
+(falling back to MSVC's `link` / `lib` otherwise):
+
+```python
+cc_toolchain_config(kind='clang-cl')
+```
+
+The LLVM tools are located automatically: from `prefix` if set, else Visual
+Studio's bundled LLVM (`<vs>/VC/Tools/Llvm/<host>/bin`), else `PATH`. Point
+`prefix` at a standalone LLVM install to override:
 
 ```python
 cc_toolchain_config(
-    kind = 'msvc',
-    cc   = 'clang-cl.exe',
-    cxx  = 'clang-cl.exe',
+    kind   = 'clang-cl',
+    prefix = 'C:/Program Files/LLVM',   # looks for clang-cl.exe under <prefix>/bin
 )
 ```
 
-This skips Visual Studio auto-detection and uses clang-cl with MSVC-style flags.
+`msvc_version` and `target_arch` apply the same as for `kind='msvc'`.
 
 ### vcpkg_config
 
