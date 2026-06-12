@@ -77,7 +77,7 @@ The library basename can differ from the port name — the vcpkg port
 `vcpkg_config(packages=...)` is the single source of truth for which ports may
 be referenced. Referencing a port that is not listed is a **hard error** — this
 keeps every external dependency declared and versioned in one place. Each value
-is either a version string or a dict with `version` and/or `features`:
+is either a version string or a dict with the keys below:
 
 ```python
 vcpkg_config(
@@ -86,6 +86,67 @@ vcpkg_config(
         'curl': {'version': '8.5.0', 'features': ['ssl', 'http2']},
     },
 )
+```
+
+## Per-port options
+
+The dict form of a package accepts these keys:
+
+| Key | Type | Purpose |
+| --- | --- | --- |
+| `version` | str | Pin the port version (a vcpkg `overrides` entry). |
+| `features` | list[str] | vcpkg features to enable. |
+| `linkage` | `'static'` (default) / `'dynamic'` | Build the port shared. |
+| `link_all_symbols` | bool | Whole-archive the static lib. |
+| `include_prefix` | str / list[str] / dict | Remap the header include path. |
+| `cmake_options` | list[str] | Extra CMake configure options for the port. |
+
+### `linkage: 'dynamic'` — singleton libraries
+
+Some libraries keep a process-wide registry behind static initializers — gflags
+(the flag registry), glog, protobuf (the descriptor pool), googletest (the test
+registry). Linked **statically** into several shared libs and the executable,
+each copy gets its own registry and they collide at startup (duplicate flag /
+descriptor / test registration). Build such ports **shared** so there is a
+single instance:
+
+```python
+'gflags': {'version': '2.2.2', 'linkage': 'dynamic'},
+'glog':   {'version': '0.7.1', 'linkage': 'dynamic'},
+```
+
+### `link_all_symbols: True` — force static initializers
+
+For a port linked statically *once*, the linker may drop object files whose
+symbols are unreferenced — including ones whose static initializers do
+registration. `link_all_symbols` whole-archives the lib so they all run. (The
+duplicate-copy problem above is the opposite case and needs `linkage:
+'dynamic'`, not this.)
+
+### `include_prefix` — remap the header path
+
+A port may ship its headers at `include/` top level (e.g. `snappy.h`) while your
+code includes them under a subdir (`"snappy/snappy.h"`). `include_prefix`
+exposes the port's include dir under the path(s) you use, with no hand-written
+wrapper headers — the port's native layout still resolves too:
+
+```python
+'snappy': {'include_prefix': 'snappy'},          # "snappy/h" -> include/h
+'zlib':   {'include_prefix': ['zlib', 'thirdparty/zlib']},  # two prefixes
+# {prefix: subdir} maps to a header already nested in the port's include:
+'glog':   {'linkage': 'dynamic',
+           'include_prefix': {'thirdparty/glog': 'glog'}},   # -> include/glog/h
+```
+
+### `cmake_options` — extra build options
+
+Pass per-port CMake configure options (emitted as that port's
+`VCPKG_CMAKE_CONFIGURE_OPTIONS`). For example vcpkg's snappy disables RTTI
+unless asked otherwise:
+
+```python
+'snappy': {'include_prefix': 'snappy',
+           'cmake_options': ['-DSNAPPY_WITH_RTTI=ON']},
 ```
 
 ## Managed vs. unmanaged installs
