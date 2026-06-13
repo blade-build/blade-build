@@ -1430,6 +1430,69 @@ def _classify_msvc_directive(line: str) -> 'str | None':
     return value.lower() or None
 
 
+class ClangClToolChain(MsvcToolChain):
+    """clang-cl: LLVM's MSVC-compatible driver.
+
+    Same MSVC ABI, cl-style flags and Windows SDK as ``MsvcToolChain`` -- so the
+    MSVC flag path, the SDK include/lib discovery, the vcpkg native-MSVC path and
+    the debug-lib matching all apply unchanged. Only the *tools* differ:
+    clang-cl / lld-link / llvm-lib instead of cl / link / lib. The vendor stays
+    'msvc' (clang-cl is cl-compatible), so every ``cc_is('msvc')`` branch and the
+    `*-windows*` vcpkg triplet are reused as-is.
+
+    This is not a separate toolchain *kind*: clang-cl ships inside Visual Studio
+    at a fixed, host-native location, so it is selected by setting
+    ``msvc_config.use_clang = True`` alongside ``kind='msvc'`` -- no extra path
+    configuration needed.
+    """
+
+    def __init__(self, target_arch='auto', msvc_version='auto', prefix=''):
+        super().__init__(target_arch=target_arch, msvc_version=msvc_version)
+        bindir = self._find_llvm_bindir(prefix)
+        self.cc = self._llvm_tool(bindir, 'clang-cl') or 'clang-cl'
+        self.cxx = self.cc
+        # Prefer LLVM's linker/librarian; fall back to MSVC's (already resolved
+        # by the MsvcToolChain base) when the LLVM ones aren't present.
+        self.ld = self._llvm_tool(bindir, 'lld-link') or self.ld
+        self.ar = self._llvm_tool(bindir, 'llvm-lib') or self.ar
+        self.cc_version = self._get_clang_cl_version()
+
+    def _find_llvm_bindir(self, prefix):
+        """Locate the LLVM bin dir: an explicit prefix, else VS's bundled LLVM
+        (``<vs>/VC/Tools/Llvm/<host>/bin``), else PATH."""
+        import shutil
+        if prefix:
+            for cand in (os.path.join(prefix, 'bin'), prefix):
+                if os.path.isfile(os.path.join(cand, 'clang-cl.exe')):
+                    return cand
+        if self._vs_path:
+            host = {'x64': 'x64', 'x86': 'x86', 'arm64': 'ARM64'}.get(
+                self.host_arch, 'x64')
+            cand = os.path.join(self._vs_path, 'VC', 'Tools', 'Llvm', host, 'bin')
+            if os.path.isfile(os.path.join(cand, 'clang-cl.exe')):
+                return cand
+        found = shutil.which('clang-cl')
+        return os.path.dirname(found) if found else ''
+
+    @staticmethod
+    def _llvm_tool(bindir, name):
+        import shutil
+        if bindir:
+            path = os.path.join(bindir, name + '.exe')
+            if os.path.isfile(path):
+                return path
+        return shutil.which(name) or ''
+
+    def _get_clang_cl_version(self):
+        import re
+        rc, out, err = run_command([self.cc, '--version'])
+        if rc == 0:
+            m = re.search(r'version\s+(\S+)', (out or '') + (err or ''))
+            if m:
+                return m.group(1)
+        return 'unknown'
+
+
 _CC_TOOLCHAIN_KINDS = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin'}
 
 _HOST_TARGET_MAP = {
@@ -1557,6 +1620,11 @@ def create_toolchain(cc_toolchain=''):
                        msvc_config.get('target_arch', 'auto'))
         msvc_version = (msvc_version or
                         msvc_config.get('msvc_version', 'auto'))
+        # clang-cl is not a separate kind: it is the same MSVC toolchain with
+        # LLVM's cl-compatible tools, toggled by msvc_config.use_clang.
+        if msvc_config.get('use_clang', False):
+            return ClangClToolChain(target_arch=target_arch,
+                                    msvc_version=msvc_version, prefix=prefix)
         return MsvcToolChain(target_arch=target_arch, msvc_version=msvc_version)
 
     return GccToolChain(

@@ -383,6 +383,14 @@ _CONFIG_TEMPLATE = {
             'Target architecture: auto (detect from host), x64, x86, arm64, arm64ec',
         'msvc_version': 'auto',
         'msvc_version__help__': 'MSVC compiler version prefix (auto, 14.44, 14.51, ...)',
+        # Compile with clang-cl (LLVM's MSVC-compatible driver) instead of cl,
+        # linking/archiving with lld-link / llvm-lib when present. Same MSVC ABI,
+        # flags, SDK and vcpkg triplet -- only the tools change. The tools are
+        # auto-located from the Visual Studio install (its bundled LLVM), so no
+        # extra path configuration is needed.
+        'use_clang': False,
+        'use_clang__help__':
+            'Compile with clang-cl instead of cl (same MSVC ABI/flags/SDK)',
         'windows_sdk': 'auto',
         'windows_sdk__help__': 'Windows SDK version (auto, 10.0, etc.)',
         'visual_studio': 'auto',
