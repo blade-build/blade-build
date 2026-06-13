@@ -1439,6 +1439,11 @@ class ClangClToolChain(MsvcToolChain):
     clang-cl / lld-link / llvm-lib instead of cl / link / lib. The vendor stays
     'msvc' (clang-cl is cl-compatible), so every ``cc_is('msvc')`` branch and the
     `*-windows*` vcpkg triplet are reused as-is.
+
+    This is not a separate toolchain *kind*: clang-cl ships inside Visual Studio
+    at a fixed, host-native location, so it is selected by setting
+    ``msvc_config.use_clang = True`` alongside ``kind='msvc'`` -- no extra path
+    configuration needed.
     """
 
     def __init__(self, target_arch='auto', msvc_version='auto', prefix=''):
@@ -1488,7 +1493,7 @@ class ClangClToolChain(MsvcToolChain):
         return 'unknown'
 
 
-_CC_TOOLCHAIN_KINDS = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin', 'clang-cl'}
+_CC_TOOLCHAIN_KINDS = {'gcc', 'clang', 'msvc', 'mingw', 'cygwin'}
 
 _HOST_TARGET_MAP = {
     'linux': 'linux',
@@ -1502,7 +1507,7 @@ _HOST_TARGET_MAP = {
 
 def _default_target_for_kind(kind):
     """Default ``target`` for a given toolchain *kind*."""
-    if kind in ('mingw', 'cygwin', 'msvc', 'clang-cl'):
+    if kind in ('mingw', 'cygwin', 'msvc'):
         return 'windows'
     return _HOST_TARGET_MAP.get(sys.platform, 'linux')
 
@@ -1609,13 +1614,15 @@ def create_toolchain(cc_toolchain=''):
     if cfg is None and cc_toolchain in _CC_TOOLCHAIN_KINDS:
         kind = cc_toolchain
 
-    if kind in ('msvc', 'clang-cl'):
+    if kind == 'msvc':
         msvc_config = blade_config.get_section('msvc_config')
         target_arch = (target_arch or
                        msvc_config.get('target_arch', 'auto'))
         msvc_version = (msvc_version or
                         msvc_config.get('msvc_version', 'auto'))
-        if kind == 'clang-cl':
+        # clang-cl is not a separate kind: it is the same MSVC toolchain with
+        # LLVM's cl-compatible tools, toggled by msvc_config.use_clang.
+        if msvc_config.get('use_clang', False):
             return ClangClToolChain(target_arch=target_arch,
                                     msvc_version=msvc_version, prefix=prefix)
         return MsvcToolChain(target_arch=target_arch, msvc_version=msvc_version)

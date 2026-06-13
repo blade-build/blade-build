@@ -129,7 +129,7 @@ global_config(
 **用途：** 指定命令行未提供 ``--cc-toolchain=`` 时使用的默认
 ``cc_toolchain_config`` 名称。值必须匹配某个 ``cc_toolchain_config()``
 的 ``name``，或者是一种工具链种类（``gcc`` / ``clang`` / ``msvc`` /
-``clang-cl`` / ``mingw`` / ``cygwin``）。
+``mingw`` / ``cygwin``）。
 
 **覆盖：** ``blade build --cc-toolchain=<name>`` 优先级更高。
 
@@ -495,6 +495,7 @@ MSVC 专有配置，仅在 Windows 下生效：
 msvc_config(
     target_arch = 'x64',
     msvc_version = 'auto',
+    use_clang = False,
     cppflags = ['/MD', '/EHsc'],
     cxxflags = ['/std:c++17'],
     linkflags = ['/SUBSYSTEM:CONSOLE'],
@@ -531,6 +532,18 @@ msvc_config(
 当 `msvc_version` 设置为特定前缀（如 `'14.44'`）时，Blade 会枚举所有已安装的 Visual Studio
 实例，选择首个 `VC/Tools/MSVC/<version>` 目录匹配的版本。这对于锁定兼容的工具集非常有用——
 例如 NVIDIA CUDA 13.2 官方支持 MSVC 14.4x（VS 2022），但不支持 MSVC 14.5x（VS 2026）。
+
+#### `use_clang`：bool = False
+
+**使用 `clang-cl` 而非 `cl` 进行编译**
+
+设为 `True` 时，MSVC 工具链改用 `clang-cl`（LLVM 的 MSVC 兼容驱动）编译，并在可用时用
+`lld-link` / `llvm-lib` 链接和打包（否则回退到 MSVC 的 `link` / `lib`）。其余部分——MSVC
+ABI、cl 风格选项、Windows SDK 查找以及 vcpkg 的 `*-windows*` triplet——保持不变，因此这只是
+替换编译器，并非另一种 `kind`。
+
+LLVM 工具会从 Visual Studio 安装自动定位（其自带的 LLVM，位于 `VC/Tools/Llvm/<host>/bin`，
+按宿主机架构选取），无需额外配置路径。参见[在 Windows 上使用 clang-cl](#在-windows-上使用-clang-cl)。
 
 #### `cppflags`：list = ['/MD', '/EHsc']
 
@@ -770,16 +783,15 @@ cc_config(
 
 `kind` 决定 **ToolChain 类**、**编译选项风格**、**依赖风格**和**默认目标平台**：
 
-| kind       | 选项风格 | 依赖风格 | 默认目标   |
-|------------|----------|----------|------------|
-| `gcc`      | GCC      | `gcc`    | 宿主机平台 |
-| `clang`    | GCC      | `gcc`    | 宿主机平台 |
-| `mingw`    | GCC      | `gcc`    | `windows`  |
-| `cygwin`   | GCC      | `gcc`    | `windows`  |
-| `msvc`     | MSVC     | `msvc`   | `windows`  |
-| `clang-cl` | MSVC     | `msvc`   | `windows`  |
+| kind     | 选项风格 | 依赖风格 | 默认目标   |
+|----------|----------|----------|------------|
+| `gcc`    | GCC      | `gcc`    | 宿主机平台 |
+| `clang`  | GCC      | `gcc`    | 宿主机平台 |
+| `mingw`  | GCC      | `gcc`    | `windows`  |
+| `cygwin` | GCC      | `gcc`    | `windows`  |
+| `msvc`   | MSVC     | `msvc`   | `windows`  |
 
-`gcc` 和 `clang` 使用相同的 GCC 家族工具链类，区别仅在于编译器二进制文件和检测到的厂商。`mingw` 和 `cygwin` 是面向 Windows 的 GCC 家族工具链。`clang-cl` 是 LLVM 的 MSVC 兼容驱动：与 `msvc` 共用 MSVC ABI、cl 风格选项、Windows SDK 以及 vcpkg 的 `*-windows*` triplet，仅将工具替换为 `clang-cl` / `lld-link` / `llvm-lib`（对应 `cl` / `link` / `lib`）。
+`gcc` 和 `clang` 使用相同的 GCC 家族工具链类，区别仅在于编译器二进制文件和检测到的厂商。`mingw` 和 `cygwin` 是面向 Windows 的 GCC 家族工具链。如需用 `clang-cl`（LLVM 的 MSVC 兼容驱动）编译，保持 `kind='msvc'` 并设置 [`msvc_config.use_clang`](#use_clangbool--false)——它是搭配 LLVM 工具的同一套 MSVC 工具链，并非独立的 kind。
 
 ### `prefix` — 安装前缀
 
@@ -793,10 +805,10 @@ cc_config(
 ```python
 cc_toolchain_config(
     name   = 'gcc-13',      # 可选 — 配合 --cc-toolchain=gcc-13 选择此配置
-    kind   = 'gcc',         # 'gcc' | 'clang' | 'msvc' | 'clang-cl' | 'mingw' | 'cygwin'（参见上表）
+    kind   = 'gcc',         # 'gcc' | 'clang' | 'msvc' | 'mingw' | 'cygwin'（参见上表）
 
     target = 'linux',       # 可选 — 目标平台: 'linux' | 'darwin' | 'windows'
-                            # 默认: 由 host 推导 (mingw/cygwin/msvc/clang-cl 始终为 'windows')
+                            # 默认: 由 host 推导 (mingw/cygwin/msvc 始终为 'windows')
 
     prefix     = '/opt/gcc-13',   # 可选 — 安装前缀，限定工具查找范围（不搜索 PATH）
     tool_prefix = '',             # 可选 — 交叉编译工具名前缀
@@ -807,7 +819,7 @@ cc_toolchain_config(
     ld     = ...,                 # 可选 — 默认由 kind/target 推导
     ar     = ...,
 
-    # 仅 MSVC 家族 (kind='msvc' 或 kind='clang-cl' 时)
+    # 仅 MSVC (kind='msvc' 时)
     msvc_version = '14.44',       # 'auto' 或 MSVC 版本前缀，如 '14.44'
     target_arch  = 'x64',         # 'auto' | 'x64' | 'x86' | 'arm64' | 'arm64ec'
 )
@@ -855,26 +867,18 @@ cc_toolchain_config(kind='clang')   # 默认工具链
 
 ### 在 Windows 上使用 clang-cl
 
-使用 `kind='clang-cl'`。它完整复用 MSVC 路径——ABI、cl 风格选项、Windows SDK
-查找以及 vcpkg 的 `*-windows*` triplet——但用 `clang-cl` 编译，并在可用时用
-`lld-link` / `llvm-lib` 链接和打包（否则回退到 MSVC 的 `link` / `lib`）：
+`clang-cl` 不是独立的 `kind`，而是用 LLVM 的 cl 兼容驱动编译的 MSVC 工具链。保持
+`kind='msvc'`（或直接依赖 Windows 自动检测），在 `msvc_config` 中开启即可：
 
 ```python
-cc_toolchain_config(kind='clang-cl')
+msvc_config(use_clang = True)
 ```
 
-LLVM 工具会自动定位：优先使用 `prefix`（若设置），其次是 Visual Studio 自带的
-LLVM（`<vs>/VC/Tools/Llvm/<host>/bin`），最后是 `PATH`。如需指定独立的 LLVM
-安装，把 `prefix` 指向它即可：
-
-```python
-cc_toolchain_config(
-    kind   = 'clang-cl',
-    prefix = 'C:/Program Files/LLVM',   # 在 <prefix>/bin 下查找 clang-cl.exe
-)
-```
-
-`msvc_version` 和 `target_arch` 的用法与 `kind='msvc'` 时相同。
+它完整复用 MSVC 路径——ABI、cl 风格选项、Windows SDK 查找以及 vcpkg 的
+`*-windows*` triplet——但用 `clang-cl` 编译，并在可用时用 `lld-link` / `llvm-lib`
+链接和打包（否则回退到 MSVC 的 `link` / `lib`）。LLVM 工具会从 Visual Studio
+安装自动定位（其自带的 LLVM，位于 `VC/Tools/Llvm/<host>/bin`，按宿主机架构选取），
+无需配置路径。`msvc_version` 和 `target_arch` 的用法与普通 MSVC 完全相同。
 
 ### vcpkg_config
 

@@ -313,14 +313,14 @@ class ResolveConfigFallbackTest(unittest.TestCase):
 
 
 class ClangClToolChainTest(unittest.TestCase):
-    """clang-cl is an MSVC-family kind (issue #1236): same MSVC ABI/flags, only
-    the tools differ. Full construction needs a VS install (Windows-only), so
-    here we pin the registration + the pure tool-resolution helpers."""
+    """clang-cl is the MSVC toolchain with LLVM's cl-compatible tools, toggled by
+    ``msvc_config.use_clang`` -- it is NOT a separate kind (issue #1236). Full
+    construction needs a VS install (Windows-only), so here we pin that it stays
+    out of the kind set and the pure tool-resolution helpers."""
 
-    def test_kind_registered_and_targets_windows(self):
+    def test_clang_cl_is_not_a_toolchain_kind(self):
         from blade import toolchain
-        self.assertIn('clang-cl', toolchain._CC_TOOLCHAIN_KINDS)
-        self.assertEqual(toolchain._default_target_for_kind('clang-cl'), 'windows')
+        self.assertNotIn('clang-cl', toolchain._CC_TOOLCHAIN_KINDS)
 
     def test_llvm_tool_prefers_bindir(self):
         from blade.toolchain import ClangClToolChain
