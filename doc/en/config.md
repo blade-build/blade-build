@@ -868,7 +868,7 @@ This skips Visual Studio auto-detection and uses clang-cl with MSVC-style flags.
 
 Configuration for consuming [vcpkg](https://github.com/microsoft/vcpkg)
 packages as `vcpkg#<port>:<lib>` dependencies. See [Using vcpkg
-packages](vcpkg.md) for the full guide. A single workspace-level section:
+packages](build_rules/vcpkg.md) for the full guide. A single workspace-level section:
 vcpkg allows one version and one feature set per package per workspace.
 
 #### `manage`: bool = True

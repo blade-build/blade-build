@@ -123,6 +123,7 @@ In terms of ease of use, besides automatic dependency maintenance, Blade can als
 
 ## Features
 
+* **Native [vcpkg](https://github.com/microsoft/vcpkg) integration for C/C++ third-party libraries.** Using third-party libraries in Blade has long been cumbersome; as vcpkg has matured, Blade now integrates it as a first-class package manager — declare `vcpkg#<port>:<lib>` in `deps` and Blade installs and links them, with version pinning and a binary cache. See [Using vcpkg packages](doc/en/build_rules/vcpkg.md).
 * Automatic analysis of header file dependencies, building affected code.
 * Incremental compilation and linking, only building code that needs to be rebuilt due to changes.
 * Automatic calculation of indirect library dependencies - library authors only need to write direct dependencies, and builds automatically check if dependent libraries need rebuilding.

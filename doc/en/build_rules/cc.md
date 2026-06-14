@@ -2,6 +2,13 @@
 
 C/C++ compilation involves three distinct phases: preprocessing, compiling, and linking, each requiring specific compiler flags.
 
+## Third-party libraries
+
+Besides building dependencies from source, C/C++ targets can link prebuilt
+system libraries (`#name`, e.g. `#pthread`) and packages managed by
+[vcpkg](https://github.com/microsoft/vcpkg) through `vcpkg#<port>:<lib>`
+dependencies. See [Using vcpkg packages](vcpkg.md) for the full guide.
+
 ## Common C/C++ Attributes
 
 ### `warning`: string = ['yes', 'no']

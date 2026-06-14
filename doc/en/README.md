@@ -14,8 +14,6 @@
 
 [Write a BUILD file](build_file.md)
 
-[Using vcpkg packages](vcpkg.md)
-
 [Command Line](command_line.md)
 
 [Testing Support](test.md)

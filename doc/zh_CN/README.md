@@ -15,8 +15,6 @@ Blade 用户手册
 
 [编写 BUILD 文件](build_file.md)
 
-[使用 vcpkg 包](vcpkg.md)
-
 [命令行参考](command_line.md)
 
 [测试支持](test.md)
