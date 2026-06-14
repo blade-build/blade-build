@@ -883,7 +883,7 @@ msvc_config(use_clang = True)
 ### vcpkg_config
 
 用于把 [vcpkg](https://github.com/microsoft/vcpkg) 包作为 `vcpkg#<port>:<lib>`
-依赖使用的配置。完整说明见[使用 vcpkg 包](vcpkg.md)。这是一个工作区级别的单一
+依赖使用的配置。完整说明见[使用 vcpkg 包](build_rules/vcpkg.md)。这是一个工作区级别的单一
 节：vcpkg 每个包每个工作区只允许一个版本、一组 features。
 
 #### `manage`: bool = True

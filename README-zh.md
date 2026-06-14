@@ -122,6 +122,7 @@ cc_binary(
 
 ## 特点
 
+* **原生集成 [vcpkg](https://github.com/microsoft/vcpkg) 管理 C/C++ 第三方库。** 长期以来在 Blade 中使用第三方库都比较麻烦；随着 vcpkg 的成熟，Blade 将它作为一等的第三方包管理工具集成进来——在 `deps` 中写 `vcpkg#<port>:<lib>`，Blade 即自动安装并链接，支持版本固定与二进制缓存。详见[使用 vcpkg 包](doc/zh_CN/build_rules/vcpkg.md)。
 * 自动分析头文件依赖关系，重新构建受影响的代码。
 * 增量编译与链接，只重建真正需要重建的部分。
 * 自动计算库的间接依赖；库作者只需声明直接依赖，构建时自动检查间接依赖是否需要重建。

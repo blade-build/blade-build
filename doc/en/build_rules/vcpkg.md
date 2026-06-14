@@ -307,7 +307,7 @@ cc_library(name='payment', srcs=['payment.cc'], deps=['//third_party/openssl:ssl
 ## Configuration reference
 
 All settings live in `vcpkg_config(...)` in `BLADE_ROOT`. See the
-[`vcpkg_config`](config.md#vcpkg_config) section of the configuration manual for
+[`vcpkg_config`](../config.md#vcpkg_config) section of the configuration manual for
 the full list of fields (`manage`, `baseline`, `packages`, `registries`, `root`,
 `triplet`, `install_dir`, `binary_cache`, `direct_use_allowed`).
 

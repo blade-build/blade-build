@@ -285,7 +285,7 @@ cc_library(name='payment', srcs=['payment.cc'], deps=['//third_party/openssl:ssl
 所有设置都在 `BLADE_ROOT` 的 `vcpkg_config(...)` 中。完整字段（`manage`、
 `baseline`、`packages`、`registries`、`root`、`triplet`、`install_dir`、
 `binary_cache`、`direct_use_allowed`）见配置手册的
-[`vcpkg_config`](config.md#vcpkg_config) 一节。
+[`vcpkg_config`](../config.md#vcpkg_config) 一节。
 
 ## 排错
 

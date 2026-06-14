@@ -2,6 +2,12 @@
 
 C/C++ 的编译过程分为三个阶段：预处理、编译（将预处理后的源文件转换为 `.o` 文件）、链接（将 `.o`、`.a` 链接为可执行文件或动态库）。各阶段使用各自的编译器选项。
 
+## 第三方库
+
+除了从源码构建依赖，C/C++ 目标还可以链接预编译的系统库（`#name`，如 `#pthread`），
+以及通过 `vcpkg#<port>:<lib>` 依赖使用 [vcpkg](https://github.com/microsoft/vcpkg)
+管理的第三方包。完整说明见[使用 vcpkg 包](vcpkg.md)。
+
 ## C/C++ 通用属性
 
 ### `warning`：string = ['yes', 'no']
