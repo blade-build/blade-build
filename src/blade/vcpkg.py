@@ -373,6 +373,16 @@ def overlay_triplet_cmake(target_os, target_arch, library_linkage='static',
     # whose ABI-incompatible debug libs must be linked (see vcpkg_build_type).
     if build_type:
         lines.append('set(VCPKG_BUILD_TYPE %s)' % build_type)
+    if target_os != 'windows':
+        # Match blade's compile-once-with-fPIC model: a static vcpkg .a may be
+        # linked into a .so (a generate_dynamic / dynamic_link consumer), which
+        # on ELF requires position-independent code. vcpkg static libs are NOT
+        # -fPIC by default -> "relocation ... can not be used when making a
+        # shared object; recompile with -fPIC". No-op on macOS (always PIC);
+        # -fPIC is unknown to MSVC and ignored-with-a-warning by MinGW, so skip
+        # Windows. VCPKG_C/CXX_FLAGS reach both CMake and autotools/make ports.
+        lines.append('set(VCPKG_C_FLAGS "-fPIC")')
+        lines.append('set(VCPKG_CXX_FLAGS "-fPIC")')
     for port in dynamic_ports:
         lines.append('if(PORT STREQUAL "%s")' % port)
         lines.append('    set(VCPKG_LIBRARY_LINKAGE dynamic)')
