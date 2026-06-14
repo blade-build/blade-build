@@ -85,6 +85,9 @@ class OverlayTripletTest(unittest.TestCase):
         self.assertIn('set(VCPKG_LIBRARY_LINKAGE static)', t)
         # Release-only: blade links the release tree, never debug/.
         self.assertIn('set(VCPKG_BUILD_TYPE release)', t)
+        # -fPIC so a static .a can be linked into a .so (ELF needs PIC).
+        self.assertIn('set(VCPKG_C_FLAGS "-fPIC")', t)
+        self.assertIn('set(VCPKG_CXX_FLAGS "-fPIC")', t)
         self.assertIn('set(VCPKG_CMAKE_SYSTEM_NAME Linux)', t)
         self.assertIn('VCPKG_CHAINLOAD_TOOLCHAIN_FILE', t)
         self.assertIn('../blade-chainload.cmake', t)
@@ -101,6 +104,8 @@ class OverlayTripletTest(unittest.TestCase):
         t = _overlay('windows', 'x64')
         self.assertNotIn('VCPKG_CMAKE_SYSTEM_NAME', t)
         self.assertIn('set(VCPKG_TARGET_ARCHITECTURE x64)', t)
+        # -fPIC is meaningless on Windows (MSVC rejects it, MinGW ignores+warns).
+        self.assertNotIn('-fPIC', t)
 
     def test_dynamic_linkage(self):
         t = _overlay('linux', 'x86_64', library_linkage='dynamic')
