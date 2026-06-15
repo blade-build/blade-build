@@ -2,6 +2,16 @@
 
 C/C++ compilation involves three distinct phases: preprocessing, compiling, and linking, each requiring specific compiler flags.
 
+## Source languages
+
+`srcs` accepts C (`.c`), C++ (`.cc`/`.cpp`/`.cxx`), assembly (`.s`/`.S`/`.asm`),
+and Objective-C / Objective-C++ (`.m` / `.mm`). Objective-C(++) compiles through
+the same rules — the clang/gcc driver infers the language from the extension —
+and `.mm` is treated as C++ (gets `cxxflags`/`extra_cxxflags`). Link Apple
+frameworks via `extra_linkflags`, e.g. `extra_linkflags=['-framework', 'Foundation']`.
+The MSVC toolchain has no Objective-C support, so keep `.m`/`.mm` out of `srcs`
+on Windows (gate them with a `blade.cc_toolchain` conditional in the BUILD file).
+
 ## Third-party libraries
 
 Besides building dependencies from source, C/C++ targets can link prebuilt

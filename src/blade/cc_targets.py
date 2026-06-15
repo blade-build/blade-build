@@ -43,7 +43,10 @@ from blade.version import LooseVersion as version_parse
 # _SOURCE_FILE_EXTS is a tuple (not a set) so it fits the Sequence[str] shape
 # callers expect; it is only ever consumed as the resolved default for the
 # `src_exts=` parameter, and ordering has no semantic effect.
-_SOURCE_FILE_EXTS: 'tuple[str, ...]' = ('c', 'cc', 'cp', 'cxx', 'cpp', 'CPP', 'c++', 'C', 's', 'S', 'asm')
+# 'm' / 'mm' are Objective-C / Objective-C++ (the clang/gcc driver infers the
+# language from these extensions); they compile through the same cc/cxx rules.
+_SOURCE_FILE_EXTS: 'tuple[str, ...]' = ('c', 'cc', 'cp', 'cxx', 'cpp', 'CPP', 'c++', 'C',
+                                        'm', 'mm', 's', 'S', 'asm')
 # _HEADER_FILE_EXTS stays a set because it is consumed by `in` membership
 # checks in :func:`is_header_file`, which benefit from O(1) lookup.
 _HEADER_FILE_EXTS = {'h', 'hh', 'H', 'hp', 'hpp', 'hxx', 'HPP', 'h++', 'inc', 'inl', 'tcc'}
@@ -627,12 +630,19 @@ class CcTarget(Target):
 
     def _get_rule_from_suffix(self, src, secret):
         """
-        Return cxx for C++ source files with suffix as .cc/.cpp/.cxx,
-        return cc otherwise for C, Assembler, etc.
+        Return cxx for C++ / Objective-C++ source files (.cc/.cpp/.cxx/.mm),
+        return cc otherwise for C, Objective-C (.m), Assembler, etc.
+
+        Objective-C(++) compiles through the same cc/cxx rules: the clang/gcc
+        driver infers the language from the .m/.mm extension (no -x flag needed),
+        and .mm needs the C++ flags so it routes to cxx just like .cc. The MSVC
+        toolchain has no Objective-C support, so a workspace targeting MSVC must
+        keep .m/.mm out of `srcs` itself (e.g. a `blade.cc_toolchain` conditional
+        in the BUILD file), the same way platform-specific sources are gated.
         """
         if secret:
             return 'secretcc'
-        for suffix in ('.cc', '.cpp', '.cxx'):
+        for suffix in ('.cc', '.cpp', '.cxx', '.mm'):
             if src.endswith(suffix):
                 return 'cxx'
         # MASM .asm can't go through cl.exe; route to the ml64/ml 'as' rule.
@@ -644,12 +654,13 @@ class CcTarget(Target):
     def _extra_compile_flags_for(self, src):
         """Per-source-language extra compile flags (issue #492).
 
-        `extra_cxxflags` for C++ (`.cc`/`.cpp`/`.cxx`, matching the cxx rule
-        selection above), `extra_asflags` for assembly (`.s`/`.S`/`.asm`), and
-        `extra_cflags` for everything else (C). These are *in addition to*
-        `extra_cppflags`, which applies to all C-family sources.
+        `extra_cxxflags` for C++ / Objective-C++ (`.cc`/`.cpp`/`.cxx`/`.mm`,
+        matching the cxx rule selection above), `extra_asflags` for assembly
+        (`.s`/`.S`/`.asm`), and `extra_cflags` for everything else (C and
+        Objective-C `.m`). These are *in addition to* `extra_cppflags`, which
+        applies to all C-family sources.
         """
-        if src.endswith(('.cc', '.cpp', '.cxx')):
+        if src.endswith(('.cc', '.cpp', '.cxx', '.mm')):
             return self.attr.get('extra_cxxflags', [])
         if src.endswith(('.s', '.S', '.asm')):
             return self.attr.get('extra_asflags', [])

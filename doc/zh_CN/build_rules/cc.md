@@ -2,6 +2,15 @@
 
 C/C++ 的编译过程分为三个阶段：预处理、编译（将预处理后的源文件转换为 `.o` 文件）、链接（将 `.o`、`.a` 链接为可执行文件或动态库）。各阶段使用各自的编译器选项。
 
+## 源语言
+
+`srcs` 接受 C（`.c`）、C++（`.cc`/`.cpp`/`.cxx`）、汇编（`.s`/`.S`/`.asm`），以及
+Objective-C / Objective-C++（`.m` / `.mm`）。Objective-C(++) 走相同的编译规则——
+clang/gcc 驱动按扩展名自动判定语言——`.mm` 按 C++ 处理（用 `cxxflags`/`extra_cxxflags`）。
+链接 Apple framework 用 `extra_linkflags`，例如 `extra_linkflags=['-framework', 'Foundation']`。
+MSVC 工具链不支持 Objective-C，因此在 Windows 上要把 `.m`/`.mm` 从 `srcs` 里排除掉
+（在 BUILD 里用 `blade.cc_toolchain` 条件判断）。
+
 ## 第三方库
 
 除了从源码构建依赖，C/C++ 目标还可以链接预编译的系统库（`#name`，如 `#pthread`），

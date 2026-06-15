@@ -197,6 +197,12 @@ class ExtraCompileFlagsForTest(unittest.TestCase):
         for src in ('a.s', 'a.S', 'a.asm'):
             self.assertEqual(['-as-only'], t._extra_compile_flags_for(src), src)
 
+    def test_objc_sources(self):
+        # Objective-C++ (.mm) is C++; Objective-C (.m) is C.
+        t = self._target()
+        self.assertEqual(['-cxx-only'], t._extra_compile_flags_for('a.mm'))
+        self.assertEqual(['-c-only'], t._extra_compile_flags_for('a.m'))
+
     def test_c_and_other_sources_get_cflags(self):
         t = self._target()
         self.assertEqual(['-c-only'], t._extra_compile_flags_for('a.c'))
@@ -206,6 +212,27 @@ class ExtraCompileFlagsForTest(unittest.TestCase):
         t.attr = {}
         self.assertEqual([], t._extra_compile_flags_for('a.cc'))
         self.assertEqual([], t._extra_compile_flags_for('a.c'))
+
+
+class RuleFromSuffixTest(unittest.TestCase):
+    """Source-suffix -> compile rule (cxx for C++/Objective-C++, else cc)."""
+
+    def _target(self):
+        return cc_targets.CcTarget.__new__(cc_targets.CcTarget)
+
+    def test_cxx_and_objcxx_use_cxx_rule(self):
+        t = self._target()
+        for src in ('a.cc', 'a.cpp', 'a.cxx', 'a.mm'):
+            self.assertEqual('cxx', t._get_rule_from_suffix(src, secret=False), src)
+
+    def test_c_and_objc_use_cc_rule(self):
+        t = self._target()
+        for src in ('a.c', 'a.m'):
+            self.assertEqual('cc', t._get_rule_from_suffix(src, secret=False), src)
+
+    def test_objc_recognized_as_source(self):
+        self.assertIn('m', cc_targets._SOURCE_FILE_EXTS)
+        self.assertIn('mm', cc_targets._SOURCE_FILE_EXTS)
 
 
 class CcLinkPlatformGuardTest(unittest.TestCase):
