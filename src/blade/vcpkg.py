@@ -582,6 +582,13 @@ def setup(builder):
     packages = cfg.get('packages') or {}
     if not cfg.get('manage', True) or not packages:
         return True
+    # Demand-driven: only install when the build actually references a vcpkg
+    # package. This lets a workspace declare vcpkg_config unconditionally (its
+    # use of vcpkg is a fixed project property) without forcing every build --
+    # or every consumer of an unrelated target -- to need the vcpkg tool or pay
+    # the install. A build with no `vcpkg#...` dependency is a no-op here.
+    if not _build_uses_vcpkg(builder):
+        return True
 
     toolchain = builder.get_build_toolchain()
     vanilla = cfg.get('triplet')
@@ -679,6 +686,17 @@ def setup(builder):
 def _read_text(path):
     with open(path) as f:
         return f.read()
+
+
+def _build_uses_vcpkg(builder):
+    """True if the build graph contains a vcpkg target (some built target
+    referenced a `vcpkg#...` dependency). get_build_targets() is the build set
+    with command-line exclusions already applied, so excluding the only vcpkg
+    target makes this False -> the install is skipped."""
+    for target in builder.get_build_targets().values():
+        if getattr(target, 'type', None) == 'vcpkg_library':
+            return True
+    return False
 
 
 def _auto_dynamic_ports(builder, packages):

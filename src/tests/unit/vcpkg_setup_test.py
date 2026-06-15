@@ -77,6 +77,10 @@ class SetupTest(unittest.TestCase):
     def _run(self, build_dir, cfg=None, run_result=(0, 'ok', ''),
              tool: 'str | None' = '/vc/vcpkg', targets=None):
         cfg = dict(_CFG if cfg is None else cfg)
+        # Default: the build references the 'fmt' package, so the demand-driven
+        # check passes and the install runs (these tests exercise that path).
+        if targets is None:
+            targets = {'fmt': _vcpkg_lib('fmt', False)}
         with mock.patch('blade.config.get_section', return_value=cfg), \
              mock.patch('blade.vcpkg._find_vcpkg_tool', return_value=tool), \
              mock.patch('blade.console.info'), \
@@ -95,6 +99,14 @@ class SetupTest(unittest.TestCase):
     def test_no_packages_is_noop(self):
         with tempfile.TemporaryDirectory() as d:
             ok, rc = self._run(d, cfg=dict(_CFG, packages={}))
+        self.assertTrue(ok)
+        rc.assert_not_called()
+
+    def test_no_vcpkg_target_skips_install(self):
+        # Demand-driven: packages are declared but the build references no vcpkg
+        # target, so the install is skipped (no vcpkg tool required).
+        with tempfile.TemporaryDirectory() as d:
+            ok, rc = self._run(d, targets={})
         self.assertTrue(ok)
         rc.assert_not_called()
 
