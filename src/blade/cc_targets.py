@@ -1272,7 +1272,12 @@ class CcTarget(Target):
         if cmd:
             vars['cmd'] = cmd
         is_msvc = self.blade.get_build_toolchain().cc_is('msvc')
-        extra_linkflags = [_system_lib_link_flag(lib, is_msvc) for lib in sys_libs]
+        # Dedup the system libraries: several deps can name the same one (e.g.
+        # every C++ vcpkg port's pkg-config Libs.private lists `c++` on macOS),
+        # and a repeated `-lfoo` makes ld64 warn "ignoring duplicate libraries".
+        # stable_unique keeps first occurrence, so link order is preserved.
+        extra_linkflags = [_system_lib_link_flag(lib, is_msvc)
+                           for lib in stable_unique(sys_libs)]
         extra_linkflags += self.attr.get('extra_linkflags')  # pyright: ignore[reportOperatorIssue]
         if implicit_deps is None:
             implicit_deps = []

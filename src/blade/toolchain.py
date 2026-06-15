@@ -386,6 +386,46 @@ class ToolChain:
 
         return valid_flags
 
+    def supports_link_flag(self, flag):
+        """Whether the linker accepts *flag* (a ``-Wl,...`` driver option).
+
+        Probes by linking a tiny program and checking the exit status; an
+        unknown ``-Wl,`` option makes the driver hand it to ``ld``, which
+        errors out. Cached per (instance, flag) -- a link probe is ~100 ms
+        and the answer is invariant for the toolchain.
+
+        Used for ld64-version-specific options such as
+        ``-Wl,-no_warn_duplicate_libraries`` (new in Xcode 15's ld) that
+        error on older linkers -- which don't emit the matching warning
+        anyway, so the flag is simply omitted there.
+        """
+        cache = getattr(self, '_link_flag_support', None)
+        if cache is None:
+            cache = self._link_flag_support = {}
+        if flag in cache:
+            return cache[flag]
+        fd, exe = tempfile.mkstemp('', 'blade_linkflag_probe')
+        os.close(fd)
+        env = os.environ.copy()
+        env['LC_ALL'] = 'C'
+        argv = [self.cc, '-x', 'c', flag, '-o', exe, '-']
+        supported = False
+        try:
+            proc = subprocess.Popen(
+                argv, stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+            proc.communicate(input=b'int main() { return 0; }\n')
+            supported = proc.returncode == 0
+        except OSError:
+            supported = False
+        finally:
+            try:
+                os.remove(exe)
+            except OSError:
+                pass
+        cache[flag] = supported
+        return supported
+
 
 class GccToolChain(ToolChain):
     """GCC/Clang/MinGW/Cygwin toolchain (all GCC-family compilers)."""

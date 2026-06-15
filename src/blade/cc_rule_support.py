@@ -379,6 +379,17 @@ class CcRuleGenerator:
                 and self.build_toolchain.cc_is('gcc')):
             cppflags.append('-fno-semantic-interposition')
 
+        # macOS / Xcode 15+ ld64 warns "ignoring duplicate libraries" when
+        # several objects each carry an embedded `-lc++` auto-link option
+        # (LC_LINKER_OPTION) -- benign noise inherent to compiling C++ on
+        # macOS, and not something on blade's command line to dedup away.
+        # Silence it with ld64's own flag, but only when the linker accepts
+        # it (older ld64 doesn't know the flag and doesn't emit the warning).
+        if self.build_toolchain.target_os == 'darwin':
+            no_warn_dup = '-Wl,-no_warn_duplicate_libraries'
+            if self.build_toolchain.supports_link_flag(no_warn_dup):
+                linkflags.append(no_warn_dup)
+
         cppflags = self.build_toolchain.filter_cc_flags(cppflags)
         return cppflags, linkflags
 
