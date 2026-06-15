@@ -136,5 +136,10 @@ jobs:
     - name: Run blade-test suites
       working-directory: blade-test
       run: |
-        # CUDA toolkit not available on CI — skip cu_basic suites
-        ./blade.sh test //suites/... --exclude-targets '//suites/cu_basic/...'
+        # CUDA toolkit not available on CI — skip cu_basic suites.
+        # vcpkg_basic is exercised by blade-test's own dedicated vcpkg jobs;
+        # exclude it here so this smoke does not install vcpkg ports on every
+        # blade PR (blade is demand-driven, so the excluded target = no install).
+        ./blade.sh test //suites/... \
+          --exclude-targets '//suites/cu_basic/...' \
+          --exclude-targets '//suites/vcpkg_basic/...'
