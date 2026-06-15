@@ -278,6 +278,21 @@ def _windows_dll_basename(path, name):
     return '.'.join(parts) + '.dll'
 
 
+def _system_lib_link_flag(lib, is_msvc):
+    """Render a system library (a `#name` dep) as a linker argument.
+
+    An absolute path is passed through unchanged. A bare name becomes the GNU
+    `-lname` on GCC/Clang; on MSVC (cl / clang-cl) `link.exe` / `lld-link` take
+    the import library as a positional argument instead (`name.lib`), so emit
+    that -- `-lname` is not understood there.
+    """
+    if os.path.isabs(lib):
+        return lib
+    if is_msvc:
+        return lib if lib.lower().endswith('.lib') else lib + '.lib'
+    return '-l%s' % lib
+
+
 class CcTarget(Target):
     """
     This class is derived from Target and it is the base class
@@ -1250,7 +1265,8 @@ class CcTarget(Target):
             vars['target_linkflags'] = ' '.join(target_linkflags)
         if cmd:
             vars['cmd'] = cmd
-        extra_linkflags = [lib if os.path.isabs(lib) else '-l%s' % lib for lib in sys_libs]
+        is_msvc = self.blade.get_build_toolchain().cc_is('msvc')
+        extra_linkflags = [_system_lib_link_flag(lib, is_msvc) for lib in sys_libs]
         extra_linkflags += self.attr.get('extra_linkflags')  # pyright: ignore[reportOperatorIssue]
         if implicit_deps is None:
             implicit_deps = []
@@ -1784,7 +1800,7 @@ class VcpkgLibrary(PrebuiltCcLibrary):
 
     def __init__(self, port, lib, key, lib_dir, include_dir, header_only,
                  linkage='static', dynamic_lib_dir=None,
-                 link_all_symbols=False, include_prefix=None):
+                 link_all_symbols=False, include_prefix=None, system_libs=None):
         # Stash the vcpkg-resolved locations before super().__init__, which
         # calls our _setup() at the end of construction.
         self._vcpkg_port = port
@@ -1844,6 +1860,16 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         # in-tree dirs). Flagging every vcpkg dep as "unused" would be pure
         # noise; precise external-header attribution is a follow-up.
         declare_header_less(self)
+        # The port's pkg-config private system libs (e.g. dbghelp on Windows)
+        # become `#name` deps so they propagate onto every consumer's link line,
+        # exactly like a hand-written `deps=['#dbghelp']` would (issue #1322).
+        # Registered before dependency expansion (which runs in the analyze
+        # phase, after this auto-created target exists), so they expand normally.
+        for sys_name in (system_libs or []):
+            dkey = '#:' + sys_name
+            self._add_system_library(dkey, sys_name)
+            if dkey not in self.deps:
+                self.deps.append(dkey)
 
     def _vcpkg_prefixed_incdir(self, include_prefix, include_dir):
         """Expose the vcpkg include dir under remapped prefixes via symlinks, so

@@ -173,6 +173,67 @@ def parse_pkgconfig(text):
     }
 
 
+def _port_pc_files(root, triplet, port):
+    """Absolute paths of the `*.pc` files `port` installed for `triplet`.
+
+    vcpkg records every file a port lays down in a per-port list under
+    `installed/vcpkg/info/<port>_<version>_<triplet>.list` (paths relative to
+    `installed/`). The `_<triplet>.list` suffix and `<port>_` prefix anchor the
+    glob so a port is not confused with one whose name it prefixes. Returns []
+    when the metadata is absent (never raises)."""
+    import glob
+    info_dir = os.path.join(root, 'installed', 'vcpkg', 'info')
+    pattern = os.path.join(info_dir, '%s_*_%s.list' % (port, triplet))
+    pc_files = []
+    for listing in glob.glob(pattern):
+        try:
+            with open(listing, encoding='utf-8') as f:
+                for line in f:
+                    rel = line.strip()
+                    if rel.endswith('.pc'):
+                        pc_files.append(os.path.join(root, 'installed', rel))
+        except OSError:
+            continue
+    return pc_files
+
+
+def _is_sibling_vcpkg_lib(lib_dir, name):
+    """True if `name` is another vcpkg library installed alongside this one (a
+    real archive in `lib_dir`), rather than an OS/SDK system library. Such a
+    `-lname` in `Libs.private` is an inter-port dependency, linked via the port's
+    own archive, not as a `#name` system lib."""
+    candidates = ('%s.lib' % name, 'lib%s.a' % name, '%s.a' % name)
+    return any(os.path.isfile(os.path.join(lib_dir, c)) for c in candidates)
+
+
+def port_system_libs(root, triplet, port, lib_dir):
+    """OS/SDK libraries a port's pkg-config marks as private link dependencies.
+
+    Reads the port's installed `.pc` file(s), collects their `Libs.private` `-l`
+    names, and drops any that are sibling vcpkg libraries (an archive in
+    `lib_dir`). The remainder are system libraries (e.g. `dbghelp`, `shlwapi` on
+    Windows; `dl`, `pthread` on POSIX) that a consumer must link but that vcpkg
+    does not ship -- on MSVC these otherwise surface as unresolved externals
+    (issue #1322).
+
+    Returns a sorted, de-duplicated list of bare library names ([] if none)."""
+    seen = set()
+    result = []
+    for pc in _port_pc_files(root, triplet, port):
+        try:
+            with open(pc, encoding='utf-8') as f:
+                text = f.read()
+        except OSError:
+            continue
+        for name in parse_pkgconfig(text)['l_private']:
+            if name in seen:
+                continue
+            seen.add(name)
+            if not _is_sibling_vcpkg_lib(lib_dir, name):
+                result.append(name)
+    return sorted(result)
+
+
 # --- Phase 2 orchestration inputs: synthetic manifest + overlay triplet ------
 #
 # When blade drives `vcpkg install` itself, it generates a manifest from the
@@ -540,6 +601,10 @@ def _vcpkg_dep_handler(referrer, coordinate):
             lib_subdir(shared_triplet, profile))
     else:
         dynamic_lib_dir = info['lib_dir']
+    # System libs the port's pkg-config marks private (e.g. dbghelp on Windows):
+    # the consumer must link them, but vcpkg does not ship them (issue #1322).
+    system_libs = ([] if info['header_only']
+                   else port_system_libs(root, triplet, info['port'], info['lib_dir']))
     # Lazy import: cc_targets is loaded before this module, but keeping the
     # import local avoids a hard module-level cycle (cc_targets -> ... -> here).
     from blade.cc_targets import VcpkgLibrary
@@ -547,7 +612,7 @@ def _vcpkg_dep_handler(referrer, coordinate):
                           info['lib_dir'], info['include_dir'], info['header_only'],
                           linkage=linkage, dynamic_lib_dir=dynamic_lib_dir,
                           link_all_symbols=link_all_symbols,
-                          include_prefix=include_prefix)
+                          include_prefix=include_prefix, system_libs=system_libs)
     referrer.blade.register_target(target)
     return key
 

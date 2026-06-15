@@ -12,7 +12,9 @@ the next PR.
 """
 
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -132,6 +134,79 @@ class ParsePkgConfigTest(unittest.TestCase):
         pc = vcpkg.parse_pkgconfig('')
         self.assertEqual(pc['name'], '')
         self.assertEqual(pc['l_libs'], [])
+
+
+class PortSystemLibsTest(unittest.TestCase):
+    """`port_system_libs` reads a port's installed .pc Libs.private and returns
+    the OS/SDK libs a consumer must link (issue #1322), excluding sibling vcpkg
+    libraries it finds as archives in the lib dir."""
+
+    TRIPLET = 'blade-x64-windows-static'
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.installed = os.path.join(self.root, 'installed')
+        self.tdir = os.path.join(self.installed, self.TRIPLET)
+        self.lib_dir = os.path.join(self.tdir, 'lib')
+        self.pkgconfig = os.path.join(self.lib_dir, 'pkgconfig')
+        os.makedirs(self.pkgconfig)
+
+    def _write_pc(self, name, libs_private):
+        path = os.path.join(self.pkgconfig, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('Name: %s\nLibs.private: %s\n' % (name, libs_private))
+        return '%s/lib/pkgconfig/%s' % (self.TRIPLET, name)
+
+    def _write_list(self, port, version, rel_paths):
+        info = os.path.join(self.installed, 'vcpkg', 'info')
+        os.makedirs(info, exist_ok=True)
+        fname = '%s_%s_%s.list' % (port, version, self.TRIPLET)
+        with open(os.path.join(info, fname), 'w', encoding='utf-8') as f:
+            f.write('\n'.join(rel_paths) + '\n')
+
+    def _touch(self, name):
+        open(os.path.join(self.lib_dir, name), 'w').close()
+
+    def test_collects_private_system_libs(self):
+        rel = self._write_pc('libglog.pc', '-ldbghelp')
+        self._write_list('glog', '0.6.0', [self.TRIPLET + '/lib/', rel])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'glog', self.lib_dir),
+            ['dbghelp'])
+
+    def test_excludes_sibling_vcpkg_libs(self):
+        # glog's Libs.private references gflags (a sibling vcpkg lib, present as
+        # an archive) plus dbghelp (a real system lib). Only dbghelp is returned.
+        rel = self._write_pc('libglog.pc', '-lgflags -ldbghelp')
+        self._touch('gflags.lib')
+        self._write_list('glog', '0.6.0', [rel])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'glog', self.lib_dir),
+            ['dbghelp'])
+
+    def test_sorted_and_deduplicated(self):
+        r1 = self._write_pc('libssl.pc', '-lcrypt32 -lws2_32')
+        r2 = self._write_pc('libcrypto.pc', '-lws2_32 -ladvapi32')
+        self._write_list('openssl', '3.2.1', [r1, r2])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'openssl', self.lib_dir),
+            ['advapi32', 'crypt32', 'ws2_32'])
+
+    def test_missing_metadata_returns_empty(self):
+        # No info .list for the port -> no system libs, no error.
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'absent', self.lib_dir),
+            [])
+
+    def test_prefix_named_port_not_matched(self):
+        # A port whose name prefixes another ('gflag' vs 'gflags') must not pick
+        # up the other's list: the '_' separator anchors the glob.
+        rel = self._write_pc('libgflags.pc', '-lshlwapi')
+        self._write_list('gflags', '2.2.2', [rel])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'gflag', self.lib_dir),
+            [])
 
 
 if __name__ == '__main__':
