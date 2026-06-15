@@ -144,9 +144,11 @@ class ParsePkgConfigTest(unittest.TestCase):
 
 
 class PortSystemLibsTest(unittest.TestCase):
-    """`port_system_libs` reads a port's installed .pc Libs.private and returns
-    the OS/SDK libs a consumer must link (issue #1322), excluding sibling vcpkg
-    libraries it finds as archives in the lib dir."""
+    """`port_system_libs` returns the OS/SDK libs a consumer must link for a port
+    (issue #1322). It reads them from wherever vcpkg records them -- pkg-config
+    `Libs`/`Libs.private` (autotools ports, e.g. OpenSSL) or a generated
+    `*-targets*.cmake`'s INTERFACE_LINK_LIBRARIES (CMake ports, e.g. gflags/glog)
+    -- and excludes sibling vcpkg libraries it finds as archives in the lib dir."""
 
     TRIPLET = 'blade-x64-windows-static'
 
@@ -159,11 +161,26 @@ class PortSystemLibsTest(unittest.TestCase):
         self.pkgconfig = os.path.join(self.lib_dir, 'pkgconfig')
         os.makedirs(self.pkgconfig)
 
-    def _write_pc(self, name, libs_private):
+    def _write_pc(self, name, libs_private='', libs=''):
         path = os.path.join(self.pkgconfig, name)
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('Name: %s\nLibs.private: %s\n' % (name, libs_private))
+            f.write('Name: %s\n' % name)
+            if libs:
+                f.write('Libs: %s\n' % libs)
+            if libs_private:
+                f.write('Libs.private: %s\n' % libs_private)
         return '%s/lib/pkgconfig/%s' % (self.TRIPLET, name)
+
+    def _write_cmake(self, port, name, interface_link_libraries, body=''):
+        share = os.path.join(self.tdir, 'share', port)
+        os.makedirs(share, exist_ok=True)
+        with open(os.path.join(share, name), 'w', encoding='utf-8') as f:
+            if interface_link_libraries is not None:
+                f.write('set_target_properties(%s::%s PROPERTIES\n'
+                        '  INTERFACE_LINK_LIBRARIES "%s"\n)\n'
+                        % (port, port, interface_link_libraries))
+            f.write(body)
+        return '%s/share/%s/%s' % (self.TRIPLET, port, name)
 
     def _write_list(self, port, version, rel_paths):
         info = os.path.join(self.installed, 'vcpkg', 'info')
@@ -207,6 +224,48 @@ class PortSystemLibsTest(unittest.TestCase):
         self.assertEqual(
             vcpkg.port_system_libs(self.root, self.TRIPLET, 'openssl', self.lib_dir),
             ['advapi32', 'crypt32', 'ws2_32'])
+
+    def test_libs_field_not_just_private(self):
+        # OpenSSL on Windows lists system libs in `Libs:` (no Libs.private),
+        # alongside its own -llibcrypto, which the sibling filter drops.
+        self._touch('libcrypto.lib')
+        rel = self._write_pc(
+            'libcrypto.pc',
+            libs='"-L${libdir}" -llibcrypto -lcrypt32 -lws2_32 -ladvapi32 -luser32')
+        self._write_list('openssl', '3.6.3', [rel])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'openssl', self.lib_dir),
+            ['advapi32', 'crypt32', 'user32', 'ws2_32'])
+
+    def test_cmake_targets_interface_link_libraries(self):
+        # CMake-config ports (no .pc): system libs come from a *-targets*.cmake.
+        # glog wraps them in $<LINK_ONLY:...> and references sibling/imported
+        # targets (gflags::gflags, Threads::Threads) which must be skipped.
+        self._touch('gflags.lib')
+        rel = self._write_cmake(
+            'glog', 'glog-targets.cmake',
+            '\\$<LINK_ONLY:dbghelp>;\\$<LINK_ONLY:Threads::Threads>;gflags::gflags')
+        self._write_list('glog', '0.7.1', [rel])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'glog', self.lib_dir),
+            ['dbghelp'])
+
+    def test_cmake_dot_lib_token(self):
+        rel = self._write_cmake('gflags', 'gflags-targets.cmake', 'shlwapi.lib')
+        self._write_list('gflags', '2.3.0', [rel])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'gflags', self.lib_dir),
+            ['shlwapi'])
+
+    def test_conditional_config_cmake_ignored(self):
+        # A hand-written *Config.cmake may gate libs behind if(UNIX); only
+        # generated *-targets*.cmake is read, so a Windows build never picks up
+        # the POSIX-only `dl`.
+        rel = self._write_cmake('openssl', 'OpenSSLConfig.cmake', 'dl')
+        self._write_list('openssl', '3.6.3', [rel])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'openssl', self.lib_dir),
+            [])
 
     def test_missing_metadata_returns_empty(self):
         # No info .list for the port -> no system libs, no error.

@@ -182,64 +182,108 @@ def parse_pkgconfig(text):
     }
 
 
-def _port_pc_files(root, triplet, port):
-    """Absolute paths of the `*.pc` files `port` installed for `triplet`.
+def _port_installed_files(root, triplet, port):
+    """Absolute paths of every file `port` installed for `triplet`.
 
-    vcpkg records every file a port lays down in a per-port list under
+    vcpkg records them in a per-port list under
     `installed/vcpkg/info/<port>_<version>_<triplet>.list` (paths relative to
-    `installed/`). The `_<triplet>.list` suffix and `<port>_` prefix anchor the
-    glob so a port is not confused with one whose name it prefixes. Returns []
-    when the metadata is absent (never raises)."""
+    `installed/`); manifest mode writes it too. The `_<triplet>.list` suffix and
+    `<port>_` prefix anchor the glob so a port is not confused with one whose
+    name it prefixes. Returns [] when the metadata is absent (never raises)."""
     import glob
     info_dir = os.path.join(root, 'installed', 'vcpkg', 'info')
     pattern = os.path.join(info_dir, '%s_*_%s.list' % (port, triplet))
-    pc_files = []
+    files = []
     for listing in glob.glob(pattern):
         try:
             with open(listing, encoding='utf-8') as f:
                 for line in f:
                     rel = line.strip()
-                    if rel.endswith('.pc'):
-                        pc_files.append(os.path.join(root, 'installed', rel))
+                    if rel:
+                        files.append(os.path.join(root, 'installed', rel))
         except OSError:
             continue
-    return pc_files
+    return files
 
 
 def _is_sibling_vcpkg_lib(lib_dir, name):
     """True if `name` is another vcpkg library installed alongside this one (a
     real archive in `lib_dir`), rather than an OS/SDK system library. Such a
-    `-lname` in `Libs.private` is an inter-port dependency, linked via the port's
-    own archive, not as a `#name` system lib."""
+    reference is an inter-port dependency, linked via the port's own archive,
+    not as a system lib."""
     candidates = ('%s.lib' % name, 'lib%s.a' % name, '%s.a' % name)
     return any(os.path.isfile(os.path.join(lib_dir, c)) for c in candidates)
 
 
+_CMAKE_LINK_LIBS_RE = re.compile(r'INTERFACE_LINK_LIBRARIES\s+"([^"]*)"')
+_CMAKE_LINK_ONLY_RE = re.compile(r'\\?\$<LINK_ONLY:(.+)>$')
+
+
+def _cmake_link_libs(text):
+    """System-lib names from a CMake config's INTERFACE_LINK_LIBRARIES.
+
+    CMake-config ports declare their transitive link deps here -- gflags ->
+    `shlwapi.lib`, glog -> `\\$<LINK_ONLY:dbghelp>;...`. `$<LINK_ONLY:x>` is
+    unwrapped; namespaced imported targets (`Foo::Bar`), other generator
+    expressions and unresolved `${vars}` are skipped (the caller drops sibling
+    vcpkg libs). Only generated `*-targets*.cmake` files should be fed in -- a
+    hand-written `*Config.cmake` may gate libs behind `if(UNIX)` etc., which
+    flat text reading cannot honor (e.g. it would pull `dl` in on Windows)."""
+    libs = []
+    for m in _CMAKE_LINK_LIBS_RE.finditer(text):
+        for tok in m.group(1).split(';'):
+            tok = tok.strip()
+            only = _CMAKE_LINK_ONLY_RE.match(tok)
+            if only:
+                tok = only.group(1)
+            if tok and '::' not in tok and '$<' not in tok and '${' not in tok:
+                libs.append(tok)
+    return libs
+
+
+def _strip_lib_ext(name):
+    """`ws2_32.lib` / `libfoo.a` -> bare stem (basename); other names unchanged."""
+    base = os.path.basename(name)
+    stem, ext = os.path.splitext(base)
+    return stem if ext.lower() in ('.lib', '.a') else base
+
+
 def port_system_libs(root, triplet, port, lib_dir):
-    """OS/SDK libraries a port's pkg-config marks as private link dependencies.
+    """OS/SDK libraries a port needs at link time but does not itself ship.
 
-    Reads the port's installed `.pc` file(s), collects their `Libs.private` `-l`
-    names, and drops any that are sibling vcpkg libraries (an archive in
-    `lib_dir`). The remainder are system libraries (e.g. `dbghelp`, `shlwapi` on
-    Windows; `dl`, `pthread` on POSIX) that a consumer must link but that vcpkg
-    does not ship -- on MSVC these otherwise surface as unresolved externals
-    (issue #1322).
-
-    Returns a sorted, de-duplicated list of bare library names ([] if none)."""
-    seen = set()
-    result = []
-    for pc in _port_pc_files(root, triplet, port):
+    vcpkg ports declare these in different places: autotools ports (OpenSSL) in
+    their pkg-config `Libs`/`Libs.private`; CMake-config ports (gflags, glog) in
+    a generated `*-targets*.cmake`'s INTERFACE_LINK_LIBRARIES. Both are read.
+    Sibling vcpkg libraries (a real archive in `lib_dir`) are dropped; the rest
+    -- the genuine system libs (dbghelp, shlwapi, ws2_32, advapi32, ...) -- are
+    returned sorted and de-duplicated. A consumer must link these or hit
+    unresolved externals on MSVC (issue #1322). [] if none / metadata absent."""
+    names = []
+    for path in _port_installed_files(root, triplet, port):
+        is_pc = path.endswith('.pc')
+        is_targets = (path.endswith('.cmake')
+                      and '-targets' in os.path.basename(path))
+        if not (is_pc or is_targets):
+            continue  # skip the port's binaries, headers, etc.
         try:
-            with open(pc, encoding='utf-8') as f:
+            with open(path, encoding='utf-8', errors='ignore') as f:
                 text = f.read()
         except OSError:
             continue
-        for name in parse_pkgconfig(text)['l_private']:
-            if name in seen:
-                continue
-            seen.add(name)
-            if not _is_sibling_vcpkg_lib(lib_dir, name):
-                result.append(name)
+        if is_pc:
+            pc = parse_pkgconfig(text)
+            names += pc['l_libs'] + pc['l_private']
+        else:
+            names += _cmake_link_libs(text)
+    seen, result = set(), []
+    for name in names:
+        bare = _strip_lib_ext(name)
+        key = bare.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if not _is_sibling_vcpkg_lib(lib_dir, bare):
+            result.append(bare)
     return sorted(result)
 
 
