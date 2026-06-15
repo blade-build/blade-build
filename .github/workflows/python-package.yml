@@ -141,5 +141,4 @@ jobs:
         # exclude it here so this smoke does not install vcpkg ports on every
         # blade PR (blade is demand-driven, so the excluded target = no install).
         ./blade.sh test //suites/... \
-          --exclude-targets '//suites/cu_basic/...' \
-          --exclude-targets '//suites/vcpkg_basic/...'
+          --exclude-targets '//suites/cu_basic/...,//suites/vcpkg_basic/...'
