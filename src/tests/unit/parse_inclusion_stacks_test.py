@@ -75,5 +75,38 @@ class ParseInclusionStacksTest(unittest.TestCase):
         self.assertEqual([], stacks)
 
 
+class MsvcExternalHeaderTest(unittest.TestCase):
+    """MSVC's /showIncludes prints every header absolute. A header under a
+    system/external include dir (a vcpkg `/external:I` tree) must stay absolute
+    so the checker skips it as a system header, even though it lives under the
+    build dir (hence under cwd) and would otherwise be stripped to a project-
+    relative path and flagged as an undeclared dependency. See issue #1321."""
+
+    def _line(self, abspath, level=1):
+        return '%s%s%s' % (inclusion_check._MSVC_INCUSION_PREFIX,
+                           ' ' * level, abspath)
+
+    def test_external_header_under_cwd_kept_absolute(self):
+        cwd = inclusion_check.to_unix_path(os.getcwd())
+        inc = cwd + '/build64_release/.cache/vcpkg/installed/x64-windows-static/include'
+        hdr = inc + '/fmt/format.h'
+        # Without the system-dir hint cwd is stripped -> looks in-tree (the bug).
+        _, stripped = inclusion_check._parse_msvc_hdr_level_line(self._line(hdr))
+        self.assertFalse(os.path.isabs(stripped))
+        # With it, the header stays absolute -> treated as a system header.
+        level, kept = inclusion_check._parse_msvc_hdr_level_line(
+            self._line(hdr), system_incs=(inc.lower(),))
+        self.assertEqual(kept, hdr)
+        self.assertTrue(os.path.isabs(kept))
+        self.assertEqual(level, 1)
+
+    def test_project_header_still_relativized(self):
+        cwd = inclusion_check.to_unix_path(os.getcwd())
+        hdr = cwd + '/app/example/foo.h'
+        _, out = inclusion_check._parse_msvc_hdr_level_line(
+            self._line(hdr), system_incs=('c:/some/other/include',))
+        self.assertEqual(out, 'app/example/foo.h')
+
+
 if __name__ == '__main__':
     unittest.main()

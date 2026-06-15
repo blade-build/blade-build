@@ -1329,6 +1329,12 @@ class CcTarget(Target):
         declared_hdrs, declared_incs = self._collect_declared_headers()
         declared_genhdrs, declared_genincs = _transitive_declared_generated_includes(self)
         direct_hdrs, generated_hdrs = self._collect_compiler_reported_hdrs(filename + '.details')
+        # System/external include dirs (`/external:I` / `-isystem`), absolute so
+        # the check can recognize headers compiled out of them (e.g. a vcpkg
+        # tree) as system on MSVC, where every header is reported absolute and
+        # would otherwise be mis-filed as in-tree. See issue #1321.
+        _, system_incs = self._get_incs_list()
+        system_incs = [os.path.abspath(inc) for inc in system_incs]
 
         target_check_info = {
             'type': self.type,
@@ -1345,6 +1351,7 @@ class CcTarget(Target):
             'declared_incs': declared_incs,
             'declared_genhdrs': declared_genhdrs,
             'declared_genincs': declared_genincs,
+            'system_incs': system_incs,
             'severity': config.get_item('cc_config', 'hdr_dep_missing_severity'),
             'suppress': verify_suppress.get(self.key, {}),
             'unused_deps_severity': config.get_item('cc_config', 'unused_deps_severity'),

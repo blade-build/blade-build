@@ -62,7 +62,7 @@ def _scan_source_includes(full_src):
             for quoted, angle in _INCLUDE_RE.findall(text)}
 
 
-def _read_all_incstk_paths(incstk_path, build_dir):
+def _read_all_incstk_paths(incstk_path, build_dir, system_incs=()):
     """Return the set of all relative paths the compiler traversed.
 
     Used to filter source-scanned `#include`s down to paths the compiler
@@ -79,7 +79,7 @@ def _read_all_incstk_paths(incstk_path, build_dir):
                 line = line.rstrip()
                 if not _is_inclusion_line(line):
                     break
-                level, hdr = _parse_hdr_level_line(line)
+                level, hdr = _parse_hdr_level_line(line, system_incs)
                 if level == -1 or os.path.isabs(hdr):
                     continue
                 # See `_scan_source_includes` for why posixpath.normpath.
@@ -204,7 +204,7 @@ def _is_inclusion_line(line):
     return line.startswith('.')
 
 
-def _parse_inclusion_stacks(path, build_dir):
+def _parse_inclusion_stacks(path, build_dir, system_incs=()):
     """Parae headers inclusion stacks from file.
 
     Given the following inclusions found in the app/example/foo.cc.incstk:
@@ -263,7 +263,7 @@ def _parse_inclusion_stacks(path, build_dir):
             if not _is_inclusion_line(line):
                 # The remaining lines are useless for us
                 break
-            level, hdr = _parse_hdr_level_line(line)
+            level, hdr = _parse_hdr_level_line(line, system_incs)
             if level == -1:
                 console.log(f'{path}: Unrecognized line {line}')
                 break
@@ -293,7 +293,7 @@ def _parse_inclusion_stacks(path, build_dir):
     return direct_hdrs, stacks
 
 
-def _parse_hdr_level_line(line):
+def _parse_hdr_level_line(line, system_incs=()):
     """Parse a normal line of a header stack file (GCC or MSVC format).
 
     GCC example:
@@ -302,7 +302,7 @@ def _parse_hdr_level_line(line):
         Note: including file:  common/rpc/rpc_client.h
     """
     if os.name == 'nt' and line.startswith(_MSVC_INCUSION_PREFIX):
-        return _parse_msvc_hdr_level_line(line)
+        return _parse_msvc_hdr_level_line(line, system_incs)
     return _parse_gcc_hdr_level_line(line)
 
 
@@ -318,20 +318,33 @@ def _parse_gcc_hdr_level_line(line):
     return level, hdr
 
 
-def _parse_msvc_hdr_level_line(line):
+def _parse_msvc_hdr_level_line(line, system_incs=()):
     """Parse an MSVC /showIncludes format header line.
 
     MSVC format: 'Note: including file:  path\\to\\header.h'
     where the whitespace between the prefix and the path indicates the nesting level.
+
+    `system_incs` are the consumer's system/external include dirs (`/external:I`,
+    lower-cased, '/'-separated, absolute). MSVC prints *every* header absolute;
+    one under a system dir (e.g. a vcpkg tree) is external, so it is kept
+    absolute here -- the caller skips absolute headers as system, exactly as GCC
+    reports `-isystem` headers absolute on POSIX. Other headers get the cwd
+    prefix stripped to the project-relative path MSVC does not print; doing that
+    to an external header would mis-file it as a project one, since these trees
+    live under the build dir (hence under cwd). See issue #1321.
     """
     line = line[len(_MSVC_INCUSION_PREFIX):]
     hdr = line.lstrip()
     level = len(line) - len(hdr)
     # Normalize to Unix-style paths for consistency with GCC output
     hdr = to_unix_path(hdr)
+    low = hdr.lower()
+    for inc in system_incs:
+        if low.startswith(inc + '/'):
+            return level, hdr  # external header: keep absolute -> skipped
     # Remove current working directory prefix if present
     cwd = to_unix_path(os.getcwd()).lower()
-    if hdr.lower().startswith(cwd):
+    if low.startswith(cwd):
         hdr = hdr[len(cwd) + 1:]
     return level, hdr
 
@@ -367,6 +380,12 @@ class Checker:
         self.declared_incs = _unix_path_set(target['declared_incs'])
         self.declared_genhdrs = _unix_path_set(target['declared_genhdrs'])
         self.declared_genincs = _unix_path_set(target['declared_genincs'])
+        # System/external include dirs (`/external:I`): lower-cased, '/'-sep,
+        # absolute. Used to keep MSVC's absolute external headers absolute so the
+        # check treats them as system, like GCC's -isystem on POSIX (issue #1321).
+        # `.get` for forward compatibility with incchk files from older blades.
+        self.system_incs = tuple(
+            p.replace('\\', '/').lower() for p in (target.get('system_incs') or []))
         self.hdrs_deps = _unix_path_dict(target['hdrs_deps'])
         self.private_hdrs_deps = _unix_path_dict(target['private_hdrs_deps'])
         self.allowed_undeclared_hdrs = _unix_path_dict(target['allowed_undeclared_hdrs'])
@@ -595,7 +614,8 @@ class Checker:
                 console.warning('No inclusion file found for %s' % full_src)
                 return
             scanned_count[0] += 1
-            direct_hdrs, stacks = _parse_inclusion_stacks(path, self.build_dir)
+            direct_hdrs, stacks = _parse_inclusion_stacks(
+                path, self.build_dir, self.system_incs)
             # `-H` silently elides direct `#include`s already pulled in by an
             # earlier transitive chain (multiple-include-guard optimization),
             # so supplement the depth-1 set with the source's literal
@@ -605,7 +625,8 @@ class Checker:
             # out because they never reached the compiler. See issue #1171
             # and the design note in `doc/*/develop/hdrs_check.md`.
             scanned = _scan_source_includes(full_src)
-            compiled_paths = _read_all_incstk_paths(path, self.build_dir)
+            compiled_paths = _read_all_incstk_paths(
+                path, self.build_dir, self.system_incs)
             direct_hdrs = list(set(direct_hdrs) | (scanned & compiled_paths))
             all_direct_hdrs.update(direct_hdrs)
             missing_dep_hdrs = set()
