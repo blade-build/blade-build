@@ -113,7 +113,14 @@ def _parse_module_list(value):
 
 
 def _extract_l_libs(tokens):
-    """Pull bare library names from `-lfoo` tokens (also `-l foo`)."""
+    """Pull bare library names from a pkg-config Libs/Libs.private token list.
+
+    Handles the GNU `-lfoo` / `-l foo` spelling and the MSVC import-library
+    spelling `foo.lib` given as a bare token -- how vcpkg/OpenSSL list Windows
+    system libs (e.g. `Libs.private: ws2_32.lib advapi32.lib crypt32.lib`). The
+    `.lib` suffix (and any directory) is stripped so a name renders uniformly;
+    the link rule re-adds it per toolchain. `-L` search-path tokens are skipped.
+    """
     libs = []
     want_name = False
     for tok in tokens:
@@ -124,6 +131,8 @@ def _extract_l_libs(tokens):
             want_name = True
         elif tok.startswith('-l'):
             libs.append(tok[2:])
+        elif tok.lower().endswith('.lib') and not tok.startswith('-'):
+            libs.append(os.path.splitext(os.path.basename(tok))[0])
     return libs
 
 
@@ -601,18 +610,18 @@ def _vcpkg_dep_handler(referrer, coordinate):
             lib_subdir(shared_triplet, profile))
     else:
         dynamic_lib_dir = info['lib_dir']
-    # System libs the port's pkg-config marks private (e.g. dbghelp on Windows):
-    # the consumer must link them, but vcpkg does not ship them (issue #1322).
-    system_libs = ([] if info['header_only']
-                   else port_system_libs(root, triplet, info['port'], info['lib_dir']))
     # Lazy import: cc_targets is loaded before this module, but keeping the
     # import local avoids a hard module-level cycle (cc_targets -> ... -> here).
     from blade.cc_targets import VcpkgLibrary
+    # root/triplet are stashed so the target can resolve the port's pkg-config
+    # private system libs (issue #1322) lazily at *generate* time -- the install
+    # tree does not exist yet here, during analyze (install runs in between).
     target = VcpkgLibrary(info['port'], info['lib'], key,
                           info['lib_dir'], info['include_dir'], info['header_only'],
                           linkage=linkage, dynamic_lib_dir=dynamic_lib_dir,
                           link_all_symbols=link_all_symbols,
-                          include_prefix=include_prefix, system_libs=system_libs)
+                          include_prefix=include_prefix,
+                          vcpkg_root=root or '', vcpkg_triplet=triplet or '')
     referrer.blade.register_target(target)
     return key
 

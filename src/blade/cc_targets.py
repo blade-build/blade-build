@@ -811,6 +811,12 @@ class CcTarget(Target):
                 sys_libs.append(lib_name)
                 continue
 
+            # A vcpkg port also contributes the OS/SDK libraries its pkg-config
+            # marks private (issue #1322); resolved now, at generate time, when
+            # the install tree exists. Its own archive is still added below.
+            if dep.type == 'vcpkg_library':
+                sys_libs.extend(dep.system_libs())
+
             lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
             if lib:
                 if dep.attr.get('link_all_symbols'):
@@ -1800,12 +1806,18 @@ class VcpkgLibrary(PrebuiltCcLibrary):
 
     def __init__(self, port, lib, key, lib_dir, include_dir, header_only,
                  linkage='static', dynamic_lib_dir=None,
-                 link_all_symbols=False, include_prefix=None, system_libs=None):
+                 link_all_symbols=False, include_prefix=None,
+                 vcpkg_root='', vcpkg_triplet=''):
         # Stash the vcpkg-resolved locations before super().__init__, which
         # calls our _setup() at the end of construction.
         self._vcpkg_port = port
         self._vcpkg_lib_dir = lib_dir
         self._vcpkg_header_only = header_only
+        # For resolving the port's pkg-config private system libs lazily, at
+        # generate time, when the install tree exists (issue #1322).
+        self._vcpkg_root = vcpkg_root
+        self._vcpkg_triplet = vcpkg_triplet
+        self._vcpkg_system_libs = None
         # linkage (vcpkg_config): 'static' (.a only), 'dynamic' (shared only --
         # one instance across the build for singletons like gflags/glog/protobuf
         # so flags/descriptors are not double-registered), or 'auto' (static .a
@@ -1860,16 +1872,21 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         # in-tree dirs). Flagging every vcpkg dep as "unused" would be pure
         # noise; precise external-header attribution is a follow-up.
         declare_header_less(self)
-        # The port's pkg-config private system libs (e.g. dbghelp on Windows)
-        # become `#name` deps so they propagate onto every consumer's link line,
-        # exactly like a hand-written `deps=['#dbghelp']` would (issue #1322).
-        # Registered before dependency expansion (which runs in the analyze
-        # phase, after this auto-created target exists), so they expand normally.
-        for sys_name in (system_libs or []):
-            dkey = '#:' + sys_name
-            self._add_system_library(dkey, sys_name)
-            if dkey not in self.deps:
-                self.deps.append(dkey)
+
+    def system_libs(self):
+        """OS/SDK libraries this port needs at link time (its pkg-config
+        `Libs.private`), e.g. dbghelp / ws2_32 on Windows (issue #1322).
+
+        Resolved lazily and cached: the vcpkg install tree is written *after*
+        analyze (when this target is created) and *before* generate (when a
+        consumer's link rule asks for this), so the `.pc` files exist only by
+        the time this is first called. A header-only port links nothing."""
+        if self._vcpkg_system_libs is None:
+            from blade import vcpkg  # local import: avoid module cycle
+            self._vcpkg_system_libs = ([] if self._vcpkg_header_only else
+                vcpkg.port_system_libs(self._vcpkg_root, self._vcpkg_triplet,
+                                       self._vcpkg_port, self._vcpkg_lib_dir))
+        return self._vcpkg_system_libs
 
     def _vcpkg_prefixed_incdir(self, include_prefix, include_dir):
         """Expose the vcpkg include dir under remapped prefixes via symlinks, so

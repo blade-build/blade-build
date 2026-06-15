@@ -109,6 +109,13 @@ class ParsePkgConfigTest(unittest.TestCase):
         self.assertEqual(pc['l_private'], ['dl'])
         self.assertIn('-pthread', pc['libs_private'])
 
+    def test_libs_private_msvc_dot_lib_form(self):
+        # vcpkg/OpenSSL on Windows list system libs as bare `foo.lib` tokens, not
+        # `-lfoo`; the `.lib` is stripped to a uniform bare name.
+        pc = vcpkg.parse_pkgconfig(
+            'Name: libcrypto\nLibs.private: ws2_32.lib advapi32.lib crypt32.lib\n')
+        self.assertEqual(pc['l_private'], ['ws2_32', 'advapi32', 'crypt32'])
+
     def test_header_only_has_no_libs(self):
         pc = vcpkg.parse_pkgconfig(_HEADER_ONLY_PC)
         self.assertEqual(pc['l_libs'], [])
@@ -189,6 +196,14 @@ class PortSystemLibsTest(unittest.TestCase):
         r1 = self._write_pc('libssl.pc', '-lcrypt32 -lws2_32')
         r2 = self._write_pc('libcrypto.pc', '-lws2_32 -ladvapi32')
         self._write_list('openssl', '3.2.1', [r1, r2])
+        self.assertEqual(
+            vcpkg.port_system_libs(self.root, self.TRIPLET, 'openssl', self.lib_dir),
+            ['advapi32', 'crypt32', 'ws2_32'])
+
+    def test_msvc_dot_lib_private_libs(self):
+        # The real OpenSSL-on-Windows case: Libs.private uses `foo.lib` tokens.
+        rel = self._write_pc('libcrypto.pc', 'ws2_32.lib advapi32.lib crypt32.lib')
+        self._write_list('openssl', '3.5.0', [rel])
         self.assertEqual(
             vcpkg.port_system_libs(self.root, self.TRIPLET, 'openssl', self.lib_dir),
             ['advapi32', 'crypt32', 'ws2_32'])
