@@ -59,6 +59,30 @@ proto_library(
 )
 ```
 
+### Import root: `strip_import_prefix`
+
+By default a proto is imported and its generated header is referenced relative
+to the workspace root: a proto at `//foo/bar/x.proto` is imported as
+`import "foo/bar/x.proto";` and generates `"foo/bar/x.pb.h"`.
+
+Some projects instead root their protos at a source subdirectory — their protos
+`import "bar/x.proto";` and their C++ `#include "bar/x.pb.h"`, where `bar/` lives
+under e.g. `src/`. Set `strip_import_prefix` to that root (a path relative to
+the BUILD package) so Blade compiles with `--proto_path=<package>/<prefix>` and
+both the `import`s and the generated `#include`s resolve there instead of at the
+workspace root:
+
+```python
+proto_library(
+    name = 'options_proto',
+    srcs = 'src/foo/bar/x.proto',   # imports "bar/y.proto"; code #includes "bar/x.pb.h"
+    strip_import_prefix = 'src/foo', # -> proto compiles with --proto_path=src/foo
+)
+```
+
+This is the analog of Bazel's `proto_library(strip_import_prefix=...)`. It
+currently affects the generated C++ outputs.
+
 ## thrift_library
 
 Can be used to generate thrift C++ library

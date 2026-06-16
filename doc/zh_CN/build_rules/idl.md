@@ -59,6 +59,29 @@ proto_library(
 )
 ```
 
+### 导入根目录：`strip_import_prefix`
+
+默认情况下，proto 的 import 路径和生成头文件的引用路径都相对于 workspace 根目录：
+位于 `//foo/bar/x.proto` 的 proto 以 `import "foo/bar/x.proto";` 导入，并生成
+`"foo/bar/x.pb.h"`。
+
+有些工程会把 proto 根置于某个源码子目录下：它们的 proto 之间以
+`import "bar/x.proto";` 互相导入，C++ 代码以 `#include "bar/x.pb.h"` 引用，而
+`bar/` 实际位于例如 `src/` 之下。此时把 `strip_import_prefix` 设为该根目录
+（相对于 BUILD 所在包的路径），Blade 就会用 `--proto_path=<包>/<前缀>` 编译，
+使 import 和生成的 `#include` 都相对该根目录解析，而非 workspace 根：
+
+```python
+proto_library(
+    name = 'options_proto',
+    srcs = 'src/foo/bar/x.proto',   # import "bar/y.proto"，代码 #include "bar/x.pb.h"
+    strip_import_prefix = 'src/foo', # -> 以 --proto_path=src/foo 编译
+)
+```
+
+这是 Bazel `proto_library(strip_import_prefix=...)` 的对应物，目前作用于生成的
+C++ 产物。
+
 ## thrift_library
 
 用于定义 thrift 库目标

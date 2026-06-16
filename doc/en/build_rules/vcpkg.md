@@ -209,6 +209,34 @@ deps = [
 A bare `vcpkg#openssl` is rejected, so you never accidentally pull in libraries
 you do not use.
 
+## Transitive library dependencies
+
+A port may depend on other vcpkg libraries that it does not itself bundle —
+notably `protobuf` (v22+), whose `protobuf.pc` lists dozens of `absl_*` plus
+`utf8_range` in pkg-config `Requires:`. Blade follows those `Requires:` and
+links the required sibling archives automatically, so a single
+`vcpkg#protobuf:protobuf` reference resolves the whole abseil set; you do not
+list them yourself. (System/SDK libraries a port needs — `ws2_32`, `dbghelp`,
+… — are resolved separately from its `Libs.private` / CMake link interface.)
+
+## Using a vcpkg protoc for `proto_library`
+
+protobuf couples the `protoc` compiler to its runtime version, so generated
+`.pb.cc` must be produced by a `protoc` matching the `libprotobuf` you link.
+Point `proto_library_config` at the vcpkg-provided protoc (and libprotobuf) so
+both come from the same pinned port:
+
+```python
+proto_library_config(
+    protoc = 'vcpkg#protobuf',                 # protoc from the vcpkg protobuf port
+    protobuf_libs = ['vcpkg#protobuf:protobuf'],
+)
+```
+
+`'vcpkg#<port>'` resolves to the protoc installed in Blade's vcpkg tree. The
+resolved protoc binary is tracked as a build input, so bumping the pinned
+protobuf version re-runs codegen automatically (no stale `.pb.*`).
+
 ## Header-only ports
 
 For a header-only port, use the `:hdrs` sentinel — Blade exposes the include

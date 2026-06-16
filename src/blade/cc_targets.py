@@ -816,6 +816,11 @@ class CcTarget(Target):
             # the install tree exists. Its own archive is still added below.
             if dep.type == 'vcpkg_library':
                 sys_libs.extend(dep.system_libs())
+                # ... and the sibling vcpkg archives it transitively requires
+                # (protobuf -> absl/utf8_range). Appended after its own archive
+                # below; macOS ld64 re-scans archives so inter-abseil cycles
+                # resolve regardless of order.
+                usr_libs.extend(dep.required_archives())
 
             lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
             if lib:
@@ -1830,6 +1835,7 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         self._vcpkg_root = vcpkg_root
         self._vcpkg_triplet = vcpkg_triplet
         self._vcpkg_system_libs = None
+        self._vcpkg_required_archives = None
         # linkage (vcpkg_config): 'static' (.a only), 'dynamic' (shared only --
         # one instance across the build for singletons like gflags/glog/protobuf
         # so flags/descriptors are not double-registered), or 'auto' (static .a
@@ -1899,6 +1905,21 @@ class VcpkgLibrary(PrebuiltCcLibrary):
                 vcpkg.port_system_libs(self._vcpkg_root, self._vcpkg_triplet,
                                        self._vcpkg_port, self._vcpkg_lib_dir))
         return self._vcpkg_system_libs
+
+    def required_archives(self):
+        """Transitive *sibling vcpkg* archives this port needs at link time,
+        e.g. protobuf -> dozens of `absl_*` + `utf8_range` (issue #1236).
+
+        A port names these in its pkg-config `Requires:`; blade links the port's
+        own archive but a consumer must also link the required ones. Resolved
+        lazily and cached, like `system_libs()` -- the install tree's `.pc`
+        files exist only by generate time. [] for a header-only port."""
+        if self._vcpkg_required_archives is None:
+            from blade import vcpkg  # local import: avoid module cycle
+            self._vcpkg_required_archives = ([] if self._vcpkg_header_only else
+                vcpkg.port_required_libs(self._vcpkg_root, self._vcpkg_triplet,
+                                         self._vcpkg_port, self._vcpkg_lib_dir))
+        return self._vcpkg_required_archives
 
     def _vcpkg_prefixed_incdir(self, include_prefix, include_dir):
         """Expose the vcpkg include dir under remapped prefixes via symlinks, so

@@ -435,7 +435,11 @@ class Target:
                     self.deps.append(dkey)
                 self._implicit_deps.add(dkey)
                 continue
-            if not dep.startswith('//') and not dep.startswith('#'):
+            # Only a plain label gets the implicit `//` (workspace-root) prefix.
+            # A `<scheme>#<coordinate>` provider reference (e.g. vcpkg#port:lib)
+            # or a leading-`#` system lib must reach _unify_dep verbatim, which
+            # dispatches on the `#`; prefixing `//` would corrupt the scheme.
+            if not dep.startswith('//') and '#' not in dep:
                 dep = '//' + dep
             dkey = self._unify_dep(dep)
             if not dkey:

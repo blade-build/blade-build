@@ -93,6 +93,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
                  source_encoding: str,
                  cpp_outs: StrOrListOpt,
                  plugin_opts: dict[str, list[str]] | None,
+                 strip_import_prefix: str,
                  kwargs: dict[str, object]):
         """Init method.
 
@@ -129,6 +130,20 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
                 kwargs=kwargs)
 
         self._check_proto_srcs_name(srcs)
+
+        # Import root (bazel `strip_import_prefix` analog): when set, protos are
+        # compiled with `--proto_path=<root>` so imports and the generated
+        # `#include`s are rooted there (e.g. with prefix 'src', a proto at
+        # src/brpc/x.proto is imported as "brpc/x.proto" and generates
+        # "brpc/x.pb.h"), instead of blade's default workspace-relative paths.
+        # The prefix is interpreted relative to the BUILD package, matching how
+        # `srcs` are. Empty -> legacy behavior (byte-for-byte unchanged).
+        self._import_root = ''
+        if strip_import_prefix:
+            self._import_root = os.path.normpath(
+                os.path.join(self.path, strip_import_prefix))
+        self.attr['strip_import_prefix'] = strip_import_prefix
+
         if srcs:
             self.attr['public_protos'] = [self._source_file_path(s) for s in srcs]
         self._add_tags('lang:proto', 'type:library')
@@ -245,9 +260,21 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         if self.attr['generate_java']:
             self._expand_deps_java_generation()
 
+    def _proto_gen_base(self, src):
+        """The generated-file base (no extension) for a proto source.
+
+        Legacy: the BUILD-relative path minus `.proto`. With an import root,
+        the path relative to that root, so generated files land at
+        `<target_dir>/<root-relative>.pb.{cc,h}` and consumers `#include` them
+        with the same root-relative path (resolved via `-I<build_dir>`).
+        """
+        if self._import_root:
+            return os.path.relpath(self._source_file_path(src), self._import_root)[:-6]
+        return src[:-6]
+
     def _proto_gen_cpp_files(self, src):
         """_proto_gen_cpp_files."""
-        proto_name = src[:-6]
+        proto_name = self._proto_gen_base(src)
         sources = []
         headers = []
         for cpp_out in self.attr['cpp_outs']:
@@ -348,12 +375,32 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         self._add_protoc_direct_dependencies(vars)
         implicit_deps = self.protoc_direct_dependencies()
         implicit_deps.extend(plugin_paths)
+        # Re-run codegen when the protoc binary itself changes (e.g. a vcpkg
+        # protobuf version bump installs a new protoc at the same path).
+        protoc = _resolve_protoc(self.blade.get_build_toolchain(), self.build_dir,
+                                 config.get_item('proto_library_config', 'protoc'))
+        implicit_deps.extend(_protoc_implicit_dep(protoc))
         cpp_sources = []
         for src in self.srcs:
             full_sources, full_headers = self._proto_gen_cpp_files(src)
-            vars['srcdir'] = to_unix_path(os.path.dirname(self._source_file_path(src)))
+            real_input = self._source_file_path(src)
+            vars['srcdir'] = to_unix_path(os.path.dirname(real_input))
+            # The `proto` rule takes the proto-path, the --cpp_out base and the
+            # protoc input as per-edge vars so an import-rooted target compiles
+            # with `--proto_path=<root>` and a root-relative input (canonical
+            # name == generated path), while legacy targets keep `--proto_path=.`
+            # and the workspace-relative input.
+            if self._import_root:
+                vars['protopath'] = to_unix_path(self._import_root)
+                vars['protocppout'] = to_unix_path(self.target_dir)
+                vars['protoinput'] = to_unix_path(
+                    os.path.relpath(real_input, self._import_root))
+            else:
+                vars['protopath'] = '.'
+                vars['protocppout'] = to_unix_path(self.build_dir)
+                vars['protoinput'] = to_unix_path(real_input)
             self.generate_build('proto', full_sources + full_headers,
-                                inputs=self._source_file_path(src),
+                                inputs=real_input,
                                 implicit_deps=implicit_deps, variables=vars)
             sources, headers = self._proto_gen_cpp_file_names(src)
             cpp_sources.extend(sources)
@@ -433,7 +480,7 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
 
     def _proto_gen_cpp_file_names(self, source):
         """Return just file names"""
-        base = source[:-6]
+        base = self._proto_gen_base(source)
         sources = []
         headers = []
         for cpp_out in self.attr['cpp_outs']:
@@ -464,6 +511,7 @@ def proto_library(
         source_encoding: str = 'iso-8859-1',
         cpp_outs: StrOrListOpt = None,
         plugin_opts: dict[str, list[str]] | None = None,
+        strip_import_prefix: str = '',
         **kwargs: object):
     """proto_library target.
     Args:
@@ -471,6 +519,11 @@ def proto_library(
         target_languages (Sequence[str]): Code for target languages to be generated, such as
             `java`, `python`, see protoc's `--xx_out`s.
             NOTE: The `cpp` target code is always generated.
+        strip_import_prefix (str): Import root for the protos (bazel
+            `strip_import_prefix` analog), relative to the BUILD package. When
+            set, protos compile with `--proto_path=<package>/<prefix>` so their
+            imports and generated `#include`s are rooted there rather than at
+            the workspace root. Currently affects the C++ outputs.
     """
     if cpp_outs is None:
         cpp_outs = [".pb"]
@@ -488,6 +541,7 @@ def proto_library(
             source_encoding=source_encoding,
             cpp_outs=cpp_outs,
             plugin_opts=plugin_opts,
+            strip_import_prefix=strip_import_prefix,
             kwargs=kwargs)
     build_manager.instance.register_target(proto_library_target)
 
@@ -499,13 +553,54 @@ def protoc_import_path_option(incs):
     return ' '.join(['-I=%s' % inc for inc in incs])
 
 
+def _resolve_protoc(toolchain, build_dir, protoc):
+    """Resolve a ``vcpkg#<port>`` protoc reference to an installed protoc path.
+
+    A plain path/command (e.g. ``'protoc'`` or an absolute path) is returned
+    unchanged. ``'vcpkg#protobuf'`` resolves to the protoc shipped by that port
+    in blade's vcpkg tree, so the generated C++ matches the vcpkg libprotobuf
+    the project links (protobuf couples protoc to the runtime version). The
+    port is installed during setup, before the protoc rule runs.
+    """
+    if not protoc.startswith('vcpkg#'):
+        return protoc
+    from blade import vcpkg  # local import: avoid a config<->vcpkg import cycle
+    vcpkg_cfg = config.get_section('vcpkg_config')
+    vanilla = vcpkg.triplet_for_toolchain(toolchain)
+    root, triplet = vcpkg.install_location(vcpkg_cfg, vanilla, build_dir)
+    exe = 'protoc.exe' if toolchain.target_os == 'windows' else 'protoc'
+    return os.path.join(root, 'installed', triplet, 'tools', 'protobuf', exe)
+
+
+def _protoc_implicit_dep(protoc):
+    """The protoc binary as a build input, for ninja staleness tracking.
+
+    Declaring the protoc binary as an implicit dependency makes ninja re-run
+    codegen when the binary changes -- e.g. when the pinned vcpkg protobuf
+    version is bumped and a new protoc is installed at the same path, or a
+    system protobuf is upgraded (the rule command string is unchanged, so
+    without this ninja would keep stale .pb.*).
+
+    A concrete path is used directly; a bare command name is resolved against
+    $PATH (the command still runs bare, PATH-resolved at build time, but the
+    resolved absolute path is what ninja stats). Returns [] only if a bare name
+    isn't on $PATH at generation time -- then there's nothing to track.
+    """
+    if os.sep in protoc or '/' in protoc:
+        return [protoc]
+    import shutil
+    resolved = shutil.which(protoc)
+    return [resolved] if resolved else []
+
+
 def _generate_proto_rules(ctx):
     """Ninja rules for proto_library (cpp/java/python/descriptors/go)."""
     proto_config = ctx.config_section('proto_library_config')
-    protoc = proto_config['protoc']
+    protoc = _resolve_protoc(ctx.toolchain, ctx.build_dir, proto_config['protoc'])
     protoc_java = protoc
     if proto_config['protoc_java']:
-        protoc_java = proto_config['protoc_java']
+        protoc_java = _resolve_protoc(
+            ctx.toolchain, ctx.build_dir, proto_config['protoc_java'])
     protobuf_incs = protoc_import_path_option(proto_config['protobuf_incs'])
     protobuf_java_incs = protobuf_incs
     if proto_config['protobuf_java_incs']:
@@ -518,10 +613,11 @@ def _generate_proto_rules(ctx):
             '''))
     ctx.emit_rule(NinjaRule(
         name='proto',
-        command='%s --proto_path=. %s -I=${srcdir} '
-                '--cpp_out=%s ${protocflags} ${protoccpppluginflags} ${in}' % (
-                    protoc, protobuf_incs, ctx.build_dir),
-        description='PROTOC CPP ${in}'))
+        command='%s --proto_path=${protopath} %s -I=${srcdir} '
+                '--cpp_out=${protocppout} ${protocflags} ${protoccpppluginflags} '
+                '${protoinput}' % (
+                    protoc, protobuf_incs),
+        description='PROTOC CPP ${protoinput}'))
     # Generate Java into a per-proto gen dir (${javagen}) and zip whatever
     # protoc produced into a single `.srcjar` (${out}). This handles an
     # unpredictable output set -- e.g. `option java_multiple_files = true;`

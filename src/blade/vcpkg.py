@@ -287,6 +287,62 @@ def port_system_libs(root, triplet, port, lib_dir):
     return sorted(result)
 
 
+def _sibling_archive_path(lib_dir, bare):
+    """Absolute path of a sibling vcpkg archive given its bare stem."""
+    for c in ('lib%s.a' % bare, '%s.a' % bare, '%s.lib' % bare):
+        p = os.path.join(lib_dir, c)
+        if os.path.isfile(p):
+            return os.path.abspath(p)
+    return ''
+
+
+def port_required_libs(root, triplet, port, lib_dir):
+    """Transitive *sibling vcpkg* archives a port needs at link time.
+
+    A port declares its inter-port dependencies in its pkg-config `Requires:`
+    (and sometimes as a sibling `-l` in `Libs`): protobuf -> dozens of `absl_*`
+    + `utf8_range`, each a real archive in `lib_dir`. blade links the port's own
+    archive, but a consumer must also link these or hit unresolved externals
+    (e.g. protobuf's descriptor.cc referencing absl). This walks `Requires:`
+    breadth-first across the modules' `.pc` files and returns the sibling
+    archives' absolute paths, de-duplicated. System libs are handled separately
+    by `port_system_libs`; [] if the port has no pkg-config metadata.
+
+    Ordering is not topologically sorted: callers must link these in a way that
+    tolerates inter-archive cycles (macOS ld64 re-scans archives; ELF needs a
+    `--start-group`). abseil has such cycles, so order alone can't satisfy it.
+    """
+    pkgconfig = os.path.join(lib_dir, 'pkgconfig')
+    queue = [p for p in _port_installed_files(root, triplet, port)
+             if p.endswith('.pc')]
+    seen_pc, seen_lib, archives = set(), set(), []
+    while queue:
+        pc_path = queue.pop()
+        ap = os.path.abspath(pc_path)
+        if ap in seen_pc:
+            continue
+        seen_pc.add(ap)
+        try:
+            with open(pc_path, encoding='utf-8', errors='ignore') as f:
+                pc = parse_pkgconfig(f.read())
+        except OSError:
+            continue
+        for name in pc['l_libs'] + pc['l_private']:
+            bare = _strip_lib_ext(name)
+            if bare.lower() in seen_lib:
+                continue
+            if _is_sibling_vcpkg_lib(lib_dir, bare):
+                seen_lib.add(bare.lower())
+                path = _sibling_archive_path(lib_dir, bare)
+                if path:
+                    archives.append(path)
+        for mod in pc['requires'] + pc['requires_private']:
+            cand = os.path.join(pkgconfig, mod + '.pc')
+            if os.path.isfile(cand):
+                queue.append(cand)
+    return archives
+
+
 # --- Phase 2 orchestration inputs: synthetic manifest + overlay triplet ------
 #
 # When blade drives `vcpkg install` itself, it generates a manifest from the

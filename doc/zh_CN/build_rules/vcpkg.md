@@ -192,6 +192,32 @@ deps = [
 
 裸写 `vcpkg#openssl` 会被拒绝，因此不会拉入用不到的库。
 
+## 传递性库依赖
+
+一个 port 可能依赖其他它自身并不打包的 vcpkg 库——典型的是 `protobuf`（v22+），
+其 `protobuf.pc` 在 pkg-config 的 `Requires:` 中列出了数十个 `absl_*` 以及
+`utf8_range`。Blade 会顺着这些 `Requires:` 自动链接所需的兄弟归档，因此单个
+`vcpkg#protobuf:protobuf` 引用即可解析整套 abseil，你无需自己一一列出。（port
+所需的系统/SDK 库——`ws2_32`、`dbghelp` 等——则单独从其 `Libs.private` / CMake
+链接接口中解析。）
+
+## 为 `proto_library` 使用 vcpkg 的 protoc
+
+protobuf 把 `protoc` 编译器与其运行时版本强耦合，因此生成的 `.pb.cc` 必须由与所
+链接 `libprotobuf` 匹配的 `protoc` 产生。把 `proto_library_config` 指向 vcpkg 提供
+的 protoc（与 libprotobuf），让二者来自同一个被 pin 的 port：
+
+```python
+proto_library_config(
+    protoc = 'vcpkg#protobuf',                 # 来自 vcpkg protobuf port 的 protoc
+    protobuf_libs = ['vcpkg#protobuf:protobuf'],
+)
+```
+
+`'vcpkg#<port>'` 会解析为安装在 Blade vcpkg 树中的 protoc。解析出的 protoc 二进制
+会被作为构建输入跟踪，因此升级被 pin 的 protobuf 版本会自动重新生成代码（不会残留
+过期的 `.pb.*`）。
+
 ## 仅头文件 port
 
 仅头文件的 port 用 `:hdrs` 哨兵——Blade 暴露 include 目录，不链接任何归档：
