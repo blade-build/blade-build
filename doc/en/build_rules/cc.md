@@ -132,6 +132,53 @@ Attributes:
   depend on the implementation part of the gtest library. It is suitable to declare it in a separate `gtest_prod`
   library instead of putting it into `gtest` library, Otherwise, the gtest library may be linked into the product code.
 
+- `textual_hdrs`: list = []
+
+  Header-like files that are exposed to dependents and `#include`d **textually**,
+  but are never compiled or parsed on their own. This is the analog of Bazel's
+  `textual_hdrs`.
+
+  Unlike `hdrs` — which must be self-contained, are checked for a header file
+  extension, and are each preprocessed standalone to build the inclusion-
+  dependency graph — `textual_hdrs` are exempt from all of that. They may have
+  any extension and need not be valid in isolation. Like `hdrs`, they are
+  declared as provided by this library, so a dependent that `#include`s one
+  passes the missing-dependency check (and the dependency counts as used).
+
+  Use it for files that only make sense pasted into the middle of another
+  translation unit:
+
+  - **X-macro / token lists** — a file `#include`d repeatedly with different
+    macro definitions to expand a list (no include guard, not standalone):
+
+    ```python
+    cc_library(
+        name = 'opcodes',
+        srcs = ['vm.cc'],          # vm.cc: #define OP(x) ...; #include "opcodes.def"
+        hdrs = ['vm.h'],
+        textual_hdrs = ['opcodes.def'],
+    )
+    ```
+
+  - **Platform-dispatch fragments** — one source `#include`s the right
+    implementation fragment per platform, so the fragments are not compiled
+    directly:
+
+    ```python
+    cc_library(
+        name = 'event_loop',
+        # event_loop.cc: #if __linux__  #include "event_loop_epoll.inc" ...
+        srcs = ['event_loop.cc'],
+        hdrs = ['event_loop.h'],
+        textual_hdrs = ['event_loop_epoll.inc', 'event_loop_kqueue.inc'],
+    )
+    ```
+
+  A file `#include`d textually but listed in `hdrs` instead would fail: blade
+  rejects a non-header extension, and otherwise tries to preprocess it on its
+  own — which errors on a fragment that references symbols/macros only defined
+  by its includer. `textual_hdrs` is the correct home for such files.
+
 - `link_all_symbols`: bool = False
 
   If you depends on the global initialization to register something, but didn't access these

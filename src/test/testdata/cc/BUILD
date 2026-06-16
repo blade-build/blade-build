@@ -31,6 +31,16 @@ cc_library(
     link_all_symbols=1
 )
 
+cc_library(
+    name='textual',
+    srcs=['textual_user.cpp'],
+    hdrs=[],
+    # numbers_data.cc is #included textually by textual_user.cpp; it is not a
+    # standalone TU and has a non-header extension, so it belongs in
+    # textual_hdrs rather than hdrs.
+    textual_hdrs=['numbers_data.cc'],
+)
+
 resource_library(
     name = 'static_resource',
     srcs = [

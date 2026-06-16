@@ -125,6 +125,47 @@ cc_library(
   常用来在产品代码中为测试提供支持，但是它本身只包含一些声明，并不依赖 gtest 库的实现部分。这种情况就适合再单独声明成一个
   独立的 `gtest_prod` 库，而不是和 `gtest` 库放在一起，否则可能导致 gtest 库被链接进产品代码。
 
+- `textual_hdrs`: list = []，以**文本方式**被 `#include` 的类头文件文件。
+
+  这类文件会暴露给依赖方并被文本包含，但从不单独编译或解析。这是 Bazel
+  `textual_hdrs` 的对应物。
+
+  与 `hdrs` 不同——`hdrs` 必须是自洽的、会检查头文件扩展名、并且每个都会被单独
+  预处理以构建包含依赖图——`textual_hdrs` 不受这些约束：可以是任意扩展名，也无需
+  能够独立编译。与 `hdrs` 一样，它们会被声明为由本库提供，因此依赖方 `#include`
+  其中之一即可通过“缺失依赖”检查（并使该依赖计为已使用）。
+
+  它适用于那些只有被粘贴进另一个翻译单元中间才有意义的文件：
+
+  - **X-macro / 列表展开**——一个文件以不同的宏定义被反复 `#include` 以展开一张表
+    （没有 include guard，无法独立编译）：
+
+    ```python
+    cc_library(
+        name = 'opcodes',
+        srcs = ['vm.cc'],          # vm.cc: #define OP(x) ...; #include "opcodes.def"
+        hdrs = ['vm.h'],
+        textual_hdrs = ['opcodes.def'],
+    )
+    ```
+
+  - **按平台分发的实现片段**——某个源文件按平台 `#include` 对应的实现片段，因此这些
+    片段不会被直接编译：
+
+    ```python
+    cc_library(
+        name = 'event_loop',
+        # event_loop.cc: #if __linux__  #include "event_loop_epoll.inc" ...
+        srcs = ['event_loop.cc'],
+        hdrs = ['event_loop.h'],
+        textual_hdrs = ['event_loop_epoll.inc', 'event_loop_kqueue.inc'],
+    )
+    ```
+
+  若把这种被文本包含的文件错误地列入 `hdrs`，则会失败：blade 会拒绝非头文件扩展名，
+  否则会尝试单独预处理它——而引用了仅由其包含者定义的符号/宏的片段会因此报错。
+  `textual_hdrs` 才是这类文件的正确归属。
+
 - `link_all_symbols`: bool = False，整个库的内容不管是否用到，全部链接到可执行文件中。
 
   如果你通过全局对象的构造函数执行一些动作（比如注册一些可以按运行期间字符串形式的名字动态创建的类），而这个全局变量本身没有被任何地方引用到。

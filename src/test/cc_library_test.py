@@ -39,6 +39,17 @@ class TestCcLibrary(blade_test.TargetTest):
 
         self.assertDynamicLinkFlags(string_depends_libs)
 
+    def testTextualHdrs(self):
+        """textual_hdrs: a #included fragment is exposed but never compiled standalone."""
+        self.assertTrue(self.runBlade())
+        # The includer is compiled normally...
+        self.assertTrue(self.findCommand(['-c', 'textual_user.cpp.o']))
+        # ...but the textual .cc fragment is not compiled on its own. (Listing
+        # it in `hdrs` instead would have failed to load -- a non-header
+        # extension -- so a successful build already proves it was accepted as
+        # a textual header.)
+        self.assertFalse(any('numbers_data.cc.o' in line for line in self.build_output))
+
 
 if __name__ == '__main__':
     blade_test.run(TestCcLibrary)

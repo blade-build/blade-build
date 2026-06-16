@@ -461,6 +461,30 @@ class CcTarget(Target):
         declare_hdrs(self, hdrs)
         self.attr['expanded_hdrs'] += self._expand_sources(hdrs)
 
+    def _set_textual_hdrs(self, textual_hdrs):
+        """Set the "textual_hdrs" attribute (the bazel `textual_hdrs` analog).
+
+        Textual headers are files exposed to dependents and `#include`d
+        textually, but NEVER compiled or parsed on their own -- so any
+        extension is allowed (e.g. an `.inc`, an X-macro token-list `.list`, or
+        a platform `.cc`/`.cpp` fragment dispatched by another source). Unlike
+        `hdrs`, they are NOT added to `expanded_hdrs`, so the standalone
+        header inclusion-stack preprocess (the `cxxhdrs` rule, which would
+        choke on a fragment that isn't valid in isolation) skips them. They are
+        still declared as provided-by-this-target, so a dependent that
+        `#include`s one satisfies the inclusion-dependency check (and marks
+        this library as a used dependency).
+        """
+        textual_hdrs = var_to_list(textual_hdrs)
+        self.attr['textual_hdrs'] = textual_hdrs
+        if not textual_hdrs:
+            return
+        # Empty `exts` validates the path (no '..' / absolute, no duplicates)
+        # while skipping the header-extension check -- the whole point is to
+        # allow non-header extensions here.
+        self._check_sources('textual header', textual_hdrs, set())
+        declare_hdrs(self, textual_hdrs)
+
     __cxx_keyword_list = frozenset([
         'and', 'and_eq', 'alignas', 'alignof', 'asm', 'auto',
         'bitand', 'bitor', 'bool', 'break', 'case', 'catch',
@@ -1478,6 +1502,7 @@ class CcLibrary(CcTarget):
                  name: str | None,
                  srcs: StrOrListOpt,
                  hdrs: StrOrListOpt,
+                 textual_hdrs: StrOrListOpt,
                  deps: StrOrListOpt,
                  visibility: StrOrListOpt,
                  tags: StrOrListOpt,
@@ -1590,6 +1615,7 @@ class CcLibrary(CcTarget):
         self._add_tags('lang:cc', 'type:library')
         self._set_secret(secret, secret_revision_file)
         self._set_hdrs(hdrs)
+        self._set_textual_hdrs(textual_hdrs)
 
     def _validate_allow_undefined(self, allow_undefined):
         """Normalize and validate the target's allow_undefined attribute.
@@ -2148,6 +2174,7 @@ def cc_library(
         name: str,
         srcs: StrOrListOpt = None,
         hdrs: StrOrListOpt = None,
+        textual_hdrs: StrOrListOpt = None,
         deps: StrOrListOpt = None,
         keep_deps: StrOrListOpt = None,
         visibility: StrOrListOpt = None,
@@ -2216,6 +2243,7 @@ def cc_library(
             name=name,
             srcs=srcs,
             hdrs=hdrs,
+            textual_hdrs=textual_hdrs,
             deps=deps,
             visibility=visibility,
             tags=tags,
