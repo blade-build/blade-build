@@ -255,6 +255,18 @@ class ChainloadTest(unittest.TestCase):
         self.assertIn('set(CMAKE_CXX_COMPILER "C:/VS/bin/cl.exe")', c)
         self.assertNotIn('\\', c)
 
+    def test_position_independent_sets_pic_property(self):
+        # The triplet's VCPKG_C/CXX_FLAGS=-fPIC is dropped for CMake ports when a
+        # chainload toolchain replaces vcpkg's stock one, so the PIC property must
+        # be set here for a static .a to be linkable into a .so on ELF.
+        c = vcpkg.chainload_cmake('/usr/bin/gcc', '/usr/bin/g++',
+                                  position_independent=True)
+        self.assertIn('set(CMAKE_POSITION_INDEPENDENT_CODE ON)', c)
+
+    def test_position_independent_off_by_default(self):
+        c = vcpkg.chainload_cmake('/usr/bin/gcc', '/usr/bin/g++')
+        self.assertNotIn('CMAKE_POSITION_INDEPENDENT_CODE', c)
+
 
 if __name__ == '__main__':
     unittest.main()

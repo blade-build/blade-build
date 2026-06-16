@@ -345,7 +345,7 @@ def configuration_json(registries):
     return {'registries': [dict(r) for r in registries]}
 
 
-def chainload_cmake(cc, cxx, c_flags='', cxx_flags=''):
+def chainload_cmake(cc, cxx, c_flags='', cxx_flags='', position_independent=False):
     """CMake toolchain file pinning vcpkg's compiler to blade's resolved one."""
     # CMake parses backslashes in a string as escapes, so a Windows compiler
     # path (C:\...\cl.exe) must use forward slashes (CMake accepts them on
@@ -353,11 +353,21 @@ def chainload_cmake(cc, cxx, c_flags='', cxx_flags=''):
     # vcpkg port configure fails ("Invalid character escape").
     cc = cc.replace('\\', '/')
     cxx = cxx.replace('\\', '/')
-    return (
+    text = (
         'set(CMAKE_C_COMPILER "%s")\n'
         'set(CMAKE_CXX_COMPILER "%s")\n'
         'set(CMAKE_C_FLAGS_INIT "%s")\n'
         'set(CMAKE_CXX_FLAGS_INIT "%s")\n' % (cc, cxx, c_flags, cxx_flags))
+    if position_independent:
+        # The overlay triplet's VCPKG_C/CXX_FLAGS=-fPIC is applied by vcpkg's
+        # *stock* toolchain, but VCPKG_CHAINLOAD_TOOLCHAIN_FILE *replaces* that
+        # toolchain for CMake ports -- so -fPIC never reaches them and a static
+        # .a linked into a .so fails on ELF ("relocation ... can not be used
+        # when making a shared object; recompile with -fPIC"). Set the property
+        # here, in the chainload file, where it always applies. (autotools/make
+        # ports are unaffected: they read VCPKG_C_FLAGS directly, not via this.)
+        text += 'set(CMAKE_POSITION_INDEPENDENT_CODE ON)\n'
+    return text
 
 
 # Overlay triplet target-OS settings, mirroring vcpkg's stock triplets. Linux
@@ -738,7 +748,8 @@ def setup(builder):
     manifest = json.dumps(manifest_json(packages, cfg.get('baseline', '')),
                           indent=2, sort_keys=True)
     chainload = chainload_cmake(toolchain.tool('cc') or 'cc',
-                                toolchain.tool('cxx') or 'c++')
+                                toolchain.tool('cxx') or 'c++',
+                                position_independent=(toolchain.target_os != 'windows'))
     files = {
         os.path.join(base, 'vcpkg.json'): manifest,
         os.path.join(base, 'blade-chainload.cmake'): chainload,
