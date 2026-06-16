@@ -45,6 +45,16 @@ class TestProtoLibrary(blade_test.TargetTest):
         self.assertTrue(meta_depends_libs)
         self.assertIn('libuse_protos.so', uses_depends_libs)
 
+    def testCrossRootImportProtoPath(self):
+        """A proto_library whose dependency is rooted under a different
+        strip_import_prefix compiles with that dependency's import root added as
+        a `-I` proto-path, so a cross-root import resolves."""
+        self.assertTrue(self.dryRun())
+        # cross_root_proto is rooted at proto/main_root; its dep other_root_proto
+        # is rooted at proto/sub -> that root must appear as a -I on the compile.
+        cmd = self.findCommand(['--proto_path=proto/main_root', '--cpp_out'])
+        self.assertIn('-I=proto/sub', cmd)
+
 
 if __name__ == '__main__':
     blade_test.run(TestProtoLibrary)

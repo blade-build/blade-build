@@ -370,6 +370,27 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
             dependencies += config.get_item('proto_library_config', 'well_known_protos')
             vars['protocflags'] = '--direct_dependencies %s' % ':'.join(dependencies)
 
+    def _dep_import_roots(self):
+        """Import roots of dependency proto_libraries, as protoc `-I` paths.
+
+        protoc reads the .proto source of every (transitively) imported proto,
+        so a proto compiled here must resolve imports against the import root of
+        each proto_library it depends on -- not only its own. When all related
+        protos share one root (the common case) this adds nothing; it matters
+        only when libraries use different `strip_import_prefix` roots.
+        """
+        targets = self.blade.get_build_targets()
+        incs, seen = [], set()
+        for key in self.expanded_deps:
+            dep = targets.get(key)
+            if dep is None or dep.type != 'proto_library':
+                continue
+            root = getattr(dep, '_import_root', '')
+            if root and root != self._import_root and root not in seen:
+                seen.add(root)
+                incs.append('-I=%s' % to_unix_path(root))
+        return ' '.join(incs)
+
     def _proto_cpp_rules(self):
         plugin_paths, vars = self._protoc_plugin_parameters('cpp')
         self._add_protoc_direct_dependencies(vars)
@@ -380,6 +401,9 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         protoc = _resolve_protoc(self.blade.get_build_toolchain(), self.build_dir,
                                  config.get_item('proto_library_config', 'protoc'))
         implicit_deps.extend(_protoc_implicit_dep(protoc))
+        # Extra `-I` proto-paths for dependencies rooted elsewhere (constant
+        # across this target's srcs). Empty when deps share this root.
+        vars['protodeproots'] = self._dep_import_roots()
         cpp_sources = []
         for src in self.srcs:
             full_sources, full_headers = self._proto_gen_cpp_files(src)
@@ -624,7 +648,7 @@ def _generate_proto_rules(ctx):
             '''))
     ctx.emit_rule(NinjaRule(
         name='proto',
-        command='%s --proto_path=${protopath} %s -I=${srcdir} '
+        command='%s --proto_path=${protopath} ${protodeproots} %s -I=${srcdir} '
                 '--cpp_out=${protocppout} ${protocflags} ${protoccpppluginflags} '
                 '${protoinput}' % (
                     protoc, protobuf_incs),

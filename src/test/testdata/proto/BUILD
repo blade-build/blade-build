@@ -21,3 +21,21 @@ cc_library(
     ],
     visibility = ['PUBLIC'],
 )
+
+# Two proto_libraries rooted under different strip_import_prefix-es: the
+# dependent must compile with the dependency's import root added as a `-I`
+# proto-path so a cross-root `import` resolves.
+proto_library(
+    name = 'other_root_proto',
+    srcs = 'sub/pkg/other.proto',
+    strip_import_prefix = 'sub',          # -> _import_root proto/sub
+    visibility = ['PUBLIC'],
+)
+
+proto_library(
+    name = 'cross_root_proto',
+    srcs = 'main_root/a.proto',
+    strip_import_prefix = 'main_root',    # -> _import_root proto/main_root
+    deps = ':other_root_proto',
+    visibility = ['PUBLIC'],
+)
