@@ -569,7 +569,10 @@ def _resolve_protoc(toolchain, build_dir, protoc):
     vanilla = vcpkg.triplet_for_toolchain(toolchain)
     root, triplet = vcpkg.install_location(vcpkg_cfg, vanilla, build_dir)
     exe = 'protoc.exe' if toolchain.target_os == 'windows' else 'protoc'
-    return os.path.join(root, 'installed', triplet, 'tools', 'protobuf', exe)
+    # root is '' only when vcpkg is unconfigured -- but a `vcpkg#` protoc was
+    # requested, so that is a misconfiguration that fails loudly at build time.
+    return os.path.join(root or '', 'installed', triplet or '',
+                        'tools', 'protobuf', exe)
 
 
 def _protoc_implicit_dep(protoc):
@@ -583,14 +586,22 @@ def _protoc_implicit_dep(protoc):
 
     A concrete path is used directly; a bare command name is resolved against
     $PATH (the command still runs bare, PATH-resolved at build time, but the
-    resolved absolute path is what ninja stats). Returns [] only if a bare name
-    isn't on $PATH at generation time -- then there's nothing to track.
+    resolved absolute path is what ninja stats).
+
+    The path is tracked only if it exists at generation time. This both skips a
+    bare name absent from $PATH and -- importantly -- avoids turning a
+    non-existent path into a hard ninja "missing and no known rule" error: the
+    default `proto_library_config.protoc` ('thirdparty/protobuf/bin/protoc') is
+    a conventional placeholder that need not exist (e.g. when no proto is
+    actually compiled). A vcpkg-resolved protoc is installed during setup, so
+    it exists by the time rules are generated.
     """
     if os.sep in protoc or '/' in protoc:
-        return [protoc]
-    import shutil
-    resolved = shutil.which(protoc)
-    return [resolved] if resolved else []
+        path = protoc
+    else:
+        import shutil
+        path = shutil.which(protoc)
+    return [path] if path and os.path.exists(path) else []
 
 
 def _generate_proto_rules(ctx):
