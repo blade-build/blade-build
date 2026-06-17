@@ -2048,17 +2048,30 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         and can't be predicted at parse time. Prefer the exact name, then the
         conventional 'd' postfix, then a unique glob match; fall back to the
         exact (optimistic) name so a genuinely missing lib still surfaces as
-        ninja's 'missing' error."""
+        ninja's 'missing' error.
+
+        Some ports install a lib under `lib/manual-link/` rather than `lib/`
+        (a vcpkg convention for libs that must not be auto-linked, e.g. gtest's
+        gtest_main / gmock_main -- main() belongs in exactly one TU per exe). So
+        each candidate dir is probed, `lib_dir` first then its `manual-link`."""
         tc = self.blade.get_build_toolchain()
         base = f'{tc.lib_prefix}{self.name}'
-        exact = os.path.join(lib_dir, base + suffix)
-        if os.path.exists(exact):
-            return exact
-        postfixed = os.path.join(lib_dir, base + 'd' + suffix)
-        if os.path.exists(postfixed):
-            return postfixed
-        matches = glob.glob(os.path.join(lib_dir, base + '*' + suffix))
-        return matches[0] if len(matches) == 1 else exact
+        lib_dirs = [lib_dir, os.path.join(lib_dir, 'manual-link')]
+        for d in lib_dirs:
+            exact = os.path.join(d, base + suffix)
+            if os.path.exists(exact):
+                return exact
+        for d in lib_dirs:
+            postfixed = os.path.join(d, base + 'd' + suffix)
+            if os.path.exists(postfixed):
+                return postfixed
+        for d in lib_dirs:
+            matches = glob.glob(os.path.join(d, base + '*' + suffix))
+            if len(matches) == 1:
+                return matches[0]
+        # Optimistic fallback: the conventional lib_dir path, so a genuinely
+        # missing lib surfaces as ninja's 'missing' error on the expected name.
+        return os.path.join(lib_dir, base + suffix)
 
     def _before_generate(self):  # override
         super()._before_generate()
@@ -2068,14 +2081,29 @@ class VcpkgLibrary(PrebuiltCcLibrary):
         # real lib files now exist -- re-resolve the static archive in case the
         # port added a debug postfix we couldn't predict during _setup() at parse
         # time (e.g. an MSVC debug build's fmt -> fmtd.lib).
+        tc = self.blade.get_build_toolchain()
         if self._vcpkg_linkage in ('static', 'auto'):
-            tc = self.blade.get_build_toolchain()
             archive = self._existing_lib(self._vcpkg_lib_dir, tc.static_lib_suffix)
             self.attr['static_source'] = archive
             self._add_target_file(tc.STATIC_LIB_LABEL, archive)
             if self._vcpkg_linkage == 'static':
                 # static: the archive serves both link modes (see _setup_static).
                 self._add_target_file(tc.DYNAMIC_LIB_LABEL, archive)
+        # Re-resolve the shared lib too: like the static archive it may sit under
+        # `manual-link/` (gtest_main / gmock_main are shared there in a shared
+        # triplet), which _setup() couldn't predict. Only when a .dylib was
+        # actually built -- a 'dynamic' port always, an 'auto' port only when a
+        # dynamic_link binary depends on it.
+        if self._vcpkg_wants_dynamic():
+            shared = self._existing_lib(self._vcpkg_dynamic_lib_dir,
+                                        tc.dynamic_lib_suffix)
+            dynamic_target = self._target_file_path(os.path.basename(shared))
+            self.attr['dynamic_source'] = shared
+            self.attr['dynamic_target'] = dynamic_target
+            self._add_target_file(tc.DYNAMIC_LIB_LABEL, dynamic_target)
+            if self._vcpkg_linkage == 'dynamic':
+                # dynamic: the shared lib serves both link modes (_setup_dynamic).
+                self._add_target_file(tc.STATIC_LIB_LABEL, dynamic_target)
 
     def _vcpkg_wants_dynamic(self):
         """Whether this port's shared library should actually be materialized.

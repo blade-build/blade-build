@@ -91,41 +91,43 @@ vcpkg_config(
 | --- | --- | --- |
 | `version` | str | 固定 port 版本（一条 vcpkg `overrides`）。 |
 | `features` | list[str] | 启用的 vcpkg features。 |
-| `linkage` | `'static'`（默认）/ `'dynamic'` / `'auto'` | 该 port 如何构建（见下）。 |
+| `linkage` | `'auto'`（默认）/ `'static'` / `'dynamic'` | 该 port 如何构建（见下）。 |
 | `link_all_symbols` | bool | 对静态库做 whole-archive。 |
 | `include_prefix` | str / list[str] / dict | 重映射头文件包含路径。 |
 | `cmake_options` | list[str] | 该 port 的额外 CMake 配置选项。 |
 
-### `linkage`——`static` / `dynamic` / `auto`
+### `linkage`——`auto` / `static` / `dynamic`
 
-- **`'static'`**（默认）——只构建静态库（`.a`）。
+- **`'auto'`**（默认）——与 `cc_library` 同一规则：静态库（`.a`）总是构建，**且**
+  共享库**按需**构建——仅当某个 `dynamic_link` 二进制真正依赖该 port 时才构建
+  （analyze 阶段在 `cc_library` 依赖上设置的 `generate_dynamic` 标志同样作用于此）。
+  这样静态链接的二进制拿到自包含的 `.a`，而 `dynamic_link` 二进制链接同一份共享库。
+  vcpkg 一个 triplet 只构建一种 linkage，所以 `'auto'` port 的共享构建落在独立的
+  `blade-<triplet>-shared` 安装树里，与主静态树并列。只被静态链接的 port 不会构建
+  共享库。
+- **`'static'`**——只构建静态库，两种链接模式共用它。用于没有可用共享构建的 port
+  （此时 `'auto'` 会构建失败）。
 - **`'dynamic'`**——只构建共享库；*所有*消费者都链接这唯一一份实例。
-- **`'auto'`**——静态库总是构建，**且**共享库**按需**构建——仅当某个
-  `dynamic_link` 二进制真正依赖该 port 时才构建（与 `cc_library` 的
-  `generate_dynamic` 同一规则）。这样静态链接的工具拿到自包含的 `.a`，而
-  `dynamic_link` 二进制仍共享同一份共享库。vcpkg 一个 triplet 只构建一种
-  linkage，所以 `'auto'` port 的共享构建落在独立的 `blade-<triplet>-shared`
-  安装树里，与主静态树并列。
 
-### `linkage: 'dynamic'` / `'auto'`——单例库
+### 单例库
 
 有些库通过静态初始化维护进程级注册表——gflags（flag 注册表）、glog、protobuf
-（descriptor pool）、googletest（测试注册表）。当它们被**静态**链接进多个共享库
-和可执行文件时，每份拷贝各有一份注册表，启动时冲突（重复注册 flag / descriptor /
-测试）。把这类 port 编成**共享库**，全进程只有一份实例。当一部分二进制静态链接
-它们（如自包含的构建期工具 / protoc 插件）、另一部分动态链接时，用 `'auto'`；要
-全程强制共享，用 `'dynamic'`：
+（descriptor pool）、googletest（测试注册表）。若这类 port 被**静态链接进多个共享库**，
+每个 `.so`/`.dylib` 各有一份注册表，运行时冲突——重复注册 flag/测试，或一个模块里
+的 descriptor pool 查不到另一个模块注册的内容（段错误）。默认的 **`'auto'`** 已经
+避免了这点：每个 `dynamic_link` 消费者都链接同一份共享实例。只有要覆盖默认行为时
+才需要显式指定 `linkage`——例如用 `'dynamic'` 强制连静态链接的二进制也用共享库：
 
 ```python
-'gflags': {'version': '2.2.2', 'linkage': 'auto'},
-'glog':   {'version': '0.7.1', 'linkage': 'auto'},
+'protobuf': {'version': '3.21.12'},   # 'auto' 默认：所有 dylib 共享同一份
+                                      # libprotobuf，静态 exe 仍用静态库
 ```
 
 ### `link_all_symbols: True`——强制运行静态初始化
 
 对只被静态链接**一次**的 port，链接器可能丢弃未被引用的目标文件——包括其中做注册
-的静态初始化。`link_all_symbols` 对该库做 whole-archive，使它们都运行。（上面的
-“多份拷贝”是相反的问题，需要 `linkage: 'dynamic'`，而不是这个。）
+的静态初始化。`link_all_symbols` 对该库做 whole-archive，使它们都运行。（上面单例库
+的“多份拷贝”是相反的问题，由默认的 `'auto'`/`'dynamic'` linkage 处理，而不是这个。）
 
 ### `include_prefix`——重映射头文件路径
 

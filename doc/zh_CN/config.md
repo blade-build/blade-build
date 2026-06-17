@@ -896,7 +896,10 @@ msvc_config(use_clang = True)
 
 **作用：** 允许的 port 白名单——`vcpkg#<port>:<lib>` 可解析到什么的唯一事实来源。
 引用未列出的 port 是硬错误。每个值是版本字符串，或带 `version` 和/或 `features`
-的字典：
+的字典（还可带 `linkage`、`link_all_symbols`、`include_prefix`、`cmake_options`
+等键，见[单个 port 的选项](build_rules/vcpkg.md#单个-port-的选项)）。`linkage`
+默认为 `'auto'`（与 `cc_library` 一致：静态链接消费者用静态库，动态链接消费者按需
+用共享库）：
 
 ```python
 vcpkg_config(

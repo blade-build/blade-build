@@ -903,7 +903,11 @@ you installed yourself under `<root>/installed/<triplet>`.
 **Purpose:** The whitelist of allowed ports — the single source of truth for
 what a `vcpkg#<port>:<lib>` reference may resolve to. Referencing a port that
 is not listed is a hard error. Each value is a version string or a dict with
-`version` and/or `features`:
+`version` and/or `features` (plus the optional `linkage`, `link_all_symbols`,
+`include_prefix`, `cmake_options` keys — see [Per-port
+options](build_rules/vcpkg.md#per-port-options)). `linkage` defaults to `'auto'`
+(like `cc_library`: static for static-link consumers, shared on demand for
+dynamic-link ones):
 
 ```python
 vcpkg_config(

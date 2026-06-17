@@ -96,38 +96,43 @@ The dict form of a package accepts these keys:
 | --- | --- | --- |
 | `version` | str | Pin the port version (a vcpkg `overrides` entry). |
 | `features` | list[str] | vcpkg features to enable. |
-| `linkage` | `'static'` (default) / `'dynamic'` / `'auto'` | How the port is built (see below). |
+| `linkage` | `'auto'` (default) / `'static'` / `'dynamic'` | How the port is built (see below). |
 | `link_all_symbols` | bool | Whole-archive the static lib. |
 | `include_prefix` | str / list[str] / dict | Remap the header include path. |
 | `cmake_options` | list[str] | Extra CMake configure options for the port. |
 
-### `linkage` — `static` / `dynamic` / `auto`
+### `linkage` — `auto` / `static` / `dynamic`
 
-- **`'static'`** (default) — only the static archive (`.a`) is built.
+- **`'auto'`** (default) — the same rule as `cc_library`: the static archive
+  (`.a`) is always built, **and** the shared library is built *on demand* —
+  only when a `dynamic_link` binary actually depends on the port (via the same
+  `generate_dynamic` flag analyze sets on `cc_library` deps). A static-link
+  binary then links a self-contained `.a`, while a `dynamic_link` binary links
+  one shared library. vcpkg builds one linkage per triplet, so the shared build
+  of an `'auto'` port lands in a separate `blade-<triplet>-shared` install tree
+  alongside the main static tree. A port consumed only by static-link binaries
+  never gets a shared build.
+- **`'static'`** — only the static archive is built; it serves both link modes.
+  Use for a port that has no working shared build (which `'auto'` would fail).
 - **`'dynamic'`** — only the shared library is built; *every* consumer links
   that single instance.
-- **`'auto'`** — the static archive is always built, **and** the shared library
-  is built *on demand* — only when a `dynamic_link` binary actually depends on
-  the port (the same rule as `cc_library`'s `generate_dynamic`). A static-link
-  tool then gets a self-contained `.a`, while a `dynamic_link` binary still
-  shares one shared library. vcpkg builds one linkage per triplet, so the shared
-  build of an `'auto'` port lands in a separate `blade-<triplet>-shared` install
-  tree alongside the main static tree.
 
-### `linkage: 'dynamic'` / `'auto'` — singleton libraries
+### Singleton libraries
 
 Some libraries keep a process-wide registry behind static initializers — gflags
 (the flag registry), glog, protobuf (the descriptor pool), googletest (the test
-registry). Linked **statically** into several shared libs and the executable,
-each copy gets its own registry and they collide at startup (duplicate flag /
-descriptor / test registration). Build such ports **shared** so there is a
-single instance. Use `'auto'` when some binaries link them statically (e.g. a
-self-contained build-time tool / protoc plugin) while others link dynamically;
-use `'dynamic'` to force shared everywhere:
+registry). If such a port is linked **statically into several shared libraries**,
+each `.so`/`.dylib` gets its own copy of the registry and they collide at
+runtime — duplicate flag/test registration, or a descriptor-pool lookup in one
+module that can't see what another module registered (a segfault). The default
+**`'auto'`** already prevents this: every `dynamic_link` consumer links the one
+shared instance. You only need to pin `linkage` for these when you want to
+override the default — e.g. `'dynamic'` to force shared even for static-link
+binaries:
 
 ```python
-'gflags': {'version': '2.2.2', 'linkage': 'auto'},
-'glog':   {'version': '0.7.1', 'linkage': 'auto'},
+'protobuf': {'version': '3.21.12'},   # 'auto' default: one shared libprotobuf
+                                      # across all dylibs, static for static exes
 ```
 
 ### `link_all_symbols: True` — force static initializers
@@ -135,8 +140,8 @@ use `'dynamic'` to force shared everywhere:
 For a port linked statically *once*, the linker may drop object files whose
 symbols are unreferenced — including ones whose static initializers do
 registration. `link_all_symbols` whole-archives the lib so they all run. (The
-duplicate-copy problem above is the opposite case and needs `linkage:
-'dynamic'`, not this.)
+singleton duplicate-copy problem above is the opposite case — it is handled by
+the default `'auto'`/`'dynamic'` linkage, not by this.)
 
 ### `include_prefix` — remap the header path
 

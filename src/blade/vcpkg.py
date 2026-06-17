@@ -206,13 +206,23 @@ def _port_installed_files(root, triplet, port):
     return files
 
 
+def _lib_candidate_dirs(lib_dir):
+    """`lib_dir` and its `manual-link/` subdir. Some ports install an archive
+    under `lib/manual-link/` rather than `lib/` (a vcpkg convention for libs
+    that must not be auto-linked, e.g. gtest's gtest_main / gmock_main); both
+    must be searched when classifying / locating a sibling vcpkg library."""
+    return (lib_dir, os.path.join(lib_dir, 'manual-link'))
+
+
 def _is_sibling_vcpkg_lib(lib_dir, name):
     """True if `name` is another vcpkg library installed alongside this one (a
-    real archive in `lib_dir`), rather than an OS/SDK system library. Such a
-    reference is an inter-port dependency, linked via the port's own archive,
-    not as a system lib."""
+    real archive in `lib_dir` or its `manual-link/`), rather than an OS/SDK
+    system library. Such a reference is an inter-port dependency, linked via the
+    port's own archive, not as a system lib -- a `.pc`'s `Libs: -lgtest_main`
+    must not become a bare `-lgtest_main` the linker can't find."""
     candidates = ('%s.lib' % name, 'lib%s.a' % name, '%s.a' % name)
-    return any(os.path.isfile(os.path.join(lib_dir, c)) for c in candidates)
+    return any(os.path.isfile(os.path.join(d, c))
+               for d in _lib_candidate_dirs(lib_dir) for c in candidates)
 
 
 _CMAKE_LINK_LIBS_RE = re.compile(r'INTERFACE_LINK_LIBRARIES\s+"([^"]*)"')
@@ -288,11 +298,13 @@ def port_system_libs(root, triplet, port, lib_dir):
 
 
 def _sibling_archive_path(lib_dir, bare):
-    """Absolute path of a sibling vcpkg archive given its bare stem."""
-    for c in ('lib%s.a' % bare, '%s.a' % bare, '%s.lib' % bare):
-        p = os.path.join(lib_dir, c)
-        if os.path.isfile(p):
-            return os.path.abspath(p)
+    """Absolute path of a sibling vcpkg archive given its bare stem (searching
+    `lib_dir` then its `manual-link/`)."""
+    for d in _lib_candidate_dirs(lib_dir):
+        for c in ('lib%s.a' % bare, '%s.a' % bare, '%s.lib' % bare):
+            p = os.path.join(d, c)
+            if os.path.isfile(p):
+                return os.path.abspath(p)
     return ''
 
 
@@ -436,47 +448,67 @@ _VCPKG_SYSTEM_NAME = {'linux': 'Linux', 'darwin': 'Darwin'}
 _VCPKG_OSX_ARCH = {'x64': 'x86_64', 'arm64': 'arm64', 'x86': 'i386'}
 
 
+def _effective_linkage(spec):
+    """The resolved linkage for a package spec, defaulting to 'auto'.
+
+    A bare version string, or a dict without an explicit `linkage`, resolves to
+    'auto' -- matching cc_library, where a static-link binary links a dep's .a
+    and a dynamic-link binary links its .so. (Before, the default was 'static',
+    which whole-archived a private copy of a port into every consuming dylib --
+    fine for stateless libs, but it duplicated process-global singletons like
+    protobuf's descriptor pool / gflags' flag registry across dylibs.)"""
+    if isinstance(spec, dict):
+        return spec.get('linkage') or 'auto'
+    return 'auto'
+
+
 def port_options(packages, port):
     """Per-port (linkage, link_all_symbols, include_prefix) from the spec.
 
-    A bare version string -> defaults ('static', False, None). A dict spec may
+    A bare version string -> defaults ('auto', False, None). A dict spec may
     carry `linkage`, `link_all_symbols` (bool) and `include_prefix` (str: expose
     vcpkg's include dir under this subdir, for libs flare includes as
     "<prefix>/<header>" but vcpkg ships at include top).
 
     `linkage` is one of:
-      'static'  (default) -- only the static archive (.a) is built.
-      'dynamic'           -- only the shared library (.dylib/.so) is built; both
-                             link modes share that single instance.
-      'auto'              -- the static archive is always built; the shared
+      'auto'    (default) -- the static archive is always built; the shared
                              library is built *on demand*, only when a
                              dynamic_link binary actually depends on the port
                              (mirrors cc_library's generate_dynamic). This gives
                              a static-link tool a self-contained .a while a
-                             dynamic-link binary still shares one .dylib.
+                             dynamic-link binary shares one .dylib -- so a
+                             process-global singleton (protobuf descriptor pool,
+                             gflags registry) stays a single instance.
+      'static'            -- only the static archive (.a) is built; it serves
+                             both link modes. Use for a port with no working
+                             shared build (the default 'auto' would fail it).
+      'dynamic'           -- only the shared library (.dylib/.so) is built; both
+                             link modes share that single instance.
     """
     spec = packages.get(port)
-    if isinstance(spec, dict):
-        return (spec.get('linkage') or 'static',
-                bool(spec.get('link_all_symbols')),
-                spec.get('include_prefix') or None)
-    return 'static', False, None
+    link_all_symbols = bool(spec.get('link_all_symbols')) if isinstance(spec, dict) else False
+    include_prefix = spec.get('include_prefix') or None if isinstance(spec, dict) else None
+    return _effective_linkage(spec), link_all_symbols, include_prefix
 
 
 def dynamic_ports(packages):
-    """Ports whose spec requests linkage='dynamic' (sorted, deterministic).
+    """Ports whose effective linkage is 'dynamic' (sorted, deterministic).
 
     These build their shared library in the *main* install tree. 'auto' ports
     are excluded here: they build static in the main tree and their shared lib
     lands in the separate `-shared` tree (see auto_ports / setup)."""
     return sorted(p for p, s in packages.items()
-                  if isinstance(s, dict) and s.get('linkage') == 'dynamic')
+                  if _effective_linkage(s) == 'dynamic')
 
 
 def auto_ports(packages):
-    """Ports whose spec requests linkage='auto' (sorted, deterministic)."""
+    """Ports whose effective linkage is 'auto' (sorted, deterministic).
+
+    This is the default, so it includes bare-version ports and dict specs that
+    don't pin `linkage` -- every such port's shared variant is built on demand
+    in the `-shared` tree when a dynamic_link binary depends on it."""
     return sorted(p for p, s in packages.items()
-                  if isinstance(s, dict) and s.get('linkage') == 'auto')
+                  if _effective_linkage(s) == 'auto')
 
 
 def port_cmake_options(packages):

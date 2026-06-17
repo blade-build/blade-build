@@ -167,31 +167,44 @@ class MsvcDebugGateTest(unittest.TestCase):
 
 class PortOptionsTest(unittest.TestCase):
 
-    def test_bare_version_defaults(self):
+    def test_bare_version_defaults_to_auto(self):
+        # Default linkage is 'auto' (cc_library-like): static for static-link
+        # consumers, shared on demand for dynamic-link ones.
         self.assertEqual(vcpkg.port_options({'fmt': '7.1.3'}, 'fmt'),
-                         ('static', False, None))
+                         ('auto', False, None))
+
+    def test_dict_without_linkage_defaults_to_auto(self):
+        self.assertEqual(
+            vcpkg.port_options({'fmt': {'version': '7.1.3'}}, 'fmt'),
+            ('auto', False, None))
 
     def test_dynamic_linkage(self):
         self.assertEqual(
             vcpkg.port_options({'gflags': {'linkage': 'dynamic'}}, 'gflags'),
             ('dynamic', False, None))
 
+    def test_explicit_static_linkage(self):
+        self.assertEqual(
+            vcpkg.port_options({'p': {'linkage': 'static'}}, 'p'),
+            ('static', False, None))
+
     def test_link_all_symbols(self):
+        # No explicit linkage -> 'auto'.
         self.assertEqual(
             vcpkg.port_options({'g': {'link_all_symbols': True}}, 'g'),
-            ('static', True, None))
+            ('auto', True, None))
 
     def test_include_prefix(self):
         self.assertEqual(
             vcpkg.port_options({'snappy': {'include_prefix': 'snappy'}}, 'snappy'),
-            ('static', False, 'snappy'))
+            ('auto', False, 'snappy'))
 
     def test_include_prefix_dict(self):
         # prefix -> vcpkg subdir mapping (e.g. "thirdparty/glog" -> include/glog).
         self.assertEqual(
             vcpkg.port_options(
                 {'glog': {'include_prefix': {'thirdparty/glog': 'glog'}}}, 'glog'),
-            ('static', False, {'thirdparty/glog': 'glog'}))
+            ('auto', False, {'thirdparty/glog': 'glog'}))
 
     def test_auto_linkage(self):
         self.assertEqual(
@@ -199,15 +212,17 @@ class PortOptionsTest(unittest.TestCase):
             ('auto', False, None))
 
     def test_dynamic_ports_sorted(self):
+        # 'fmt' (bare) is 'auto' by default, not 'dynamic'.
         pkgs = {'fmt': '7', 'gflags': {'linkage': 'dynamic'},
                 'glog': {'linkage': 'dynamic'}, 'z': {'linkage': 'static'}}
         self.assertEqual(vcpkg.dynamic_ports(pkgs), ['gflags', 'glog'])
 
-    def test_auto_ports_sorted_and_excluded_from_dynamic(self):
-        pkgs = {'fmt': '7', 'glog': {'linkage': 'auto'},
-                'gflags': {'linkage': 'auto'}, 'z': {'linkage': 'dynamic'}}
-        # 'auto' ports build static in the main tree -> not in dynamic_ports.
-        self.assertEqual(vcpkg.auto_ports(pkgs), ['gflags', 'glog'])
+    def test_auto_ports_includes_default_and_excludes_static_dynamic(self):
+        # Default is 'auto', so a bare version ('fmt') and a dict without an
+        # explicit linkage ('lz4') are 'auto'; explicit static/dynamic are not.
+        pkgs = {'fmt': '7', 'lz4': {'version': '1'},
+                's': {'linkage': 'static'}, 'z': {'linkage': 'dynamic'}}
+        self.assertEqual(vcpkg.auto_ports(pkgs), ['fmt', 'lz4'])
         self.assertEqual(vcpkg.dynamic_ports(pkgs), ['z'])
 
     def test_shared_overlay_triplet_name(self):

@@ -275,9 +275,14 @@ class HandlerTest(unittest.TestCase):
             kw['dynamic_lib_dir'])
 
     def test_static_port_dynamic_lib_dir_falls_back_to_main(self):
+        # An explicit 'static' port has no separate `-shared` tree, so its
+        # dynamic_lib_dir falls back to the main install lib dir. (A bare version
+        # now defaults to 'auto', so pin linkage='static' to exercise this path.)
         r = _Referrer()
         with mock.patch('blade.config.get_section',
-                        return_value=self._cfg(packages={'fmt': '10.2.1'})), \
+                        return_value=self._cfg(
+                            packages={'fmt': {'version': '10.2.1',
+                                              'linkage': 'static'}})), \
              mock.patch('blade.cc_targets.VcpkgLibrary') as MockVL:
             vcpkg._vcpkg_dep_handler(r, 'fmt:fmt')
         kw = MockVL.call_args[1]

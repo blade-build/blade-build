@@ -443,7 +443,10 @@ _CONFIG_TEMPLATE = {
         # The allow-list of packages: the single source of truth for what a
         # `vcpkg#<port>:<lib>` reference may resolve to. Each value is either a
         # version string ('fmt': '10.2.1') or a dict with version/features
-        # ('curl': {'version': '8.5.0', 'features': ['ssl', 'http2']}).
+        # ('curl': {'version': '8.5.0', 'features': ['ssl', 'http2']}). A dict
+        # may also carry linkage/link_all_symbols/include_prefix/cmake_options;
+        # linkage defaults to 'auto' (like cc_library: static for static-link
+        # consumers, shared on demand for dynamic-link ones).
         'packages': {},
         # Optional private registries -> vcpkg-configuration.json "registries".
         'registries': [],
