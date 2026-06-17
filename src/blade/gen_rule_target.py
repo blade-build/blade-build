@@ -237,7 +237,7 @@ class GenRuleTarget(Target):
         # `build` statement, so any other build scoped variables are expanded to empty.
         rule = '%s__rule__' % regular_variable_name(self._source_file_path(self.name))
         cmd = self._wrap_command(self._expand_command())
-        description = console.colored('{} {}'.format(self.attr['cmd_name'], self.fullname), 'dimpurple')
+        description = f"{self.attr['cmd_name']} {self.fullname}"
         self._write_rule(_RULE_FORMAT % (rule, cmd, description))
 
         outputs = self.attr['outputs']
