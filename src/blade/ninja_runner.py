@@ -97,6 +97,10 @@ def _show_progress(process, file_reader):
     recent = collections.deque(maxlen=console._PANEL_MAX_RECENT)
     # In quiet mode show only the aggregate bar, not the per-step descriptions.
     quiet = console.is_quiet()
+    # A live panel needs cursor control (\r, clear-line). Without it (CI, a pipe,
+    # a dumb terminal) we fall back to printing the status lines as they arrive.
+    # Invariant for the whole build, so resolve it once.
+    cursor_control = console.support_cursor_control()
     total = finished = 0
     start = time.time()
     try:
@@ -107,13 +111,23 @@ def _show_progress(process, file_reader):
                 line = line.rstrip('\r\n')  # keep leading indent of error output
                 m = progress_re.match(line)
                 if m:
+                    # Track totals unconditionally so the final "N build steps
+                    # completed" summary is correct even without a live panel.
                     finished, total = int(m.group(1)), int(m.group(2))
-                    running = max(0, int(m.group(3)) - 1)  # %r counts the finishing edge
-                    recent.append(m.group(4))
-                    elapsed = time.time() - start
-                    eta = (total - finished) * elapsed / finished if finished else None
-                    window = () if quiet else recent
-                    console.render_build_panel(finished, running, total, window, eta)
+                    if cursor_control:
+                        running = max(0, int(m.group(3)) - 1)  # %r counts the finishing edge
+                        recent.append(m.group(4))
+                        elapsed = time.time() - start
+                        eta = (total - finished) * elapsed / finished if finished else None
+                        window = () if quiet else recent
+                        console.render_build_panel(finished, running, total, window, eta)
+                    elif not quiet:
+                        # No cursor control: print the status line so the build
+                        # stays observable. print_line (not console.output): the
+                        # full ninja stream is already persisted to
+                        # ninja_output.log, so re-logging each line is redundant.
+                        # Honors quiet like the panel path above.
+                        console.print_line(line)
                 elif line == 'ninja: no work to do.':
                     pass
                 elif line:

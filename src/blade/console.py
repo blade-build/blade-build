@@ -76,6 +76,12 @@ _color_enabled = _console_support_ansi_color()
 # Conceptually independent from color support, even if they coincide on most terminals.
 _cursor_control = _console_support_cursor_control()
 
+
+def support_cursor_control():
+    """Whether the terminal supports cursor control (\r, \033[K, ...)."""
+    return _cursor_control
+
+
 # Serializes writes to stdout/stderr so the progress bar and messages don't interleave.
 _print_lock = threading.Lock()
 
@@ -450,6 +456,16 @@ def output(msg):
     """Output message without any decoration"""
     _do_print(msg)
     log(msg)
+
+
+def print_line(msg):
+    """Print a line to the terminal without logging it.
+
+    Like `output` but skips the log file -- for content that is already
+    persisted elsewhere (e.g. ninja status lines, captured in
+    ninja_output.log). Serialized with the progress bar via the print lock.
+    """
+    _do_print(msg)
 
 
 # Global Error Counter
