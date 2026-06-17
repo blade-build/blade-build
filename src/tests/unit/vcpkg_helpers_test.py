@@ -109,6 +109,18 @@ class ParsePkgConfigTest(unittest.TestCase):
         self.assertEqual(pc['l_private'], ['dl'])
         self.assertIn('-pthread', pc['libs_private'])
 
+    def test_macos_frameworks_extracted(self):
+        # libcurl.pc on macOS: `Libs: ... -framework SystemConfiguration
+        # -framework Security ...`. Each `-framework <Name>` pair -> a framework
+        # name; the bare names are not mistaken for -l libs.
+        pc = vcpkg.parse_pkgconfig(
+            'Name: libcurl\n'
+            'Libs: -L${libdir} -lcurl -framework SystemConfiguration '
+            '-framework Security -framework CoreFoundation\n')
+        self.assertEqual(pc['frameworks'],
+                         ['SystemConfiguration', 'Security', 'CoreFoundation'])
+        self.assertEqual(pc['l_libs'], ['curl'])
+
     def test_libs_private_msvc_dot_lib_form(self):
         # vcpkg/OpenSSL on Windows list system libs as bare `foo.lib` tokens, not
         # `-lfoo`; the `.lib` is stripped to a uniform bare name.

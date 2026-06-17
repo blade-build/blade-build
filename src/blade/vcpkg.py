@@ -136,6 +136,23 @@ def _extract_l_libs(tokens):
     return libs
 
 
+def _extract_frameworks(tokens):
+    """macOS framework names from `-framework <Name>` pairs in a pkg-config
+    Libs line. vcpkg ports that use Apple system frameworks list them this way
+    (e.g. libcurl.pc: `-framework SystemConfiguration -framework Security ...`);
+    a consumer must pass `-framework <Name>` or hit unresolved CF*/Sec*/SC*
+    symbols at link time."""
+    fws = []
+    want = False
+    for tok in tokens:
+        if want:
+            fws.append(tok)
+            want = False
+        elif tok == '-framework':
+            want = True
+    return fws
+
+
 def parse_pkgconfig(text):
     """Parse pkg-config (`.pc`) content into a structured dict.
 
@@ -179,6 +196,7 @@ def parse_pkgconfig(text):
         'cflags': tokens('cflags'),
         'l_libs': _extract_l_libs(libs),
         'l_private': _extract_l_libs(libs_private),
+        'frameworks': _extract_frameworks(libs) + _extract_frameworks(libs_private),
     }
 
 
@@ -269,6 +287,7 @@ def port_system_libs(root, triplet, port, lib_dir):
     returned sorted and de-duplicated. A consumer must link these or hit
     unresolved externals on MSVC (issue #1322). [] if none / metadata absent."""
     names = []
+    frameworks = []
     for path in _port_installed_files(root, triplet, port):
         is_pc = path.endswith('.pc')
         is_targets = (path.endswith('.cmake')
@@ -283,6 +302,7 @@ def port_system_libs(root, triplet, port, lib_dir):
         if is_pc:
             pc = parse_pkgconfig(text)
             names += pc['l_libs'] + pc['l_private']
+            frameworks += pc['frameworks']
         else:
             names += _cmake_link_libs(text)
     seen, result = set(), []
@@ -294,7 +314,15 @@ def port_system_libs(root, triplet, port, lib_dir):
         seen.add(key)
         if not _is_sibling_vcpkg_lib(lib_dir, bare):
             result.append(bare)
-    return sorted(result)
+    # macOS frameworks (e.g. libcurl -> SystemConfiguration/Security/CoreFoundation)
+    # are emitted as `framework:<Name>` tokens; the cc link rule renders them as
+    # `-framework <Name>` (see _system_lib_link_flag), not `-l<Name>`.
+    fw_seen, fw_result = set(), []
+    for fw in frameworks:
+        if fw.lower() not in fw_seen:
+            fw_seen.add(fw.lower())
+            fw_result.append('framework:' + fw)
+    return sorted(result) + sorted(fw_result)
 
 
 def _sibling_archive_path(lib_dir, bare):

@@ -281,11 +281,15 @@ def _windows_dll_basename(path, name):
 def _system_lib_link_flag(lib, is_msvc):
     """Render a system library (a `#name` dep) as a linker argument.
 
-    An absolute path is passed through unchanged. A bare name becomes the GNU
-    `-lname` on GCC/Clang; on MSVC (cl / clang-cl) `link.exe` / `lld-link` take
-    the import library as a positional argument instead (`name.lib`), so emit
-    that -- `-lname` is not understood there.
+    An absolute path is passed through unchanged. A `framework:<Name>` token (a
+    macOS framework a vcpkg port's pkg-config requires, see vcpkg.port_system_libs)
+    becomes `-framework <Name>`. A bare name becomes the GNU `-lname` on
+    GCC/Clang; on MSVC (cl / clang-cl) `link.exe` / `lld-link` take the import
+    library as a positional argument instead (`name.lib`), so emit that --
+    `-lname` is not understood there.
     """
+    if lib.startswith('framework:'):
+        return '-framework %s' % lib[len('framework:'):]
     if os.path.isabs(lib):
         return lib
     if is_msvc:
