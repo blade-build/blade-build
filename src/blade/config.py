@@ -324,6 +324,12 @@ _CONFIG_TEMPLATE = {
         'protobuf_go_path': '',
         'protobuf_python_libs': [],
         'protoc_direct_dependencies': False,
+        # The .proto files protobuf itself ships (google/protobuf/*.proto),
+        # whitelisted as imports under --direct_dependencies. Empty (default)
+        # auto-discovers them from the protobuf include tree (the `protoc`'s
+        # install, or `protobuf_incs`) so the list need not be hand-maintained
+        # and stays correct across protobuf versions (issue #1236/#1339). Set an
+        # explicit list to override discovery.
         'well_known_protos': [],
         'extra_cppflags': [],
     },

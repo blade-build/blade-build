@@ -716,8 +716,18 @@ proto_library_config(
     protobuf_path = 'thirdparty',                        # import 时的 proto 搜索路径，相对 BLADE_ROOT
     protobuf_cc_warning = '',                            # 编译 pb.cc 时是否开启 warning，yes 或 no
     protobuf_include_path = 'thirdparty',                # 编译 pb.cc 时额外的 -I 路径
+    protoc_direct_dependencies = False,                  # 是否给 protoc 传 --direct_dependencies
+    well_known_protos = [],                              # 见下方说明
 )
 ```
+
+`well_known_protos` 是 protobuf 自带的 `.proto` 文件列表
+（`google/protobuf/*.proto`），在开启 `protoc_direct_dependencies` 时作为
+允许的 import 白名单传给 protoc。留空（默认）时，blade 会在 protobuf 的头
+文件目录下用 `google/protobuf/**/*.proto` 通配自动发现——目录从 `protoc`
+的安装位置（包括 `vcpkg#protobuf` 的 protoc）或 `protobuf_incs` 解析得到，
+从而无需手工维护、并能随 protobuf 版本保持正确。只有需要覆盖自动发现结果
+时才显式设置该列表。
 
 ### thrift_library_config
 

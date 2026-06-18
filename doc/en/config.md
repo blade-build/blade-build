@@ -714,8 +714,19 @@ proto_library_config(
     protobuf_path='thirdparty', # import proto search path, relative to BLADE_ROOT
     protobuf_cc_warning='', # enable warning(disable -w) or not when compiling pb.cc, yes or no
     protobuf_include_path = 'thirdparty', # extra -I path when compiling pb.cc
+    protoc_direct_dependencies=False, # pass --direct_dependencies to protoc
+    well_known_protos=[], # see note below
 )
 ```
+
+`well_known_protos` is the list of `.proto` files protobuf itself ships
+(`google/protobuf/*.proto`) that are whitelisted as imports when
+`protoc_direct_dependencies` is on. Left empty (the default), blade
+auto-discovers them by globbing `google/protobuf/**/*.proto` under the
+protobuf include tree -- resolved from the `protoc` install (including a
+`vcpkg#protobuf` protoc) or from `protobuf_incs` -- so the list stays
+correct across protobuf versions without hand-maintenance. Set an
+explicit list only to override discovery.
 
 ### thrift_library_config
 
