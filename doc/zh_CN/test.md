@@ -57,15 +57,30 @@ blade test //common... --test-jobs 8
 
 ### 互斥执行的测试
 
-对于某些由于相互干扰而无法并行运行的测试，可以通过 `exclusive` 属性声明独占执行：
+`exclusive` 测试会**独占**运行——调度器不会同时运行任何其他测试。两种场景下使用：
+
+1. **相互干扰 / 共享资源。** 测试与其他测试争用固定资源（绑定知名端口、固定磁盘
+   路径、系统服务、单例守护进程等），同时运行多个实例会不可靠。
+2. **资源过载。** 测试会刻意压满机器（CPU / 内存 / 连接 / fiber 压测，overload 或
+   负载测试）。与整套测试并行运行时可能耗尽资源、非确定性地失败或崩溃，尽管它单独
+   运行是正确的。
 
 ```python
 cc_test(
-    name = 'zookeeper_test',
+    name = 'zookeeper_test',     # 相互干扰：绑定固定端口
     srcs = 'zookeeper_test.cc',
     exclusive = True
 )
+
+cc_test(
+    name = 'server_overload_test',   # 过载：压满整台机器
+    srcs = 'server_overload_test.cc',
+    exclusive = True
+)
 ```
+
+独占测试串行运行，因此应优先修复真正的并发 bug，而不是把测试标为独占；仅在上述两种
+情况下使用。
 
 ## 测试覆盖率分析
 

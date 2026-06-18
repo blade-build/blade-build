@@ -57,15 +57,34 @@ blade test //common... --test-jobs 8
 
 ### Exclusive Test Execution
 
-For tests that cannot run concurrently due to potential interference, use the `exclusive` attribute:
+An `exclusive` test runs **alone** — the test scheduler does not run any other
+test at the same time. Use it in two situations:
+
+1. **Interference / shared resource.** The test conflicts with others over a
+   fixed resource — binding a well-known port, a fixed on-disk path, a system
+   service, a singleton daemon — so running it alongside another instance is
+   unreliable.
+2. **Resource overload.** The test deliberately saturates the machine (CPU /
+   memory / connection / fiber stress, overload or load tests). Run concurrently
+   with the rest of the suite it can exhaust resources and fail or crash
+   nondeterministically, even though it is correct in isolation.
 
 ```python
 cc_test(
-    name = 'zookeeper_test',
+    name = 'zookeeper_test',     # interference: binds a fixed port
     srcs = 'zookeeper_test.cc',
     exclusive = True
 )
+
+cc_test(
+    name = 'server_overload_test',   # overload: stresses the whole machine
+    srcs = 'server_overload_test.cc',
+    exclusive = True
+)
 ```
+
+Exclusive tests run serially, so prefer fixing genuine concurrency bugs over
+marking tests exclusive; reserve it for the two cases above.
 
 ## Test Coverage Analysis
 
