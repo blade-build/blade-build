@@ -725,8 +725,10 @@ proto_library_config(
 auto-discovers them by globbing `google/protobuf/**/*.proto` under the
 protobuf include tree -- resolved from the `protoc` install (including a
 `vcpkg#protobuf` protoc) or from `protobuf_incs` -- so the list stays
-correct across protobuf versions without hand-maintenance. Set an
-explicit list only to override discovery.
+correct across protobuf versions without hand-maintenance. If no include
+tree is resolvable (e.g. a misconfigured provider), a built-in canonical
+list is used as a safety net. Set an explicit list only to override
+discovery.
 
 ### thrift_library_config
 

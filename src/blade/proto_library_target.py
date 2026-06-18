@@ -597,6 +597,27 @@ def _protobuf_include_dir(toolchain, build_dir, proto_config):
     return incs[0] if incs else ''
 
 
+# Last-resort fallback when neither an explicit list nor a discoverable include
+# tree is available (e.g. a misconfigured protobuf provider). These are the
+# well-known types protobuf has shipped for many major versions, so the common
+# `import "google/protobuf/*.proto"` keeps resolving under --direct_dependencies
+# instead of failing outright. Discovery (when it works) supersedes this and
+# tracks the actual protobuf version; this is only a safety net.
+_DEFAULT_WELL_KNOWN_PROTOS = (
+    'google/protobuf/any.proto',
+    'google/protobuf/api.proto',
+    'google/protobuf/compiler/plugin.proto',
+    'google/protobuf/descriptor.proto',
+    'google/protobuf/duration.proto',
+    'google/protobuf/empty.proto',
+    'google/protobuf/field_mask.proto',
+    'google/protobuf/source_context.proto',
+    'google/protobuf/struct.proto',
+    'google/protobuf/timestamp.proto',
+    'google/protobuf/type.proto',
+    'google/protobuf/wrappers.proto',
+)
+
 _well_known_protos_cache = {}
 
 
@@ -608,19 +629,22 @@ def well_known_protos(toolchain, build_dir, proto_config):
     ``google/protobuf/**/*.proto`` protobuf ships, as include-root-relative
     paths (e.g. ``google/protobuf/any.proto``) -- so the list is not
     hand-maintained per workspace and tracks the protobuf version in use.
-    Returns [] when no include tree is resolvable (same as the old default)."""
+    Falls back to ``_DEFAULT_WELL_KNOWN_PROTOS`` when no include tree is
+    resolvable, so a misconfigured provider still resolves the common WKT
+    imports rather than failing outright."""
     explicit = proto_config['well_known_protos']
     if explicit:
         return list(explicit)
     inc = _protobuf_include_dir(toolchain, build_dir, proto_config)
     if inc in _well_known_protos_cache:
         return _well_known_protos_cache[inc]
-    result = []
+    discovered = []
     base = os.path.join(inc, 'google', 'protobuf') if inc else ''
     if base and os.path.isdir(base):
-        result = sorted(
+        discovered = sorted(
             to_unix_path(os.path.relpath(p, inc))
             for p in glob.glob(os.path.join(base, '**', '*.proto'), recursive=True))
+    result = discovered or list(_DEFAULT_WELL_KNOWN_PROTOS)
     _well_known_protos_cache[inc] = result
     return result
 

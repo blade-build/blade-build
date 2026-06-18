@@ -726,8 +726,9 @@ proto_library_config(
 允许的 import 白名单传给 protoc。留空（默认）时，blade 会在 protobuf 的头
 文件目录下用 `google/protobuf/**/*.proto` 通配自动发现——目录从 `protoc`
 的安装位置（包括 `vcpkg#protobuf` 的 protoc）或 `protobuf_incs` 解析得到，
-从而无需手工维护、并能随 protobuf 版本保持正确。只有需要覆盖自动发现结果
-时才显式设置该列表。
+从而无需手工维护、并能随 protobuf 版本保持正确。若无法解析到头文件目录
+（例如 provider 配置有误），则回退到内置的标准列表作为兜底。只有需要覆盖
+自动发现结果时才显式设置该列表。
 
 ### thrift_library_config
 

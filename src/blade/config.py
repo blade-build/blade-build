@@ -328,8 +328,9 @@ _CONFIG_TEMPLATE = {
         # whitelisted as imports under --direct_dependencies. Empty (default)
         # auto-discovers them from the protobuf include tree (the `protoc`'s
         # install, or `protobuf_incs`) so the list need not be hand-maintained
-        # and stays correct across protobuf versions (issue #1236/#1339). Set an
-        # explicit list to override discovery.
+        # and stays correct across protobuf versions (issue #1236/#1339). When
+        # no include tree is resolvable, a built-in canonical list is used as a
+        # safety net. Set an explicit list to override discovery.
         'well_known_protos': [],
         'extra_cppflags': [],
     },

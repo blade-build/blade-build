@@ -52,13 +52,31 @@ class WellKnownProtosTest(unittest.TestCase):
                 'google/protobuf/timestamp.proto',
             ])
 
-    def test_no_include_returns_empty(self):
-        self.assertEqual(plt.well_known_protos(None, 'b', self._cfg()), [])
+    def test_no_include_falls_back_to_default(self):
+        # No resolvable include tree -> the built-in safety net, not [].
+        self.assertEqual(plt.well_known_protos(None, 'b', self._cfg()),
+                         list(plt._DEFAULT_WELL_KNOWN_PROTOS))
 
-    def test_missing_google_protobuf_dir_returns_empty(self):
+    def test_missing_google_protobuf_dir_falls_back_to_default(self):
         with tempfile.TemporaryDirectory() as d:  # exists but no google/protobuf/
             self.assertEqual(
-                plt.well_known_protos(None, 'b', self._cfg(protobuf_incs=[d])), [])
+                plt.well_known_protos(None, 'b', self._cfg(protobuf_incs=[d])),
+                list(plt._DEFAULT_WELL_KNOWN_PROTOS))
+
+    def test_default_fallback_matches_discovery_for_a_modern_protobuf(self):
+        # The hand-maintained safety net should equal what discovery finds for a
+        # typical protobuf layout, so a fallback build behaves like a normal one.
+        with tempfile.TemporaryDirectory() as d:
+            base = os.path.join(d, 'google', 'protobuf')
+            os.makedirs(os.path.join(base, 'compiler'))
+            names = [p.split('google/protobuf/')[1]
+                     for p in plt._DEFAULT_WELL_KNOWN_PROTOS]
+            for n in names:
+                full = os.path.join(base, *n.split('/'))
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                open(full, 'w').close()
+            self.assertEqual(plt.well_known_protos(None, 'b', self._cfg(protobuf_incs=[d])),
+                             list(plt._DEFAULT_WELL_KNOWN_PROTOS))
 
 
 if __name__ == '__main__':
