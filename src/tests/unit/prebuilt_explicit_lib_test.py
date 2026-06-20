@@ -59,24 +59,23 @@ class ResolveLibrarySourcesTest(unittest.TestCase):
     def test_explicit_static_only(self):
         t = _target(static_library='libfoo.a')
         with mock.patch('os.path.exists', return_value=True):
-            s, d, i, hs, hd, hi = t._resolve_library_sources(_TC())
-        self.assertEqual((J('pkg', 'libfoo.a'), None, None, True, False, False),
-                         (s, d, i, hs, hd, hi))
+            s, d, i = t._resolve_library_sources(_TC())
+        self.assertEqual((J('pkg', 'libfoo.a'), None, None), (s, d, i))
         self.assertEqual([], t.errors)
 
     def test_explicit_both(self):
         t = _target(static_library='libfoo.a', dynamic_library='lib/libfoo.so')
         with mock.patch('os.path.exists', return_value=True):
-            s, d, i, hs, hd, hi = t._resolve_library_sources(_TC())
-        self.assertEqual(
-            (J('pkg', 'libfoo.a'), J('pkg', 'lib/libfoo.so'), None, True, True, False),
-            (s, d, i, hs, hd, hi))
+            s, d, i = t._resolve_library_sources(_TC())
+        self.assertEqual((J('pkg', 'libfoo.a'), J('pkg', 'lib/libfoo.so'), None),
+                         (s, d, i))
 
     def test_explicit_missing_file_errors(self):
+        # A set-but-missing explicit path is an error and resolves to None.
         t = _target(static_library='gone.a')
         with mock.patch('os.path.exists', return_value=False):
-            _s, _d, _i, hs, _hd, _hi = t._resolve_library_sources(_TC())
-        self.assertFalse(hs)
+            s, _d, _i = t._resolve_library_sources(_TC())
+        self.assertIsNone(s)
         self.assertEqual(1, len(t.errors))
         self.assertIn('not found', t.errors[0])
 
@@ -93,21 +92,29 @@ class ResolveLibrarySourcesTest(unittest.TestCase):
         t._library_source_path = mock.Mock(
             side_effect=lambda suf: 'pkg/lib64/libfoo' + suf)
         with mock.patch('os.path.exists', return_value=True):
-            s, d, i, hs, hd, hi = t._resolve_library_sources(_TC())
-        self.assertEqual(
-            ('pkg/lib64/libfoo.a', 'pkg/lib64/libfoo.so', None, True, True, False),
-            (s, d, i, hs, hd, hi))
+            s, d, i = t._resolve_library_sources(_TC())
+        self.assertEqual(('pkg/lib64/libfoo.a', 'pkg/lib64/libfoo.so', None),
+                         (s, d, i))
         self.assertEqual([], t.warnings)  # no libpath_pattern warning in convention mode
+
+    def test_convention_mode_missing_one_kind_is_none(self):
+        # In convention mode a kind that doesn't exist resolves to None.
+        t = _target()
+        t._library_source_path = mock.Mock(
+            side_effect=lambda suf: 'pkg/lib64/libfoo' + suf)
+        exists = lambda p: p.endswith('.a')  # only the static archive is present
+        with mock.patch('os.path.exists', side_effect=exists):
+            s, d, i = t._resolve_library_sources(_TC())
+        self.assertEqual(('pkg/lib64/libfoo.a', None, None), (s, d, i))
 
     # --- Windows import_library (#1357 phase 2) ---
 
     def test_import_library_resolved_on_msvc(self):
         t = _target(dynamic_library='bin/foo.dll', import_library='lib/foo.lib')
         with mock.patch('os.path.exists', return_value=True):
-            s, d, i, hs, hd, hi = t._resolve_library_sources(_TC('msvc'))
-        self.assertEqual(
-            (None, J('pkg', 'bin/foo.dll'), J('pkg', 'lib/foo.lib'), False, True, True),
-            (s, d, i, hs, hd, hi))
+            s, d, i = t._resolve_library_sources(_TC('msvc'))
+        self.assertEqual((None, J('pkg', 'bin/foo.dll'), J('pkg', 'lib/foo.lib')),
+                         (s, d, i))
         self.assertEqual([], t.errors)
 
     def test_dll_without_import_library_errors_on_msvc(self):
@@ -121,17 +128,15 @@ class ResolveLibrarySourcesTest(unittest.TestCase):
         # import_library is a Windows concept; on gcc/clang it's not resolved.
         t = _target(dynamic_library='lib/libfoo.so', import_library='lib/foo.lib')
         with mock.patch('os.path.exists', return_value=True):
-            s, d, i, hs, hd, hi = t._resolve_library_sources(_TC('gcc'))
-        self.assertEqual(
-            (None, J('pkg', 'lib/libfoo.so'), None, False, True, False),
-            (s, d, i, hs, hd, hi))
+            s, d, i = t._resolve_library_sources(_TC('gcc'))
+        self.assertEqual((None, J('pkg', 'lib/libfoo.so'), None), (s, d, i))
         self.assertEqual([], t.errors)
 
     def test_import_library_missing_file_errors_on_msvc(self):
         t = _target(import_library='lib/foo.lib')
         with mock.patch('os.path.exists', return_value=False):
-            _s, _d, _i, _hs, _hd, hi = t._resolve_library_sources(_TC('msvc'))
-        self.assertFalse(hi)
+            _s, _d, i = t._resolve_library_sources(_TC('msvc'))
+        self.assertIsNone(i)
         self.assertEqual(1, len(t.errors))
         self.assertIn('import_library: file not found', t.errors[0])
 

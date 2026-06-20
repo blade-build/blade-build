@@ -17,7 +17,7 @@ import os
 import pickle
 import sys
 from string import Template
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from blade import build_manager
 from blade import build_rules
@@ -37,6 +37,9 @@ from blade.util import (
     var_to_list,
     var_to_list_or_none)
 from blade.version import LooseVersion as version_parse
+
+if TYPE_CHECKING:
+    from blade.toolchain import ToolChain
 
 
 # See https://gcc.gnu.org/onlinedocs/gcc/Overall-Options.html#Overall-Options
@@ -1741,7 +1744,8 @@ class PrebuiltCcLibrary(CcTarget):
         self._set_hdrs(hdrs)
         self._setup()
 
-    def _resolve_library_sources(self, tc):
+    def _resolve_library_sources(
+            self, tc: 'ToolChain') -> 'tuple[str | None, str | None, str | None]':
         """Resolve the static/dynamic/import library source paths, in either mode.
 
         - **Explicit** (``static_library`` / ``dynamic_library`` /
@@ -1755,8 +1759,10 @@ class PrebuiltCcLibrary(CcTarget):
         ``.dll`` -- so it is resolved only on the MSVC toolchain and ignored
         elsewhere (where the ``.so``/``.dylib`` is itself the link target).
 
-        Returns ``(static_source, dynamic_source, import_source, has_static,
-        has_dynamic, has_import)``; a source is ``None`` when that kind is absent.
+        Returns ``(static_source, dynamic_source, import_source)``; each is the
+        usable path, or ``None`` when that kind is absent (in explicit mode a
+        set-but-missing file is also an error). With everything ``None`` the
+        target has no library and an error has been emitted.
         """
         static_library = self.attr.get('static_library')
         dynamic_library = self.attr.get('dynamic_library')
@@ -1768,34 +1774,28 @@ class PrebuiltCcLibrary(CcTarget):
                 self.warning('libpath_pattern is ignored when static_library / '
                              'dynamic_library / import_library is set (explicit '
                              'paths take over)')
-            static_source = dynamic_source = import_source = None
-            has_static = has_dynamic = has_import = False
-            if static_library:
-                static_source = os.path.join(self.path, static_library)
-                if os.path.exists(static_source):
-                    has_static = True
-                else:
-                    self.error(f'static_library: file not found: {static_source}')
-            if dynamic_library:
-                dynamic_source = os.path.join(self.path, dynamic_library)
-                if os.path.exists(dynamic_source):
-                    has_dynamic = True
-                else:
-                    self.error(f'dynamic_library: file not found: {dynamic_source}')
+
+            def resolve(kind, value):
+                # An explicit path must exist; a missing one is a clear error
+                # (and resolves to None so it's simply treated as absent).
+                path = os.path.join(self.path, value)
+                if os.path.exists(path):
+                    return path
+                self.error(f'{kind}: file not found: {path}')
+                return None
+
+            static_source = resolve('static_library', static_library) if static_library else None
+            dynamic_source = resolve('dynamic_library', dynamic_library) if dynamic_library else None
+            import_source = None
             if is_msvc:
                 if import_library:
-                    import_source = os.path.join(self.path, import_library)
-                    if os.path.exists(import_source):
-                        has_import = True
-                    else:
-                        self.error(f'import_library: file not found: {import_source}')
+                    import_source = resolve('import_library', import_library)
                 elif dynamic_library:
                     # On Windows a .dll cannot be linked directly -- its import
                     # .lib is required (autogen is a later phase, see #1261).
                     self.error('on MSVC, dynamic_library requires import_library '
                                '(the .lib used to link the .dll)')
-            return (static_source, dynamic_source, import_source,
-                    has_static, has_dynamic, has_import)
+            return static_source, dynamic_source, import_source
 
         static_source = self._library_source_path(tc.static_lib_suffix)
         dynamic_source = self._library_source_path(tc.dynamic_lib_suffix)
@@ -1803,8 +1803,10 @@ class PrebuiltCcLibrary(CcTarget):
         has_dynamic = os.path.exists(dynamic_source)
         if not has_static and not has_dynamic:
             self.error(f'Can not find either {static_source} or {dynamic_source}')
-            return None, None, None, False, False, False
-        return static_source, dynamic_source, None, has_static, has_dynamic, False
+            return None, None, None
+        return (static_source if has_static else None,
+                dynamic_source if has_dynamic else None,
+                None)
 
     def _setup(self):
         # There are 3 cases for prebuilt library as below:
@@ -1815,38 +1817,30 @@ class PrebuiltCcLibrary(CcTarget):
         # But in the third case, we use static library for static linking,
         # and use dynamic library for dynamic linking.
         tc = self.blade.get_build_toolchain()
-        (static_source, dynamic_source, import_source,
-         has_static, has_dynamic, has_import) = self._resolve_library_sources(tc)
+        static_source, dynamic_source, import_source = \
+            self._resolve_library_sources(tc)
 
-        if not has_static and not has_dynamic and not has_import:
+        if not static_source and not dynamic_source and not import_source:
             return  # error already emitted by _resolve_library_sources
 
-        # On Windows you link the import library, not the DLL; the DLL is a
-        # runtime-only payload (copied into runfiles, like blade's own generated
-        # DLLs -- see _dynamic_cc_library_windows). `dynamic_link_source` is what
-        # serves link-time dynamic linking: the import lib on MSVC, else the .so.
-        link_dynamic_source = import_source if has_import else None
-
-        if has_static:
-            assert static_source is not None  # has_static implies a resolved path
+        if static_source:
             self.attr['static_source'] = static_source
             self._add_target_file(tc.STATIC_LIB_LABEL, static_source)
-            if not has_dynamic and not has_import:
+            if not dynamic_source and not import_source:
                 # Using static library for dynamic linking
                 self._add_target_file(tc.DYNAMIC_LIB_LABEL, static_source)
 
-        if has_import:
+        if import_source:
             # MSVC: link the import lib; record the DLL (if any) as the runtime
-            # artifact the runner flattens into runfiles (see windows_dll).
-            assert import_source is not None
-            self._add_target_file(tc.DYNAMIC_LIB_LABEL, link_dynamic_source)
-            if not has_static:
-                self._add_target_file(tc.STATIC_LIB_LABEL, link_dynamic_source)
-            if has_dynamic:
+            # artifact the runner flattens into runfiles (see windows_dll), like
+            # blade's own generated DLLs (see _dynamic_cc_library_windows).
+            self._add_target_file(tc.DYNAMIC_LIB_LABEL, import_source)
+            if not static_source:
+                self._add_target_file(tc.STATIC_LIB_LABEL, import_source)
+            if dynamic_source:
                 self.attr['dynamic_source'] = dynamic_source
                 self.data['windows_dll'] = dynamic_source
-        elif has_dynamic:
-            assert dynamic_source is not None  # has_dynamic implies a resolved path
+        elif dynamic_source:
             dynamic_target = self._target_file_path(os.path.basename(dynamic_source))
             self.attr['dynamic_source'] = dynamic_source
             self.attr['dynamic_target'] = dynamic_target
@@ -1856,7 +1850,7 @@ class PrebuiltCcLibrary(CcTarget):
             if soname:
                 self.data['soname_and_full_path'] = (soname, dynamic_target)
 
-            if not has_static:
+            if not static_source:
                 # Using dynamic library for static linking
                 self._add_target_file(tc.STATIC_LIB_LABEL, dynamic_target)
 
