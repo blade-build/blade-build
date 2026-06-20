@@ -345,6 +345,7 @@ class CcRuleGenerator:
 
         sanitizers = getattr(self.options, 'sanitizers', None)
         if sanitizers:
+            sanitizer.check_compat(sanitizers)
             sanitizer.check_toolchain(sanitizers, self.build_toolchain)
             cppflags += sanitizer.compile_flags(sanitizers)
             linkflags += sanitizer.link_flags(sanitizers)

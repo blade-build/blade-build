@@ -68,6 +68,27 @@ class SanitizerHelperTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             sanitizer.parse('bogus')
 
+    def test_thread_alias_and_tag(self):
+        self.assertEqual(['thread'], sanitizer.parse('tsan'))
+        self.assertEqual('tsan', sanitizer.build_tag(['thread']))
+
+    def test_check_compat_rejects_incompatible(self):
+        # address/leak/undefined compose; thread is exclusive with address/leak.
+        sanitizer.check_compat(['address', 'leak', 'undefined'])  # ok, no raise
+        sanitizer.check_compat(['thread', 'undefined'])           # ok
+        with self.assertRaises(SystemExit):
+            sanitizer.check_compat(['address', 'thread'])
+        with self.assertRaises(SystemExit):
+            sanitizer.check_compat(['leak', 'thread'])
+
+    def test_runtime_env_defaults(self):
+        env = sanitizer.runtime_env(['thread'])
+        self.assertEqual('halt_on_error=1', env['TSAN_OPTIONS'])
+        env = sanitizer.runtime_env(['address', 'undefined'])
+        self.assertIn('ASAN_OPTIONS', env)
+        self.assertIn('halt_on_error=1', env['UBSAN_OPTIONS'])
+        self.assertEqual({}, sanitizer.runtime_env([]))
+
     def test_check_toolchain_rejects_msvc(self):
         msvc = mock.Mock()
         msvc.cc_is.side_effect = lambda v: v == 'msvc'

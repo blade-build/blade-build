@@ -68,5 +68,30 @@ class TestSanitizerUbsan(blade_test.TargetTest):
                         'expected the %s build dir' % self.UBSAN_BUILD_DIR)
 
 
+class TestSanitizerTsan(blade_test.TargetTest):
+    """ThreadSanitizer catches a data race the normal build runs through."""
+
+    TSAN_BUILD_DIR = 'build64_release_tsan'
+
+    def setUp(self):
+        """setup method."""
+        self.doSetUp('sanitizer', 'race_test')
+        shutil.rmtree(self.TSAN_BUILD_DIR, ignore_errors=True)
+
+    def doTearDown(self):
+        shutil.rmtree(self.TSAN_BUILD_DIR, ignore_errors=True)
+
+    def testTsanCatchesDataRace(self):
+        # Normal build: the race is benign -> the test passes.
+        self.assertTrue(self.runBlade('test'),
+                        'expected the un-sanitized test to pass')
+        # Under TSan the race is caught -> it fails.
+        self.assertFalse(
+            self.runBlade('test', '--sanitizer=thread', print_error=False),
+            'expected --sanitizer=thread to catch the data race')
+        self.assertTrue(os.path.isdir(self.TSAN_BUILD_DIR),
+                        'expected the %s build dir' % self.TSAN_BUILD_DIR)
+
+
 if __name__ == '__main__':
     blade_test.run(TestSanitizerAsan)

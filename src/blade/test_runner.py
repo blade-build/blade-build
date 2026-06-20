@@ -24,6 +24,7 @@ from blade import binary_runner
 from blade import config
 from blade import console
 from blade import coverage
+from blade import sanitizer
 from blade import target_pattern
 from blade.test_scheduler import TestScheduler  # lgtm[py/cyclic-import]
 # pylint: disable=unused-import
@@ -486,6 +487,13 @@ class TestRunner(binary_runner.BinaryRunner):
                     if not os.path.exists(data_dir):
                         os.makedirs(data_dir)
                     test_env['COVERAGE_FILE'] = os.path.join(data_dir, '.coverage')
+            sanitizers = getattr(self.options, 'sanitizers', None)
+            if sanitizers:
+                # Default *_OPTIONS so a detection fails the test; a value the
+                # user already set in the environment still wins.
+                for var, value in sanitizer.runtime_env(sanitizers).items():
+                    if var not in os.environ:
+                        test_env[var] = value
             tests_run_list.append((target, self._runfiles_dir(target), test_env, cmd))
 
         console.notice('%d tests to run' % len(tests_run_list))

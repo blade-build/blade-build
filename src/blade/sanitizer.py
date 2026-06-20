@@ -21,6 +21,8 @@ _ALIASES = {
     'ubsan': 'undefined',
     'leak': 'leak',
     'lsan': 'leak',
+    'thread': 'thread',
+    'tsan': 'thread',
 }
 
 # Canonical -fsanitize= name -> short build-dir tag.
@@ -28,6 +30,18 @@ _TAGS = {
     'address': 'asan',
     'undefined': 'ubsan',
     'leak': 'lsan',
+    'thread': 'tsan',
+}
+
+# Canonical name -> the sanitizers it cannot be combined with. Each uses a
+# different shadow-memory / runtime model, so they're mutually exclusive;
+# `undefined` is pure instrumentation and composes with anything. (`memory`
+# is listed ahead of its phase so the matrix stays complete.)
+_INCOMPATIBLE = {
+    'address': {'thread', 'memory'},
+    'leak': {'thread', 'memory'},
+    'thread': {'address', 'leak', 'memory'},
+    'memory': {'address', 'leak', 'thread'},
 }
 
 
@@ -75,6 +89,34 @@ def link_flags(sanitizers):
 def build_tag(sanitizers):
     """The build-dir tag for the set (e.g. ``asan``); stable, sorted."""
     return '+'.join(_TAGS[s] for s in sanitizers)
+
+
+def runtime_env(sanitizers):
+    """Default ``*_OPTIONS`` env so a detection reliably fails the test.
+
+    These are defaults only -- the test runner applies them without overriding
+    a value the user already set in the environment.
+    """
+    env = {}
+    if 'address' in sanitizers:
+        env['ASAN_OPTIONS'] = 'abort_on_error=1'
+    if 'thread' in sanitizers:
+        env['TSAN_OPTIONS'] = 'halt_on_error=1'
+    if 'undefined' in sanitizers:
+        env['UBSAN_OPTIONS'] = 'halt_on_error=1:print_stacktrace=1'
+    if 'leak' in sanitizers:
+        env['LSAN_OPTIONS'] = 'exitcode=1'
+    return env
+
+
+def check_compat(sanitizers):
+    """Fatal if the requested sanitizers can't be combined with each other."""
+    requested = set(sanitizers)
+    for s in sanitizers:
+        conflicts = _INCOMPATIBLE.get(s, set()) & requested
+        if conflicts:
+            console.fatal('--sanitizer: "%s" cannot be combined with %s' %
+                          (s, ', '.join(sorted(conflicts))))
 
 
 def check_toolchain(sanitizers, toolchain):

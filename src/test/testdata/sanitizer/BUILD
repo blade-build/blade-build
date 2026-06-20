@@ -2,3 +2,4 @@
 # the respective sanitizer.
 cc_test(name = 'oob_test', srcs = ['oob_test.cc'])  # heap-buffer-overflow (ASan)
 cc_test(name = 'ub_test', srcs = ['ub_test.cc'])    # signed overflow (UBSan)
+cc_test(name = 'race_test', srcs = ['race_test.cc'], deps = ['#pthread'])  # data race (TSan)
