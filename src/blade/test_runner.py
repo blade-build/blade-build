@@ -491,8 +491,15 @@ class TestRunner(binary_runner.BinaryRunner):
             sanitizers = getattr(self.options, 'sanitizers', None)
             if sanitizers:
                 # Default *_OPTIONS so a detection fails the test; a value the
-                # user already set in the environment still wins.
-                for var, value in sanitizer.runtime_env(sanitizers).items():
+                # user already set in the environment still wins. Configured
+                # sanitizer_config.options are appended to the matching
+                # sanitizer's options (a suppressions=<path> token is resolved
+                # against the workspace root; everything else is verbatim).
+                options = sanitizer.resolve_options(
+                    config.get_item('sanitizer_config', 'options'),
+                    sanitizers)
+                for var, value in sanitizer.runtime_env(
+                        sanitizers, options).items():
                     if var not in os.environ:
                         test_env[var] = value
                 # MSVC ASan links the dynamic runtime (clang_rt.asan_dynamic-*.dll),

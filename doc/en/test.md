@@ -168,9 +168,20 @@ A sanitizer is a **per-run choice** (a flag), not project config. `--sanitizer` 
 - **Isolated build directory:** a sanitized build is ABI/codegen-incompatible with a normal one, so it gets its own sibling dir with a sanitizer tag — `build64_release_asan`. The plain `build64_release` is untouched, so the two coexist without clobbering or rebuilding each other.
 - **Per-target opt-out:** a target that must not be instrumented (intentional UB, a hot path, a wrapper around a non-instrumented prebuilt) sets `sanitize = False`. It still links (and still gets the runtime); only its own compiles drop the instrumentation. This works on MSVC too — since `cl` has no `-fno-sanitize`, Blade blanks the per-file `/fsanitize` flag for that target instead.
 
-```python
-cc_library(name = 'crc32_hw', srcs = ['crc32_hw.cc'], sanitize = False)
-```
+  ```python
+  cc_library(name = 'crc32_hw', srcs = ['crc32_hw.cc'], sanitize = False)
+  ```
+
+- **Runtime options & suppressions:** set per-sanitizer run options from BLADE_ROOT, mapped onto the matching `*_OPTIONS` environment variable. Each value is a list, one option per element. These options are appended to Blade's defaults, and take effect only when that sanitizer is in `--sanitizer`. If you've already set that sanitizer's environment variable yourself (e.g. `ASAN_OPTIONS`), Blade uses it as-is and ignores the corresponding options from the config.
+
+  To suppress a known-benign leak/race or a false positive, use the `suppressions=<file path>` option; the path is resolved relative to the workspace root and the file must exist. Suppression files use each sanitizer's **own** syntax: e.g. `leak:<name>` ([LeakSanitizer](https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer#suppressions)), `race:<name>` / `called_from_lib:<lib>` ([ThreadSanitizer](https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions)).
+
+  ```python
+  sanitizer_config(options = {
+      'thread': ['suppressions=etc/tsan.supp', 'history_size=7'],
+      'address': ['detect_stack_use_after_return=1'],
+  })
+  ```
 
 ## Test Exclusion
 

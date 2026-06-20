@@ -472,6 +472,18 @@ _CONFIG_TEMPLATE = {
         'direct_use_allowed': [],
     },
 
+    'sanitizer_config': {
+        '__help__': 'Sanitizer configuration (issue #1038)',
+        # Per-sanitizer runtime `*_OPTIONS`: {sanitizer: [option, ...]}. Keys
+        # accept the canonical name or its alias ('thread'/'tsan', ...); each
+        # value is a list of `key=value` options (a bare string also works). The
+        # options are appended to that sanitizer's options after blade's defaults
+        # (a value you set in the environment still overrides the lot). A
+        # `suppressions=<path>` option is resolved relative to the workspace root
+        # and the file must exist; every other option passes through verbatim.
+        'options': {},
+    },
+
 }
 
 
@@ -1051,6 +1063,31 @@ def vcpkg_config(append=None, **kwargs):
 def cuda_config(append=None, **kwargs):
     """cuda_config."""
     _blade_config.update_config('cuda_config', append, kwargs)
+
+
+@config_rule
+def sanitizer_config(append=None, **kwargs):
+    """Sanitizer configuration (issue #1038).
+
+    Per-sanitizer runtime ``*_OPTIONS``, one option per list element, e.g.::
+
+        sanitizer_config(
+            options = {
+                'thread': [
+                    'suppressions=etc/tsan.supp',
+                    'history_size=7',
+                ],
+                'address': ['detect_stack_use_after_return=1'],
+            },
+        )
+
+    A bare string also works for a single option. The options are appended to
+    that sanitizer's options at run time, after blade's defaults (a value you set
+    in the environment still overrides the lot). A ``suppressions=<path>`` option
+    is resolved relative to the workspace root and the file must exist; every
+    other option passes through verbatim.
+    """
+    _blade_config.update_config('sanitizer_config', append, kwargs)
 
 
 @config_rule

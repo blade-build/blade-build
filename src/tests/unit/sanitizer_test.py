@@ -118,6 +118,57 @@ class SanitizerHelperTest(unittest.TestCase):
                          sanitizer.runtime_env(['memory'])['MSAN_OPTIONS'])
         self.assertEqual({}, sanitizer.runtime_env([]))
 
+    def test_runtime_env_appends_options(self):
+        # A configured option string is appended to that sanitizer's *_OPTIONS,
+        # after the default (joined with ':').
+        env = sanitizer.runtime_env(['thread'], {'thread': 'history_size=7'})
+        self.assertEqual('halt_on_error=1:history_size=7', env['TSAN_OPTIONS'])
+        # Untouched sanitizers keep their plain default; empty string is ignored.
+        env = sanitizer.runtime_env(['address', 'leak'],
+                                    {'leak': 'suppressions=/abs/l.supp', 'address': ''})
+        self.assertEqual('abort_on_error=1', env['ASAN_OPTIONS'])
+        self.assertEqual('exitcode=1:suppressions=/abs/l.supp', env['LSAN_OPTIONS'])
+
+
+class ResolveOptionsTest(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual({}, sanitizer.resolve_options(None, ['thread']))
+        self.assertEqual({}, sanitizer.resolve_options({}, ['thread']))
+
+    def test_list_form_joined_with_colon(self):
+        # The natural form: one option per list element, joined to ':' for env.
+        # Alias 'tsan' -> 'thread'; 'leak' is configured but inactive -> skipped.
+        resolved = sanitizer.resolve_options(
+            {'tsan': ['history_size=7', 'halt_on_error=0'], 'leak': ['x=1']},
+            ['thread'])
+        self.assertEqual({'thread': 'history_size=7:halt_on_error=0'}, resolved)
+
+    def test_string_form_is_a_single_option(self):
+        # A bare string is one option (use a list for several).
+        self.assertEqual(
+            {'thread': 'history_size=7'},
+            sanitizer.resolve_options({'thread': 'history_size=7'}, ['thread']))
+
+    def test_suppressions_path_resolved_among_other_options(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.supp') as f:
+            rel = os.path.relpath(f.name, os.getcwd())
+            abspath = os.path.abspath(f.name)
+            # List form, with the suppressions path resolved in place.
+            resolved = sanitizer.resolve_options(
+                {'thread': ['suppressions=%s' % rel, 'history_size=7']}, ['thread'])
+            self.assertEqual(
+                {'thread': 'suppressions=%s:history_size=7' % abspath}, resolved)
+
+    def test_unknown_sanitizer_is_fatal(self):
+        with self.assertRaises(SystemExit):
+            sanitizer.resolve_options({'bogus': ['x=1']}, ['bogus'])
+
+    def test_missing_suppressions_file_is_fatal(self):
+        with self.assertRaises(SystemExit):
+            sanitizer.resolve_options(
+                {'thread': ['suppressions=/definitely/missing.supp']}, ['thread'])
+
     def test_check_toolchain_msvc_allows_only_address(self):
         msvc = mock.Mock()
         msvc.cc_is.side_effect = lambda v: v == 'msvc'

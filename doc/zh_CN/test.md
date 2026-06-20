@@ -164,9 +164,20 @@ sanitizer 是**每次运行的选择**（命令行开关），不是项目配置
 - **独立的构建目录：** sanitizer 构建与普通构建在 ABI/代码生成上不兼容，因此使用带 sanitizer 标记的独立兄弟目录——`build64_release_asan`。普通的 `build64_release` 不受影响，两者可并存、互不覆盖、互不触发重新编译。
 - **按目标退出：** 不应被插桩的目标（有意的 UB、性能热点、对未插桩预编译库的包装）可设置 `sanitize = False`。它仍参与链接（仍获得运行时），只是自身的编译不再插桩。在 MSVC 上同样有效——由于 `cl` 没有 `-fno-sanitize`，Blade 改为将该目标的 `/fsanitize` 标志置空。
 
-```python
-cc_library(name = 'crc32_hw', srcs = ['crc32_hw.cc'], sanitize = False)
-```
+  ```python
+  cc_library(name = 'crc32_hw', srcs = ['crc32_hw.cc'], sanitize = False)
+  ```
+
+- **运行时选项与抑制：** 可在 BLADE_ROOT 中为各 sanitizer 设置运行选项，映射到对应的 `*_OPTIONS` 环境变量。选项值为列表，每个列表元素为一个选项。这些选项追加到 Blade 的默认选项上，且仅当它出现在 `--sanitizer` 中时才生效。若你已自行设置了该 sanitizer 的环境变量（如 `ASAN_OPTIONS`），Blade 就会忽略配置中对应的选项。
+
+  要抑制已知良性的泄漏/竞争或者误报，可以通过 `suppressions=<抑制文件路径>` 选项，文件路径相对工作区根目录解析且文件必须存在。抑制文件采用各 sanitizer **各自**的语法：例如 `leak:<名称>`（[LeakSanitizer](https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer#suppressions)）、`race:<名称>` / `called_from_lib:<库>`（[ThreadSanitizer](https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions)）。
+
+  ```python
+  sanitizer_config(options = {
+      'thread': ['suppressions=etc/tsan.supp', 'history_size=7'],
+      'address': ['detect_stack_use_after_return=1'],
+  })
+  ```
 
 ## 测试排除
 

@@ -12,7 +12,10 @@ order.
 """
 
 
+import os
+
 from blade import console
+from blade.util import var_to_list
 
 # Canonical -fsanitize= name -> short build-dir tag (also its `--sanitizer`
 # alias: `asan` etc.). This is the single source of truth for the sanitizer set.
@@ -40,6 +43,15 @@ _INCOMPATIBLE = {
     'leak': {'thread', 'memory'},
     'thread': {'address', 'leak', 'memory'},
     'memory': {'address', 'leak', 'thread'},
+}
+
+# Canonical name -> its runtime ``*_OPTIONS`` environment variable.
+_OPTIONS_VAR = {
+    'address': 'ASAN_OPTIONS',
+    'undefined': 'UBSAN_OPTIONS',
+    'leak': 'LSAN_OPTIONS',
+    'thread': 'TSAN_OPTIONS',
+    'memory': 'MSAN_OPTIONS',
 }
 
 
@@ -128,11 +140,65 @@ def msvc_link_flags(sanitizers):
     return []
 
 
-def runtime_env(sanitizers):
+def resolve_options(options, sanitizers):
+    """Resolve configured ``*_OPTIONS`` for the active sanitizer set.
+
+    ``options`` is the ``{sanitizer: str|list}`` map from
+    ``sanitizer_config.options`` (keys accept aliases; each value is one option
+    string or a list of them). Returns ``{canonical: option_string}`` joined with
+    the canonical ``:`` for the sanitizers actually active this run; a configured
+    sanitizer that isn't requested is skipped. A ``suppressions=<path>`` option is
+    resolved relative to the workspace root (the CWD blade runs from) and the file
+    must exist (fatal otherwise) -- a silently-missing file would let findings you
+    believed suppressed fire. Every other option passes through verbatim.
+    """
+    if not options:
+        return {}
+    active = set(sanitizers)
+    resolved = {}
+    for name, value in options.items():
+        canonical = _ALIASES.get(str(name).strip().lower())
+        if canonical is None:
+            console.fatal('sanitizer_config.options: unknown sanitizer "%s" '
+                          '(known: %s)' % (name, ', '.join(sorted(_ALIASES))))
+        if canonical not in active or not value:
+            continue
+        option_string = _normalize_options(value, name)
+        if option_string:
+            resolved[canonical] = option_string
+    return resolved
+
+
+def _normalize_options(value, name):
+    """Flatten a str-or-list of ``*_OPTIONS`` into one colon-joined string.
+
+    Each element is a single option; use a list for several -- the readable form
+    (the colon ``:`` separator is just an env-var artifact, joined on at the end).
+    A ``suppressions=<path>`` option is resolved to a validated abspath relative
+    to the workspace root; every other option passes through verbatim.
+    """
+    options = []
+    for item in var_to_list(value):
+        option = str(item).strip()
+        if not option:
+            continue
+        if option.startswith('suppressions='):
+            path = os.path.abspath(option[len('suppressions='):])
+            if not os.path.isfile(path):
+                console.fatal('sanitizer_config.options["%s"]: suppressions '
+                              'file not found: %s' % (name, path))
+            option = 'suppressions=' + path
+        options.append(option)
+    return ':'.join(options)
+
+
+def runtime_env(sanitizers, options=None):
     """Default ``*_OPTIONS`` env so a detection reliably fails the test.
 
     These are defaults only -- the test runner applies them without overriding
-    a value the user already set in the environment.
+    a value the user already set in the environment. ``options`` is the resolved
+    ``{canonical: option_string}`` map from ``resolve_options``; each string is
+    appended to that sanitizer's options after the defaults.
     """
     env = {}
     if 'address' in sanitizers:
@@ -145,6 +211,11 @@ def runtime_env(sanitizers):
         env['LSAN_OPTIONS'] = 'exitcode=1'
     if 'memory' in sanitizers:
         env['MSAN_OPTIONS'] = 'halt_on_error=1'
+    for canonical, option_string in (options or {}).items():
+        if not option_string:
+            continue
+        var = _OPTIONS_VAR[canonical]
+        env[var] = env[var] + ':' + option_string if var in env else option_string
     return env
 
 
