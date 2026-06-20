@@ -1700,6 +1700,7 @@ class PrebuiltCcLibrary(CcTarget):
                  libpath_pattern: str | None,
                  static_library: str | None,
                  dynamic_library: str | None,
+                 import_library: str | None,
                  link_all_symbols: bool,
                  binary_link_only: bool,
                  deprecated: bool,
@@ -1732,6 +1733,7 @@ class PrebuiltCcLibrary(CcTarget):
         self.attr['libpath_pattern'] = libpath_pattern
         self.attr['static_library'] = static_library
         self.attr['dynamic_library'] = dynamic_library
+        self.attr['import_library'] = import_library
         self.attr['link_all_symbols'] = link_all_symbols
         self.attr['binary_link_only'] = binary_link_only
         self.attr['deprecated'] = deprecated
@@ -1740,26 +1742,34 @@ class PrebuiltCcLibrary(CcTarget):
         self._setup()
 
     def _resolve_library_sources(self, tc):
-        """Resolve the static/dynamic library source paths, in either mode.
+        """Resolve the static/dynamic/import library source paths, in either mode.
 
-        - **Explicit** (``static_library`` / ``dynamic_library`` set): the paths
-          are given directly, relative to the target's dir; a path that is set
-          but missing on disk is an error. At least one must be set.
-        - **Convention** (neither set): locate by name + libpath pattern (the
+        - **Explicit** (``static_library`` / ``dynamic_library`` /
+          ``import_library`` set): the paths are given directly, relative to the
+          target's dir; a path that is set but missing on disk is an error. At
+          least one must be set.
+        - **Convention** (none set): locate by name + libpath pattern (the
           historical behavior); presence is just whether the file exists.
 
-        Returns ``(static_source, dynamic_source, has_static, has_dynamic)``; a
-        source is ``None`` when that kind is absent.
+        ``import_library`` is a Windows concept -- the ``.lib`` you link to use a
+        ``.dll`` -- so it is resolved only on the MSVC toolchain and ignored
+        elsewhere (where the ``.so``/``.dylib`` is itself the link target).
+
+        Returns ``(static_source, dynamic_source, import_source, has_static,
+        has_dynamic, has_import)``; a source is ``None`` when that kind is absent.
         """
         static_library = self.attr.get('static_library')
         dynamic_library = self.attr.get('dynamic_library')
-        if static_library or dynamic_library:
+        import_library = self.attr.get('import_library')
+        is_msvc = tc.cc_is('msvc')
+        if static_library or dynamic_library or import_library:
             # Explicit paths win; the name-convention knob is meaningless here.
             if self.attr.get('libpath_pattern') is not None:
                 self.warning('libpath_pattern is ignored when static_library / '
-                             'dynamic_library is set (explicit paths take over)')
-            static_source = dynamic_source = None
-            has_static = has_dynamic = False
+                             'dynamic_library / import_library is set (explicit '
+                             'paths take over)')
+            static_source = dynamic_source = import_source = None
+            has_static = has_dynamic = has_import = False
             if static_library:
                 static_source = os.path.join(self.path, static_library)
                 if os.path.exists(static_source):
@@ -1772,7 +1782,20 @@ class PrebuiltCcLibrary(CcTarget):
                     has_dynamic = True
                 else:
                     self.error(f'dynamic_library: file not found: {dynamic_source}')
-            return static_source, dynamic_source, has_static, has_dynamic
+            if is_msvc:
+                if import_library:
+                    import_source = os.path.join(self.path, import_library)
+                    if os.path.exists(import_source):
+                        has_import = True
+                    else:
+                        self.error(f'import_library: file not found: {import_source}')
+                elif dynamic_library:
+                    # On Windows a .dll cannot be linked directly -- its import
+                    # .lib is required (autogen is a later phase, see #1261).
+                    self.error('on MSVC, dynamic_library requires import_library '
+                               '(the .lib used to link the .dll)')
+            return (static_source, dynamic_source, import_source,
+                    has_static, has_dynamic, has_import)
 
         static_source = self._library_source_path(tc.static_lib_suffix)
         dynamic_source = self._library_source_path(tc.dynamic_lib_suffix)
@@ -1780,8 +1803,8 @@ class PrebuiltCcLibrary(CcTarget):
         has_dynamic = os.path.exists(dynamic_source)
         if not has_static and not has_dynamic:
             self.error(f'Can not find either {static_source} or {dynamic_source}')
-            return None, None, False, False
-        return static_source, dynamic_source, has_static, has_dynamic
+            return None, None, None, False, False, False
+        return static_source, dynamic_source, None, has_static, has_dynamic, False
 
     def _setup(self):
         # There are 3 cases for prebuilt library as below:
@@ -1792,21 +1815,37 @@ class PrebuiltCcLibrary(CcTarget):
         # But in the third case, we use static library for static linking,
         # and use dynamic library for dynamic linking.
         tc = self.blade.get_build_toolchain()
-        static_source, dynamic_source, has_static, has_dynamic = \
-            self._resolve_library_sources(tc)
+        (static_source, dynamic_source, import_source,
+         has_static, has_dynamic, has_import) = self._resolve_library_sources(tc)
 
-        if not has_static and not has_dynamic:
+        if not has_static and not has_dynamic and not has_import:
             return  # error already emitted by _resolve_library_sources
+
+        # On Windows you link the import library, not the DLL; the DLL is a
+        # runtime-only payload (copied into runfiles, like blade's own generated
+        # DLLs -- see _dynamic_cc_library_windows). `dynamic_link_source` is what
+        # serves link-time dynamic linking: the import lib on MSVC, else the .so.
+        link_dynamic_source = import_source if has_import else None
 
         if has_static:
             assert static_source is not None  # has_static implies a resolved path
             self.attr['static_source'] = static_source
             self._add_target_file(tc.STATIC_LIB_LABEL, static_source)
-            if not has_dynamic:
+            if not has_dynamic and not has_import:
                 # Using static library for dynamic linking
                 self._add_target_file(tc.DYNAMIC_LIB_LABEL, static_source)
 
-        if has_dynamic:
+        if has_import:
+            # MSVC: link the import lib; record the DLL (if any) as the runtime
+            # artifact the runner flattens into runfiles (see windows_dll).
+            assert import_source is not None
+            self._add_target_file(tc.DYNAMIC_LIB_LABEL, link_dynamic_source)
+            if not has_static:
+                self._add_target_file(tc.STATIC_LIB_LABEL, link_dynamic_source)
+            if has_dynamic:
+                self.attr['dynamic_source'] = dynamic_source
+                self.data['windows_dll'] = dynamic_source
+        elif has_dynamic:
             assert dynamic_source is not None  # has_dynamic implies a resolved path
             dynamic_target = self._target_file_path(os.path.basename(dynamic_source))
             self.attr['dynamic_source'] = dynamic_source
@@ -1951,6 +1990,7 @@ class VcpkgLibrary(PrebuiltCcLibrary):
                 libpath_pattern=None,
                 static_library=None,
                 dynamic_library=None,
+                import_library=None,
                 # whole-archive the static lib when requested, so all of its
                 # static initializers (registration) run even if unreferenced.
                 link_all_symbols=link_all_symbols,
@@ -2252,6 +2292,7 @@ def prebuilt_cc_library(
         libpath_pattern: str | None = None,
         static_library: str | None = None,
         dynamic_library: str | None = None,
+        import_library: str | None = None,
         link_all_symbols: bool = False,
         binary_link_only: bool = False,
         deprecated: bool = False,
@@ -2267,6 +2308,7 @@ def prebuilt_cc_library(
             libpath_pattern=libpath_pattern,
             static_library=static_library,
             dynamic_library=dynamic_library,
+            import_library=import_library,
             link_all_symbols=link_all_symbols,
             binary_link_only=binary_link_only,
             deprecated=deprecated,
@@ -2690,8 +2732,11 @@ class CcBinary(CcTarget):
             else:
                 linkflags.append('-rdynamic')
         linkflags += self._generate_link_flags()
-        for rpath_link in self._get_rpath_links():
-            linkflags.append('-Wl,--rpath-link=%s' % rpath_link)
+        # `--rpath-link` is a GNU-ld flag; MSVC link.exe just answers LNK4044
+        # and ignores it (Windows has no rpath), so don't emit it there.
+        if not toolchain.cc_is('msvc'):
+            for rpath_link in self._get_rpath_links():
+                linkflags.append('-Wl,--rpath-link=%s' % rpath_link)
         linkflags += self._vcpkg_rpath_flags(dynamic_link, toolchain)
         return linkflags
 
