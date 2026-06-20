@@ -26,6 +26,7 @@ from blade import console
 from blade import init_command
 from blade import target_pattern
 from blade import workspace
+from blade.toolchain import BuildArchitecture, create_toolchain
 
 
 def load_config(options, root_dir):
@@ -64,9 +65,9 @@ def _check_error_log(stage):
     return 0
 
 
-def run_subcommand(blade_path, command, options, ws, targets):
+def run_subcommand(blade_path, command, options, ws, toolchain, targets):
     """Run particular subcommands."""
-    builder = build_manager.initialize(blade_path, command, options, ws, targets)
+    builder = build_manager.initialize(blade_path, command, options, ws, toolchain, targets)
 
     # The 'dump' command is special, some kind of dump items should be ran before loading.
     if command == 'dump' and options.dump_config:
@@ -101,7 +102,7 @@ def run_subcommand(blade_path, command, options, ws, targets):
     return _check_error_log(command)
 
 
-def run_subcommand_profile(blade_path, command, options, ws, targets):
+def run_subcommand_profile(blade_path, command, options, ws, toolchain, targets):
     """Run subcommand within profile."""
     pstats_file = os.path.join(ws.build_dir, 'blade.pstats')
     # NOTE: can't use an plain int variable to receive exit_code
@@ -109,8 +110,9 @@ def run_subcommand_profile(blade_path, command, options, ws, targets):
     # wll not modify the local exit_code.
     # so we use a mutable object list to obtain the return value of run_subcommand
     exit_code = [-1]
-    cProfile.runctx("exit_code[0] = run_subcommand(blade_path, command, options, ws, targets)",
-                    globals(), locals(), pstats_file)
+    cProfile.runctx(
+        "exit_code[0] = run_subcommand(blade_path, command, options, ws, toolchain, targets)",
+        globals(), locals(), pstats_file)
     p = pstats.Stats(pstats_file)
     p.sort_stats('cumulative').print_stats(20)
     p.sort_stats('time').print_stats(20)
@@ -161,12 +163,21 @@ def _main(blade_path, argv):
         targets = ['.']
     targets = target_pattern.normalize_list(targets, ws.working_dir)
 
-    ws.setup_build_dir()
+    # The selected cc toolchain is the single source of truth for the platform
+    # triple (${os}/${arch}/${bits}); create it once, here, and pass it on. When
+    # the deprecated -m flag is absent, arch/bits come from the toolchain too, so
+    # the DSL (blade.arch) and prebuilt lib${bits} paths stay consistent.
+    toolchain = create_toolchain(options.cc_toolchain)
+    if not options.m:
+        options.arch = toolchain.target_arch
+        options.bits = BuildArchitecture.get_architecture_bits(toolchain.target_arch)
+
+    ws.setup_build_dir(toolchain)
 
     lock_id = ws.lock()
     try:
         run_fn = run_subcommand_profile if options.profiling else run_subcommand
-        return run_fn(blade_path, command, options, ws, targets)
+        return run_fn(blade_path, command, options, ws, toolchain, targets)
     finally:
         ws.unlock(lock_id)
 

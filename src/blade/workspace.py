@@ -36,6 +36,30 @@ def _build_variant_suffix(options):
     return ''.join('_' + v for v in variants)
 
 
+def _build_dir_name(build_path_format, options, toolchain):
+    """Compute the build-dir name: template substitution + variant suffix.
+
+    The selected ``toolchain`` supplies the platform triple
+    (``${os}``/``${arch}``/``${bits}``); ``${profile}`` comes from the options.
+    The sanitizer/coverage variant tag is appended afterwards -- it is never part
+    of the template, so it composes uniformly regardless of the template a
+    project chooses.
+    """
+    template = string.Template(build_path_format)
+    try:
+        name = template.substitute(
+            profile=options.profile,
+            os=toolchain.target_os,
+            arch=toolchain.target_arch,
+            bits=options.bits)
+    except KeyError as e:
+        console.fatal(
+            'global_config.build_path_template "%s" references unknown variable '
+            '%s; supported: ${profile} ${os} ${arch} ${bits} (sanitizer/coverage '
+            'variants are appended automatically)' % (build_path_format, e))
+    return name + _build_variant_suffix(options)
+
+
 def _generate_scm_svn():
     url = revision = 'unknown'
     returncode, stdout, stderr = util.run_command(['svn', 'info'])
@@ -122,16 +146,14 @@ class Workspace:
                 print("Blade: Entering directory `%s'" % self.__root_dir)
             os.chdir(self.__root_dir)
 
-    def setup_build_dir(self):
-        """Setup build dir."""
+    def setup_build_dir(self, toolchain):
+        """Setup build dir.
+
+        ``toolchain`` is the cc toolchain created in main; it is the source of
+        truth for the ``${os}``/``${arch}``/``${bits}`` build-dir variables.
+        """
         build_path_format = config.get_item('global_config', 'build_path_template')
-        s = string.Template(build_path_format)
-        build_dir = s.substitute(bits=self.__options.bits, profile=self.__options.profile)
-        # Give variant builds (coverage, and later sanitizers) their own sibling
-        # build dir so they don't clobber or force-rebuild the normal one. The
-        # plain build keeps its exact historical name (no suffix), so existing
-        # workspaces/scripts/blade-bin are unaffected.
-        build_dir += _build_variant_suffix(self.__options)
+        build_dir = _build_dir_name(build_path_format, self.__options, toolchain)
 
         if not os.path.exists(build_dir):
             os.mkdir(build_dir)

@@ -125,6 +125,11 @@ class CommandLineParser:
             options.bits = BuildArchitecture.get_architecture_bits(arch)
             assert options.bits
         else:
+            console.warning(
+                f'"-m{m}" is deprecated: it is the legacy x86 multilib selector. '
+                'Select a toolchain whose arch is 32-/64-bit instead '
+                '(--cc-toolchain, cc_config.toolchain, or cc_toolchain_config); '
+                'the toolchain then determines ${arch}/${bits}.')
             options.bits = m
             options.arch = BuildArchitecture.get_model_architecture(arch, m)
             if options.arch is None:

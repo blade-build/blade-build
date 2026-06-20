@@ -24,7 +24,6 @@ from blade import maven
 from blade import ninja_runner
 from blade import target_pattern
 from blade.binary_runner import BinaryRunner
-from blade.toolchain import create_toolchain
 from blade.build_accelerator import BuildAccelerator
 from blade.dependency_analyzer import analyze_deps
 from blade.load_build_files import load_targets
@@ -77,6 +76,7 @@ class Blade:
                  command,
                  options,
                  workspace,
+                 toolchain,
                  targets):
         """init method.
 
@@ -135,7 +135,9 @@ class Blade:
         # Indicate whether the deps list is expanded by expander or not
         self.__targets_expanded = False
 
-        self.__build_toolchain = create_toolchain(options.cc_toolchain)
+        # The toolchain is created once in main and threaded through (it is the
+        # source of truth for the build-dir platform triple); reuse that instance.
+        self.__build_toolchain = toolchain
         self.build_accelerator = BuildAccelerator(self.__build_toolchain)
         self.__build_jobs_num = 0
 
@@ -766,7 +768,7 @@ class Blade:
         return self.__all_rule_names
 
 
-def initialize(blade_path, command, options, workspace, targets):
+def initialize(blade_path, command, options, workspace, toolchain, targets):
     global instance
-    instance = Blade(blade_path, command, options, workspace, targets)
+    instance = Blade(blade_path, command, options, workspace, toolchain, targets)
     return instance
