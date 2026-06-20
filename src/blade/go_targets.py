@@ -382,9 +382,12 @@ def _generate_go_rules(ctx):
         command=f'{prefix} build -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
         description='GO BUILD ${package}',
         pool=go_pool))
+    # Under --coverage, build the test binary with coverage instrumentation;
+    # the test runner then passes -test.coverprofile to collect a profile.
+    gotest_cover = ' -cover -covermode=count' if getattr(ctx.options, 'coverage', False) else ''
     ctx.emit_rule(NinjaRule(
         name='gotest',
-        command=f'{prefix} test -c -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
+        command=f'{prefix} test -c{gotest_cover} -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
         description='GO TEST ${package}',
         pool=go_pool))
 

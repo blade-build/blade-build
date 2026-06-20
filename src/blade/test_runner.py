@@ -332,6 +332,11 @@ class TestRunner(binary_runner.BinaryRunner):
         toolchain = build_manager.instance.get_build_toolchain()
         coverage.CcCoverageReporter(self.build_dir, os.getcwd(),
                                     toolchain.cc_is('clang')).generate()
+        # Go coverage: go_test binaries drop `.coverprofile` files in the build
+        # dir; merge them into one `go tool cover` HTML report.
+        coverage.GoCoverageReporter(self.build_dir,
+                                    config.get_item('go_config', 'go'),
+                                    config.get_item('go_config', 'go_home')).generate()
 
     def _show_banner(self, text):
         pads = int((76 - len(text)) / 2)
@@ -451,6 +456,11 @@ class TestRunner(binary_runner.BinaryRunner):
             test_env = self._prepare_env(target)
             cmd = [os.path.abspath(self._executable(target))]
             cmd += self.options.args
+            if self.options.coverage and target.type == 'go_test':
+                # Go test binaries (built with -cover) write a profile here;
+                # GoCoverageReporter merges all of them into one HTML report.
+                cmd.append('-test.coverprofile=%s.coverprofile'
+                           % os.path.abspath(self._executable(target)))
             if console.color_enabled():
                 test_env['GTEST_COLOR'] = 'yes'
             else:

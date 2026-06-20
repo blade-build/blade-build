@@ -299,3 +299,71 @@ class CcCoverageReporter:
         console.debug(' '.join(cmd))
         if subprocess.call(cmd, shell=False) != 0:
             console.warning('Failed to generate the C/C++ coverage report')
+
+
+class GoCoverageReporter:
+    """Generate a Go coverage report from `go test` coverage profiles.
+
+    Under ``blade test --coverage`` go_test binaries are built with `-cover`
+    and run with `-test.coverprofile`, dropping a `<binary>.coverprofile` next
+    to each. This merges them and renders an HTML report via `go tool cover`.
+    Degrades gracefully: a no-op when go is unconfigured or no profile exists,
+    and only warns (never fails the build) on error.
+    """
+
+    def __init__(self, build_dir, go, go_home):
+        self.__build_dir = build_dir
+        self.__go = go
+        self.__go_home = go_home
+
+    def _profiles(self):
+        found = []
+        for dirpath, _dirnames, filenames in os.walk(self.__build_dir):
+            for name in filenames:
+                if name.endswith('.coverprofile'):
+                    found.append(os.path.join(dirpath, name))
+        return found
+
+    @staticmethod
+    def merge_profiles(profiles, dest):
+        """Merge Go coverprofiles into one (single `mode:` header + all rows)."""
+        mode = 'mode: count'
+        rows = []
+        for profile in profiles:
+            with open(profile, encoding='utf-8') as f:
+                for line in f:
+                    line = line.rstrip('\n')
+                    if line.startswith('mode:'):
+                        mode = line
+                    elif line:
+                        rows.append(line)
+        with open(dest, 'w', encoding='utf-8') as f:
+            f.write(mode + '\n')
+            for row in rows:
+                f.write(row + '\n')
+
+    def generate(self):
+        """Merge profiles and render `go tool cover -html`."""
+        if not self.__go:
+            return  # go toolchain not configured
+        profiles = self._profiles()
+        if not profiles:
+            console.debug('No Go coverage profiles found, '
+                          'skipping the Go coverage report')
+            return
+
+        report_dir = os.path.join(self.__build_dir, 'go_coverage_report')
+        if not os.path.exists(report_dir):
+            os.makedirs(report_dir)
+        merged = os.path.join(report_dir, 'merged.coverprofile')
+        self.merge_profiles(profiles, merged)
+        console.info('Generating Go coverage report `%s`' % report_dir)
+
+        env = dict(os.environ)
+        if self.__go_home:
+            env['GOPATH'] = os.path.abspath(self.__go_home)
+        cmd = [self.__go, 'tool', 'cover', '-html=' + merged,
+               '-o', os.path.join(report_dir, 'index.html')]
+        console.debug(' '.join(cmd))
+        if subprocess.call(cmd, shell=False, env=env) != 0:
+            console.warning('Failed to generate the Go coverage report')

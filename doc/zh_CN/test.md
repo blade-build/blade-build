@@ -98,6 +98,17 @@ blade test //foo/... --coverage
 - 测试结束后，Blade 调用 [gcovr](https://gcovr.com/) 在 `<build_dir>/cc_coverage_report/index.html` 生成可逐级目录下钻（目录 → 文件 → 逐行）的 HTML 报告（并附带 Cobertura 格式的 `coverage.xml`）。请先 `pip install gcovr`；若未安装，Blade 只会告警并跳过报告生成。
 - 构建目录下的源文件会被排除，报告只反映你自己的代码，而非生成代码（如 `*.pb.cc`）或第三方依赖（vcpkg 安装在构建目录下）。
 
+### Go 覆盖率（go test -cover）
+
+Go 测试覆盖率基于 Go 内置的 cover 支持：
+
+```bash
+blade test //foo/... --coverage
+```
+
+- `go_test` 二进制以 `-cover -covermode=count` 编译，并以 `-test.coverprofile` 运行，每个测试产生一份 profile。
+- 测试结束后，Blade 合并这些 profile 并调用 `go tool cover -html` 在 `<build_dir>/go_coverage_report/index.html` 生成报告。
+
 **独立的构建目录。** `--coverage` 构建的插桩方式与普通构建不同，因此 Blade 为它单独使用一个带 `_coverage` 后缀的兄弟目录——例如 `build64_release_coverage` 而非 `build64_release`。普通构建目录名保持不变，普通构建与覆盖率构建可以并存、互不覆盖、互不触发重新编译，现有工作区与脚本也完全不受影响。
 
 ### Java / Scala 覆盖率（JaCoCo）

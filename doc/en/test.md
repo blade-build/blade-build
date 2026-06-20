@@ -102,6 +102,17 @@ blade test //foo/... --coverage
 - After the tests finish, Blade runs [gcovr](https://gcovr.com/) to produce a directory-navigable HTML report (drill down folder by folder to per-file line views) at `<build_dir>/cc_coverage_report/index.html` (plus `coverage.xml` in Cobertura format). Install it with `pip install gcovr`; if gcovr is absent, Blade just warns and skips the report.
 - Sources under the build directory are excluded, so the report reflects your own code rather than generated sources (e.g. `*.pb.cc`) or vendored dependencies (vcpkg installs under the build dir).
 
+### Go Coverage (go test -cover)
+
+Go test coverage uses Go's built-in cover support:
+
+```bash
+blade test //foo/... --coverage
+```
+
+- `go_test` binaries are built with `-cover -covermode=count` and run with `-test.coverprofile`, dropping one profile per test.
+- After the tests finish, Blade merges the profiles and runs `go tool cover -html` to produce a report at `<build_dir>/go_coverage_report/index.html`.
+
 **Separate build directory.** A `--coverage` build is instrumented differently from a normal build, so Blade gives it its own sibling build directory with a `_coverage` suffix — e.g. `build64_release_coverage` instead of `build64_release`. The plain build directory name is unchanged, so a normal build and a coverage build coexist without clobbering or rebuilding each other, and existing workspaces/scripts are unaffected.
 
 ### Java/Scala Coverage (JaCoCo)

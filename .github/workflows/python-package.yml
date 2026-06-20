@@ -23,6 +23,10 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Set up Go  # for the go_test coverage integration test (go_coverage_test)
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
