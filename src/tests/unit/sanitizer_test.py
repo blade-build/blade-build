@@ -72,6 +72,27 @@ class SanitizerHelperTest(unittest.TestCase):
         self.assertEqual(['thread'], sanitizer.parse('tsan'))
         self.assertEqual('tsan', sanitizer.build_tag(['thread']))
 
+    def test_memory_alias_and_tag(self):
+        self.assertEqual(['memory'], sanitizer.parse('msan'))
+        self.assertEqual(['memory'], sanitizer.parse('memory'))
+        self.assertEqual('msan', sanitizer.build_tag(['memory']))
+
+    def test_aliases_derived_from_tags(self):
+        # Every sanitizer is accepted under its canonical name and its tag, and
+        # _ALIASES carries nothing beyond those two spellings per sanitizer.
+        for canonical, tag in sanitizer._TAGS.items():
+            self.assertEqual(canonical, sanitizer._ALIASES[canonical])
+            self.assertEqual(canonical, sanitizer._ALIASES[tag])
+        self.assertEqual(2 * len(sanitizer._TAGS), len(sanitizer._ALIASES))
+
+    def test_compile_flags_memory_track_origins(self):
+        flags = sanitizer.compile_flags(['memory'])
+        self.assertIn('-fsanitize=memory', flags)
+        self.assertIn('-fsanitize-memory-track-origins=2', flags)
+        # Origin tracking is MSan-specific -- not added for other sanitizers.
+        self.assertNotIn('-fsanitize-memory-track-origins=2',
+                         sanitizer.compile_flags(['address']))
+
     def test_check_compat_rejects_incompatible(self):
         # address/leak/undefined compose; thread is exclusive with address/leak.
         sanitizer.check_compat(['address', 'leak', 'undefined'])  # ok, no raise
@@ -80,6 +101,12 @@ class SanitizerHelperTest(unittest.TestCase):
             sanitizer.check_compat(['address', 'thread'])
         with self.assertRaises(SystemExit):
             sanitizer.check_compat(['leak', 'thread'])
+        # memory is exclusive with address/leak/thread, but composes with ubsan.
+        sanitizer.check_compat(['memory', 'undefined'])  # ok
+        with self.assertRaises(SystemExit):
+            sanitizer.check_compat(['memory', 'address'])
+        with self.assertRaises(SystemExit):
+            sanitizer.check_compat(['memory', 'thread'])
 
     def test_runtime_env_defaults(self):
         env = sanitizer.runtime_env(['thread'])
@@ -87,6 +114,8 @@ class SanitizerHelperTest(unittest.TestCase):
         env = sanitizer.runtime_env(['address', 'undefined'])
         self.assertIn('ASAN_OPTIONS', env)
         self.assertIn('halt_on_error=1', env['UBSAN_OPTIONS'])
+        self.assertEqual('halt_on_error=1',
+                         sanitizer.runtime_env(['memory'])['MSAN_OPTIONS'])
         self.assertEqual({}, sanitizer.runtime_env([]))
 
     def test_check_toolchain_msvc_allows_only_address(self):
@@ -100,6 +129,25 @@ class SanitizerHelperTest(unittest.TestCase):
             sanitizer.check_toolchain(['address', 'undefined'], msvc)
         # No sanitizer -> no check, no error.
         sanitizer.check_toolchain([], msvc)
+
+    def test_check_toolchain_msan_requires_clang_and_linux(self):
+        def tc(vendor, target_os):
+            m = mock.Mock()
+            m.cc_is.side_effect = lambda v: v == vendor
+            m.target_os = target_os
+            return m
+        # MSan is Clang + Linux only (Phase 4).
+        sanitizer.check_toolchain(['memory'], tc('clang', 'linux'))  # ok
+        # ... still composes with ubsan on clang/linux.
+        sanitizer.check_toolchain(['memory', 'undefined'], tc('clang', 'linux'))
+        with self.assertRaises(SystemExit):
+            sanitizer.check_toolchain(['memory'], tc('gcc', 'linux'))
+        with self.assertRaises(SystemExit):
+            sanitizer.check_toolchain(['memory'], tc('clang', 'darwin'))
+        with self.assertRaises(SystemExit):
+            sanitizer.check_toolchain(['memory'], tc('clang', 'windows'))
+        # A non-MSan set on gcc/linux is unaffected by the MSan gate.
+        sanitizer.check_toolchain(['address', 'undefined'], tc('gcc', 'linux'))
 
     def test_msvc_compile_flags(self):
         flags = sanitizer.msvc_compile_flags(['address'])

@@ -4,34 +4,32 @@
 """Sanitizer selection: parse --sanitizer into -fsanitize flags + a build tag.
 
 A sanitizer is a per-run choice (a command-line flag), not project config.
-This first phase supports AddressSanitizer; ThreadSanitizer / UBSan / etc. are
-added in later phases (see blade-build#1038). The parsed set is canonical
-(deduplicated and sorted) so it drives both the -fsanitize= flag list and the
-build-dir tag identically regardless of argument order.
+Supports Address / Undefined / Leak / Thread / Memory sanitizers (see
+blade-build#1038); MSVC provides only Address and MSan is Clang+Linux only.
+The parsed set is canonical (deduplicated and sorted) so it drives both the
+-fsanitize= flag list and the build-dir tag identically regardless of argument
+order.
 """
 
 
 from blade import console
 
-# Accepted --sanitizer name (and short alias) -> canonical -fsanitize= name.
-_ALIASES = {
-    'address': 'address',
-    'asan': 'address',
-    'undefined': 'undefined',
-    'ubsan': 'undefined',
-    'leak': 'leak',
-    'lsan': 'leak',
-    'thread': 'thread',
-    'tsan': 'thread',
-}
-
-# Canonical -fsanitize= name -> short build-dir tag.
+# Canonical -fsanitize= name -> short build-dir tag (also its `--sanitizer`
+# alias: `asan` etc.). This is the single source of truth for the sanitizer set.
 _TAGS = {
     'address': 'asan',
     'undefined': 'ubsan',
     'leak': 'lsan',
     'thread': 'tsan',
+    'memory': 'msan',
 }
+
+# Accepted --sanitizer name -> canonical -fsanitize= name. Each sanitizer is
+# accepted under both its canonical name and its short tag (`asan`, `msan`, ...),
+# so this is derived from _TAGS rather than maintained as a parallel table.
+_ALIASES = {name: canonical
+            for canonical, tag in _TAGS.items()
+            for name in (canonical, tag)}
 
 # Canonical name -> the sanitizers it cannot be combined with. Each uses a
 # different shadow-memory / runtime model, so they're mutually exclusive;
@@ -78,6 +76,13 @@ def compile_flags(sanitizers):
         # Make UBSan findings fatal so a test actually fails on them, instead
         # of just printing a diagnostic and continuing (the default).
         flags.append('-fno-sanitize-recover=undefined')
+    if 'memory' in sanitizers:
+        # Track where an uninitialized value was allocated (and, at =2, the
+        # chain of stores that propagated it) -- MSan reports are nearly
+        # unusable without origins. Note: avoiding false positives also needs
+        # an MSan-instrumented C++ standard library; that's the toolchain's
+        # responsibility (see doc/*/test.md), not something Blade injects.
+        flags.append('-fsanitize-memory-track-origins=2')
     return flags
 
 
@@ -138,6 +143,8 @@ def runtime_env(sanitizers):
         env['UBSAN_OPTIONS'] = 'halt_on_error=1:print_stacktrace=1'
     if 'leak' in sanitizers:
         env['LSAN_OPTIONS'] = 'exitcode=1'
+    if 'memory' in sanitizers:
+        env['MSAN_OPTIONS'] = 'halt_on_error=1'
     return env
 
 
@@ -162,3 +169,17 @@ def check_toolchain(sanitizers, toolchain):
             console.fatal(
                 'the MSVC toolchain supports only the "address" sanitizer, '
                 'not %s' % ', '.join(unsupported))
+        return
+    if 'memory' in sanitizers:
+        # MemorySanitizer (issue #1038, Phase 4) is the most constrained of the
+        # set: GCC has no MSan at all, and the runtime ships only for Linux
+        # (Apple clang on macOS can't link it). Reject early with a clear reason
+        # rather than letting the compile/link fail cryptically downstream.
+        if not toolchain.cc_is('clang'):
+            console.fatal(
+                'the "memory" sanitizer (MSan) requires Clang; '
+                'GCC has no MemorySanitizer')
+        if toolchain.target_os != 'linux':
+            console.fatal(
+                'the "memory" sanitizer (MSan) is only supported on Linux, '
+                'not %s' % toolchain.target_os)
