@@ -483,17 +483,35 @@ For libraries without source code, library should be put under the lib{32,64} su
 The attributes `deps`, `export_incs`, `link_all_symbols` is still avialiable, but other attributes,
 include compile and link related options, are not not present in prebuilt_cc_library.
 
+The library files can be located in two ways:
+
+- **By name convention** (default): the file is `lib<name><suffix>` under a `lib{32,64}`-style subdirectory.
+- **By explicit path**: give the paths directly with `static_library` / `dynamic_library` (below) — useful when the file names or layout don't follow the convention.
+
 Attributes:
 
 - `libpath_pattern`: str, The subdirectory which contains the library files. It default to `cc_library_config.prebuilt_libpath_pattern` config.
   See [cc_library_config.prebuilt_libpath_pattern](../config.md#cc_library_config) for more details.
+- `static_library`: str, explicit path (relative to the target's dir) to the static archive (`.a` / `.lib`).
+- `dynamic_library`: str, explicit path (relative to the target's dir) to the shared library (`.so` / `.dylib`).
+  When either explicit path is set, at least one is required, the name convention is skipped, and `libpath_pattern` is ignored (a warning is emitted if both are given). As with convention mode, when only one kind is present it serves both static and dynamic linking.
 
 Example:
 
 ```python
+# By name convention (looks for lib<name> under the lib{32,64} subdir):
 prebuilt_cc_library(
     name = 'mysql',
     deps = [':mystring', '#pthread']
+)
+
+# By explicit path:
+prebuilt_cc_library(
+    name = 'foo',
+    hdrs = ['foo.h'],
+    static_library = 'lib/libfoo.a',
+    dynamic_library = 'lib/libfoo.so',
+    export_incs = ['include'],
 )
 ```
 
