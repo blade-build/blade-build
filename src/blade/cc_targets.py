@@ -1745,7 +1745,7 @@ class PrebuiltCcLibrary(CcTarget):
         self._setup()
 
     def _resolve_library_sources(
-            self, tc: 'ToolChain') -> 'tuple[str | None, str | None, str | None]':
+            self, tc: 'ToolChain') -> tuple[str | None, str | None, str | None]:
         """Resolve the static/dynamic/import library source paths, in either mode.
 
         - **Explicit** (``static_library`` / ``dynamic_library`` /
