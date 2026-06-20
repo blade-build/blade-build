@@ -150,13 +150,15 @@ java_test_config(
 Build and run an existing target tree under a sanitizer with a single command-line switch — no BUILD-file changes:
 
 ```bash
-blade test //...                       # normal
-blade test //... --sanitizer=address   # AddressSanitizer (alias: asan)
+blade test //...                                # normal
+blade test //... --sanitizer=address            # AddressSanitizer (alias: asan)
+blade test //... --sanitizer=address,undefined  # ASan + UBSan
+blade test //... --sanitizer=undefined          # UBSan (alias: ubsan)
 ```
 
-A sanitizer is a **per-run choice** (a flag), not project config. `--sanitizer` applies to `build`, `run`, and `test`. Currently **AddressSanitizer** is supported on gcc / clang / Apple clang; more sanitizers and MSVC follow.
+A sanitizer is a **per-run choice** (a flag), not project config. `--sanitizer` applies to `build`, `run`, and `test`, and takes a comma-separated **set**: `address` (`asan`), `undefined` (`ubsan`), `leak` (`lsan`) — supported on gcc / clang / Apple clang (ThreadSanitizer, MemorySanitizer and MSVC follow). The set is canonicalized (deduplicated and sorted) so `--sanitizer=ubsan,address` and `--sanitizer=address,undefined` are the same build.
 
-- **Flags:** `-fsanitize=address -fno-omit-frame-pointer -g` are added to compiles and links (the link pulls in the sanitizer runtime). A sanitizer detection makes the test exit non-zero, so `blade test` reports it as a failure.
+- **Flags:** `-fsanitize=<set> -fno-omit-frame-pointer -g` are added to compiles and links (the link pulls in the sanitizer runtime). UBSan is made **fatal** (`-fno-sanitize-recover=undefined`) so a finding fails the test rather than just printing. A sanitizer detection makes the test exit non-zero, so `blade test` reports it as a failure.
 - **Isolated build directory:** a sanitized build is ABI/codegen-incompatible with a normal one, so it gets its own sibling dir with a sanitizer tag — `build64_release_asan`. The plain `build64_release` is untouched, so the two coexist without clobbering or rebuilding each other.
 - **Per-target opt-out:** a target that must not be instrumented (intentional UB, a hot path, a wrapper around a non-instrumented prebuilt) sets `sanitize = False`. It still links (and still gets the runtime); only its own compiles drop the instrumentation.
 

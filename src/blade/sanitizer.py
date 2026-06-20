@@ -17,11 +17,17 @@ from blade import console
 _ALIASES = {
     'address': 'address',
     'asan': 'address',
+    'undefined': 'undefined',
+    'ubsan': 'undefined',
+    'leak': 'leak',
+    'lsan': 'leak',
 }
 
 # Canonical -fsanitize= name -> short build-dir tag.
 _TAGS = {
     'address': 'asan',
+    'undefined': 'ubsan',
+    'leak': 'lsan',
 }
 
 
@@ -47,6 +53,23 @@ def parse(value):
 def fsanitize_value(sanitizers):
     """The value for ``-fsanitize=`` (e.g. ``address``)."""
     return ','.join(sanitizers)
+
+
+def compile_flags(sanitizers):
+    """Compile flags for the active sanitizer set."""
+    # Frame pointers + debug info for readable, symbolized reports.
+    flags = ['-fsanitize=' + fsanitize_value(sanitizers),
+             '-fno-omit-frame-pointer', '-g']
+    if 'undefined' in sanitizers:
+        # Make UBSan findings fatal so a test actually fails on them, instead
+        # of just printing a diagnostic and continuing (the default).
+        flags.append('-fno-sanitize-recover=undefined')
+    return flags
+
+
+def link_flags(sanitizers):
+    """Link flags for the active sanitizer set (pull in the runtime)."""
+    return ['-fsanitize=' + fsanitize_value(sanitizers)]
 
 
 def build_tag(sanitizers):

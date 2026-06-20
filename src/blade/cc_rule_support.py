@@ -346,10 +346,8 @@ class CcRuleGenerator:
         sanitizers = getattr(self.options, 'sanitizers', None)
         if sanitizers:
             sanitizer.check_toolchain(sanitizers, self.build_toolchain)
-            fsanitize = '-fsanitize=' + sanitizer.fsanitize_value(sanitizers)
-            # Frame pointers + debug info for readable, symbolized reports.
-            cppflags += [fsanitize, '-fno-omit-frame-pointer', '-g']
-            linkflags.append(fsanitize)  # link the sanitizer runtime
+            cppflags += sanitizer.compile_flags(sanitizers)
+            linkflags += sanitizer.link_flags(sanitizers)
 
         if hasattr(self.options, 'profile-generate') and getattr(self.options, 'profile-generate') is not None:
             pgo_gen_dir = getattr(self.options, 'profile-generate')

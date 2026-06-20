@@ -1,3 +1,4 @@
-# Fixture for the sanitizer integration test (#1038): a cc_test whose
-# heap-buffer-overflow is caught only under --sanitizer=address.
-cc_test(name = 'oob_test', srcs = ['oob_test.cc'])
+# Fixtures for the sanitizer integration tests (#1038): bugs caught only under
+# the respective sanitizer.
+cc_test(name = 'oob_test', srcs = ['oob_test.cc'])  # heap-buffer-overflow (ASan)
+cc_test(name = 'ub_test', srcs = ['ub_test.cc'])    # signed overflow (UBSan)

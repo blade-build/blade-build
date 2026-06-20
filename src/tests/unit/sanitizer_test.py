@@ -38,6 +38,31 @@ class SanitizerHelperTest(unittest.TestCase):
         self.assertEqual('address', sanitizer.fsanitize_value(s))
         self.assertEqual('asan', sanitizer.build_tag(s))
 
+    def test_more_sanitizer_aliases(self):
+        self.assertEqual(['undefined'], sanitizer.parse('ubsan'))
+        self.assertEqual(['undefined'], sanitizer.parse('undefined'))
+        self.assertEqual(['leak'], sanitizer.parse('lsan'))
+
+    def test_set_is_canonical_sorted(self):
+        # Order-independent: both spellings -> the same sorted set + tag.
+        self.assertEqual(['address', 'undefined'], sanitizer.parse('ubsan,address'))
+        self.assertEqual(['address', 'undefined'], sanitizer.parse('address,undefined'))
+        self.assertEqual('asan+ubsan',
+                         sanitizer.build_tag(['address', 'undefined']))
+
+    def test_compile_flags_make_ubsan_fatal(self):
+        flags = sanitizer.compile_flags(['address', 'undefined'])
+        self.assertIn('-fsanitize=address,undefined', flags)
+        self.assertIn('-fno-omit-frame-pointer', flags)
+        self.assertIn('-fno-sanitize-recover=undefined', flags)
+        # No UBSan -> no recover flag.
+        self.assertNotIn('-fno-sanitize-recover=undefined',
+                         sanitizer.compile_flags(['address']))
+
+    def test_link_flags(self):
+        self.assertEqual(['-fsanitize=address,leak'],
+                         sanitizer.link_flags(['address', 'leak']))
+
     def test_unknown_is_fatal(self):
         # console.fatal raises SystemExit.
         with self.assertRaises(SystemExit):

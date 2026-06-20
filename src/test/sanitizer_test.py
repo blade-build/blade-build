@@ -43,5 +43,30 @@ class TestSanitizerAsan(blade_test.TargetTest):
                         'expected the %s build dir' % self.ASAN_BUILD_DIR)
 
 
+class TestSanitizerUbsan(blade_test.TargetTest):
+    """UBSan (made fatal) catches undefined behavior the normal build wraps."""
+
+    UBSAN_BUILD_DIR = 'build64_release_ubsan'
+
+    def setUp(self):
+        """setup method."""
+        self.doSetUp('sanitizer', 'ub_test')
+        shutil.rmtree(self.UBSAN_BUILD_DIR, ignore_errors=True)
+
+    def doTearDown(self):
+        shutil.rmtree(self.UBSAN_BUILD_DIR, ignore_errors=True)
+
+    def testUbsanCatchesSignedOverflow(self):
+        # Normal build: the overflow wraps silently -> the test passes.
+        self.assertTrue(self.runBlade('test'),
+                        'expected the un-sanitized test to pass')
+        # Under UBSan (fatal) the same test is caught -> it fails.
+        self.assertFalse(
+            self.runBlade('test', '--sanitizer=undefined', print_error=False),
+            'expected --sanitizer=undefined to catch the signed overflow')
+        self.assertTrue(os.path.isdir(self.UBSAN_BUILD_DIR),
+                        'expected the %s build dir' % self.UBSAN_BUILD_DIR)
+
+
 if __name__ == '__main__':
     blade_test.run(TestSanitizerAsan)
