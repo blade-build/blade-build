@@ -10,6 +10,8 @@ blade-bin
 build_*
 build32_*
 build64_*
+# ...but not the docs dir that happens to start with "build_".
+!**/build_rules/
 
 /blade.zip
 
