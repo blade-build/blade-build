@@ -113,6 +113,18 @@ blade test //foo/... --coverage
 - `go_test` binaries are built with `-cover -covermode=count` and run with `-test.coverprofile`, dropping one profile per test.
 - After the tests finish, Blade merges the profiles and runs `go tool cover -html` to produce a report at `<build_dir>/go_coverage_report/index.html`.
 
+### Python Coverage (coverage.py)
+
+Python test coverage uses [coverage.py](https://coverage.readthedocs.io/):
+
+```bash
+blade test //foo/... --coverage
+```
+
+- Each `py_test` runs under `coverage run -p`, writing a per-test data file.
+- After the tests finish, Blade combines them and runs `coverage html` to produce a report at `<build_dir>/py_coverage_report/index.html`. Install it for the test interpreter with `pip install coverage`; if it is unavailable, Blade just warns and skips the report.
+- Because the test runs from its packaged zip, file paths in the report carry a `.zip/` prefix.
+
 **Separate build directory.** A `--coverage` build is instrumented differently from a normal build, so Blade gives it its own sibling build directory with a `_coverage` suffix — e.g. `build64_release_coverage` instead of `build64_release`. The plain build directory name is unchanged, so a normal build and a coverage build coexist without clobbering or rebuilding each other, and existing workspaces/scripts are unaffected.
 
 ### Java/Scala Coverage (JaCoCo)

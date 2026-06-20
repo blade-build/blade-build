@@ -337,6 +337,11 @@ class TestRunner(binary_runner.BinaryRunner):
         coverage.GoCoverageReporter(self.build_dir,
                                     config.get_item('go_config', 'go'),
                                     config.get_item('go_config', 'go_home')).generate()
+        # Python coverage: py_test wrappers run under `coverage run -p`; combine
+        # the data and render an HTML report with the test interpreter.
+        coverage.PyCoverageReporter(
+            self.build_dir,
+            os.environ.get('BLADE_PYTHON_INTERPRETER') or 'python3').generate()
 
     def _show_banner(self, text):
         pads = int((76 - len(text)) / 2)
@@ -472,6 +477,15 @@ class TestRunner(binary_runner.BinaryRunner):
                 test_env['PPROF_PATH'] = os.path.abspath(pprof_path)
             if self.options.coverage:
                 test_env['BLADE_COVERAGE'] = 'true'
+                if target.type == 'py_test':
+                    # py_test wrappers run under `coverage run -p`; point all of
+                    # them at one shared data dir so PyCoverageReporter can
+                    # combine the per-test (parallel-suffixed) data files.
+                    data_dir = os.path.abspath(
+                        os.path.join(self.build_dir, 'py_coverage_data'))
+                    if not os.path.exists(data_dir):
+                        os.makedirs(data_dir)
+                    test_env['COVERAGE_FILE'] = os.path.join(data_dir, '.coverage')
             tests_run_list.append((target, self._runfiles_dir(target), test_env, cmd))
 
         console.notice('%d tests to run' % len(tests_run_list))

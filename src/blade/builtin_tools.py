@@ -1678,15 +1678,24 @@ def generate_python_binary(pybin, basedir, exclusions, mainentry, args):
     if os.name == 'nt':
         content = '@echo off\r\n'
         content += 'set "PYTHONPATH=%~dp0%~n0.zip;%PYTHONPATH%"\r\n'
-        content += f'python -m {mainentry} %*\r\n'
+        # Under `blade test --coverage` (BLADE_COVERAGE set), run through
+        # coverage.py in parallel mode; the runner sets COVERAGE_FILE.
+        content += 'set "COV="\r\n'
+        content += 'if defined BLADE_COVERAGE set "COV=-m coverage run -p"\r\n'
+        content += f'python %COV% -m {mainentry} %*\r\n'
         util.write_if_changed(pybin, content)
         return
 
     content = '#!/bin/sh\n'
     content += 'ZIP="$(dirname "$0")/$(basename "$0").zip"\n'
+    # Under `blade test --coverage` (BLADE_COVERAGE set), run through
+    # coverage.py in parallel mode; the runner sets COVERAGE_FILE so each test
+    # writes a distinct data file that PyCoverageReporter later combines.
+    content += 'COV=""\n'
+    content += 'if [ -n "$BLADE_COVERAGE" ]; then COV="-m coverage run -p"; fi\n'
     content += ('PYTHONPATH="$ZIP:$PYTHONPATH" '
                 'exec "${BLADE_PYTHON_INTERPRETER:-python3}" '
-                f'-m {mainentry} "$@"\n')
+                f'$COV -m {mainentry} "$@"\n')
     util.write_if_changed(pybin, content)
     os.chmod(pybin, 0o755)
 

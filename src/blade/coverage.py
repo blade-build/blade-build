@@ -12,6 +12,7 @@ Code Test Coverage.
 import collections
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import zipfile
@@ -367,3 +368,56 @@ class GoCoverageReporter:
         console.debug(' '.join(cmd))
         if subprocess.call(cmd, shell=False, env=env) != 0:
             console.warning('Failed to generate the Go coverage report')
+
+
+class PyCoverageReporter:
+    """Generate a Python coverage report from coverage.py data.
+
+    Under ``blade test --coverage`` py_test wrappers run under
+    ``coverage run -p`` and write parallel-mode data files into
+    <build_dir>/py_coverage_data (the runner sets COVERAGE_FILE). This
+    combines them and renders an HTML report via ``coverage html``. The test
+    code runs from the test zipapp, so file paths in the report carry a
+    ``.zip/`` prefix. Degrades gracefully: a no-op when there is no data, and
+    only warns (never fails the build) when coverage.py is unavailable.
+    """
+
+    def __init__(self, build_dir, interpreter):
+        self.__build_dir = build_dir
+        self.__data_dir = os.path.join(build_dir, 'py_coverage_data')
+        # The interpreter the tests ran under -- it must have coverage.py.
+        self.__interp = shlex.split(interpreter) if interpreter else ['python3']
+
+    def _has_data(self):
+        if not os.path.isdir(self.__data_dir):
+            return False
+        return any(name.startswith('.coverage')
+                   for name in os.listdir(self.__data_dir))
+
+    def _coverage(self, *args, env=None, quiet=False):
+        out = subprocess.DEVNULL if quiet else None
+        return subprocess.call(self.__interp + ['-m', 'coverage', *args],
+                               env=env, stdout=out, stderr=out)
+
+    def generate(self):
+        """Combine per-test coverage data and render an HTML report."""
+        if not self._has_data():
+            console.debug('No Python coverage data found, '
+                          'skipping the Python coverage report')
+            return
+
+        if self._coverage('--version', quiet=True) != 0:
+            console.warning('coverage.py not available for the test interpreter, '
+                            'skipping the Python coverage report (install it '
+                            'with `pip install coverage`)')
+            return
+
+        report_dir = os.path.join(self.__build_dir, 'py_coverage_report')
+        env = dict(os.environ)
+        env['COVERAGE_FILE'] = os.path.join(self.__data_dir, '.coverage')
+        if self._coverage('combine', env=env) != 0:
+            console.warning('Failed to combine Python coverage data')
+            return
+        console.info('Generating Python coverage report `%s`' % report_dir)
+        if self._coverage('html', '-d', report_dir, env=env) != 0:
+            console.warning('Failed to generate the Python coverage report')

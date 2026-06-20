@@ -109,6 +109,18 @@ blade test //foo/... --coverage
 - `go_test` 二进制以 `-cover -covermode=count` 编译，并以 `-test.coverprofile` 运行，每个测试产生一份 profile。
 - 测试结束后，Blade 合并这些 profile 并调用 `go tool cover -html` 在 `<build_dir>/go_coverage_report/index.html` 生成报告。
 
+### Python 覆盖率（coverage.py）
+
+Python 测试覆盖率基于 [coverage.py](https://coverage.readthedocs.io/)：
+
+```bash
+blade test //foo/... --coverage
+```
+
+- 每个 `py_test` 在 `coverage run -p` 下运行，各自产生一份数据文件。
+- 测试结束后，Blade 合并它们并调用 `coverage html` 在 `<build_dir>/py_coverage_report/index.html` 生成报告。请为测试解释器 `pip install coverage`；若未安装，Blade 只会告警并跳过报告生成。
+- 由于测试从打包的 zip 中运行，报告里的文件路径会带有 `.zip/` 前缀。
+
 **独立的构建目录。** `--coverage` 构建的插桩方式与普通构建不同，因此 Blade 为它单独使用一个带 `_coverage` 后缀的兄弟目录——例如 `build64_release_coverage` 而非 `build64_release`。普通构建目录名保持不变，普通构建与覆盖率构建可以并存、互不覆盖、互不触发重新编译，现有工作区与脚本也完全不受影响。
 
 ### Java / Scala 覆盖率（JaCoCo）
