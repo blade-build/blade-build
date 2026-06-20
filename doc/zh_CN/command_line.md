@@ -16,6 +16,23 @@ Blade 支持以下子命令：
 - `dump` —— 导出有用的信息
 - `query` —— 查询目标依赖关系
 - `run` —— 构建并执行单个可执行目标
+- `init` —— 在当前目录创建 `BLADE_ROOT`
+- `root` —— 打印工作区根目录
+
+### `blade init`
+
+通过在当前目录创建 `BLADE_ROOT` 文件来初始化一个新的工作区。文件中包含被注释掉的配置块，按需取消注释并编辑即可。
+
+```bash
+blade init                       # 默认：C/C++ 配置块
+blade init --lang=cc,java        # 包含 C/C++ 和 Java 配置块
+blade init --lang=all            # 包含所有支持的语言
+blade init --force               # 即使已处于某个工作区内也强制初始化
+```
+
+`--lang` 接受逗号分隔的列表：`cc`（即 `c++`）、`java`、`scala`、`go`、`python`、`proto` 或 `all`。
+
+默认情况下，当前目录**位于某个已有 `BLADE_ROOT` 之内（含当前目录自身或任意上级目录）**时 `blade init` 会拒绝执行，因为这会产生嵌套的工作区。加 `--force` 可强制初始化：覆盖当前目录已有的 `BLADE_ROOT`，或在上级工作区之下创建一个嵌套工作区。
 
 ## 目标模式语法
 

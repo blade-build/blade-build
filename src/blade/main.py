@@ -23,6 +23,7 @@ from blade import build_manager
 from blade import command_line
 from blade import config
 from blade import console
+from blade import init_command
 from blade import target_pattern
 from blade import workspace
 
@@ -131,6 +132,11 @@ def _main(blade_path, argv):
     """The main entry of blade."""
     command, options, targets = command_line.parse(argv)
     setup_console(options)
+
+    # 'init' creates a new BLADE_ROOT, so it must run before workspace setup
+    # (which requires an existing BLADE_ROOT).
+    if command == 'init':
+        return init_command.run_init(options)
 
     ws = workspace.initialize(options)
 

@@ -44,6 +44,13 @@ Create a workspace by placing a `BLADE_ROOT` file in the root directory:
 touch BLADE_ROOT
 ```
 
+Or use `blade init`, which writes a `BLADE_ROOT` with commented-out configuration to start from (see [`blade init`](command_line.md#blade-init)):
+
+```console
+blade init                # default C/C++ config block
+blade init --lang=all     # all supported languages
+```
+
 ## Workspace Configuration Strategies
 
 ### Single Repository Development

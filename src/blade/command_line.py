@@ -78,6 +78,7 @@ class CommandLineParser:
             'build': self._check_build_command,
             'clean': self._check_clean_command,
             'dump': self._check_dump_command,
+            'init': self._check_init_command,
             'query': self._check_query_command,
             'root': self._check_root_command,
             'run': self._check_run_command,
@@ -89,6 +90,13 @@ class CommandLineParser:
         """check root options: it takes no targets."""
         if targets:
             console.fatal('blade root does not accept any targets')
+
+    def _check_init_command(self, options, targets):
+        """check init options: validate --lang, takes no targets."""
+        if targets:
+            console.fatal('blade init does not accept any targets')
+        from blade import init_command  # noqa: avoid an import cycle at load
+        init_command.parse_langs(options.lang)  # fatal on an unknown language
 
     def _check_run_targets(self, options, targets):
         """check that run command should have only one target."""
@@ -440,6 +448,18 @@ class CommandLineParser:
                 '--tags-filter', dest='tags_filter', type=str,
                 help='Tags filter expression, see documents for details')
 
+    def _add_init_arguments(self, parser):
+        """Add init arguments for parser."""
+        parser.add_argument(
+            '--lang', dest='lang', type=str, default='cc',
+            help='Comma-separated languages to include commented config for: '
+                 'cc, java, scala, go, python, proto, or "all" (default: cc)')
+        parser.add_argument(
+            '--force', dest='force', action='store_true', default=False,
+            help='Initialize even when already at or under an existing '
+                 'workspace (creates a nested workspace; overwrites a '
+                 'BLADE_ROOT in this directory)')
+
     def _add_dump_arguments(self, parser):
         """Add dump arguments for parser."""
         parser.add_argument(
@@ -498,9 +518,14 @@ class CommandLineParser:
             'root',
             help='Print the workspace root directory')
 
+        init_parser = sub_parser.add_parser(
+            'init',
+            help='Create a BLADE_ROOT in the current directory')
+
         self._add_common_arguments(build_parser, run_parser, test_parser,
                                    clean_parser, query_parser, dump_parser,
-                                   root_parser)
+                                   root_parser, init_parser)
+        self._add_init_arguments(init_parser)
         self._add_build_arguments(build_parser, run_parser, test_parser, dump_parser)
         self._add_run_arguments(run_parser)
         self._add_test_arguments(test_parser)

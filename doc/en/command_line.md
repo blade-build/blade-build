@@ -16,6 +16,23 @@ Blade supports the following subcommands:
 - `dump` - Export useful information
 - `query` - Query target dependencies
 - `run` - Build and execute a single executable target
+- `init` - Create a `BLADE_ROOT` in the current directory
+- `root` - Print the workspace root directory
+
+### `blade init`
+
+Bootstrap a new workspace by creating a `BLADE_ROOT` file in the current directory. The file contains commented-out configuration blocks that you uncomment and edit as needed.
+
+```bash
+blade init                       # default: C/C++ config block
+blade init --lang=cc,java        # include C/C++ and Java config blocks
+blade init --lang=all            # include every supported language
+blade init --force               # initialize even inside an existing workspace
+```
+
+`--lang` accepts a comma-separated list of `cc` (a.k.a. `c++`), `java`, `scala`, `go`, `python`, `proto`, or `all`.
+
+By default `blade init` refuses to run when the current directory is **at or under an existing `BLADE_ROOT`**, because that would create a nested workspace (a `BLADE_ROOT` already in this directory, or one in any parent directory). Pass `--force` to initialize anyway — this overwrites a `BLADE_ROOT` in the current directory, or creates a nested one beneath a parent workspace.
 
 ## Target Pattern Syntax
 
