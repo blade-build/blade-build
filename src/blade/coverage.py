@@ -11,6 +11,8 @@ Code Test Coverage.
 
 import collections
 import os
+import re
+import shutil
 import subprocess
 import zipfile
 
@@ -211,3 +213,89 @@ class JacocoReporter:
             console.warning('Failed to generate java coverage report')
             return
         self._postprocess_report(report_dir)
+
+
+class CcCoverageReporter:
+    """Generate a C/C++ coverage report from gcov data using gcovr.
+
+    Under ``blade test --coverage`` cc targets are compiled and linked with
+    ``--coverage``, emitting ``.gcno`` (at compile) and ``.gcda`` (at run)
+    next to the objects in the build dir. gcovr turns those into an HTML
+    report. The reporter degrades gracefully: it is a no-op when there is no
+    coverage data, and only warns (never fails the build) when gcovr is
+    missing or errors.
+    """
+
+    def __init__(self, build_dir, root_dir, cc_is_clang):
+        self.__build_dir = build_dir
+        self.__root_dir = root_dir
+        self.__cc_is_clang = cc_is_clang
+
+    def _has_coverage_data(self):
+        for _dirpath, _dirnames, filenames in os.walk(self.__build_dir):
+            if any(f.endswith('.gcda') for f in filenames):
+                return True
+        return False
+
+    def _gcov_executable(self):
+        """The `gcov` command for the active toolchain, or None for the default.
+
+        gcovr defaults to GNU `gcov`, which is right for GCC. Clang provides
+        gcov compatibility via `llvm-cov gcov`; on Apple toolchains llvm-cov is
+        reachable only through `xcrun`, not directly on PATH.
+        """
+        if not self.__cc_is_clang:
+            return None
+        if shutil.which('llvm-cov'):
+            return 'llvm-cov gcov'
+        if shutil.which('xcrun'):
+            return 'xcrun llvm-cov gcov'
+        return 'llvm-cov gcov'
+
+    def build_gcovr_command(self, gcovr, report_dir, gcov_executable=None):
+        """Build the gcovr command line (split out for testing)."""
+        cmd = [
+            gcovr,
+            '--root', self.__root_dir,
+            self.__build_dir,
+            # Exclude everything under the build dir: generated sources
+            # (e.g. *.pb.cc, scm.cc) and vendored deps (vcpkg installs under
+            # the build dir) are not the project's own code. Without this the
+            # report is diluted by uncovered library headers.
+            '--exclude', re.escape(self.__build_dir) + '/',
+            # gcov's counters can overflow / go negative on hot concurrent code
+            # (spin loops etc.) -- a known gcov bug (gcc #68080). Warn and keep
+            # going instead of aborting the whole report on one bad line.
+            '--gcov-ignore-parse-errors=all',
+            '--print-summary',
+            # Nested HTML: navigable directory-by-directory, drilling down to
+            # per-file line views (vs the flat file list of --html-details).
+            '--html-nested', '-o', os.path.join(report_dir, 'index.html'),
+            '--xml', os.path.join(report_dir, 'coverage.xml'),
+        ]
+        if gcov_executable:
+            cmd += ['--gcov-executable', gcov_executable]
+        return cmd
+
+    def generate(self):
+        """Run gcovr to produce an HTML (+ XML) C/C++ coverage report."""
+        if not self._has_coverage_data():
+            console.debug('No C/C++ coverage data (.gcda) found, '
+                          'skipping the C/C++ coverage report')
+            return
+
+        gcovr = shutil.which('gcovr')
+        if not gcovr:
+            console.warning('gcovr not found, skipping the C/C++ coverage '
+                            'report (install it with `pip install gcovr`)')
+            return
+
+        report_dir = os.path.join(self.__build_dir, 'cc_coverage_report')
+        if not os.path.exists(report_dir):
+            os.makedirs(report_dir)
+        console.info('Generating C/C++ coverage report `%s`' % report_dir)
+
+        cmd = self.build_gcovr_command(gcovr, report_dir, self._gcov_executable())
+        console.debug(' '.join(cmd))
+        if subprocess.call(cmd, shell=False) != 0:
+            console.warning('Failed to generate the C/C++ coverage report')

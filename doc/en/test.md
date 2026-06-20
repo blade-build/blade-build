@@ -90,13 +90,19 @@ marking tests exclusive; reserve it for the two cases above.
 
 Blade supports code coverage analysis for C++, Java, and Scala tests using the `--coverage` option.
 
-### C/C++ Coverage (GCOV)
+### C/C++ Coverage (gcov + gcovr)
 
-C/C++ test coverage utilizes GCC's [gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html) implementation:
+C/C++ test coverage uses the compiler's [gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html) instrumentation (GCC, and Clang via `llvm-cov gcov`):
 
-- Coverage-related compilation flags are automatically included
-- Coverage data is collected after test execution
-- Generate reports using third-party tools like gcov or lcov
+```bash
+blade test //foo/... --coverage
+```
+
+- The coverage compile/link flags are added automatically; `.gcno`/`.gcda` data is produced during the test run.
+- After the tests finish, Blade runs [gcovr](https://gcovr.com/) to produce a directory-navigable HTML report (drill down folder by folder to per-file line views) at `<build_dir>/cc_coverage_report/index.html` (plus `coverage.xml` in Cobertura format). Install it with `pip install gcovr`; if gcovr is absent, Blade just warns and skips the report.
+- Sources under the build directory are excluded, so the report reflects your own code rather than generated sources (e.g. `*.pb.cc`) or vendored dependencies (vcpkg installs under the build dir).
+
+**Separate build directory.** A `--coverage` build is instrumented differently from a normal build, so Blade gives it its own sibling build directory with a `_coverage` suffix — e.g. `build64_release_coverage` instead of `build64_release`. The plain build directory name is unchanged, so a normal build and a coverage build coexist without clobbering or rebuilding each other, and existing workspaces/scripts are unaffected.
 
 ### Java/Scala Coverage (JaCoCo)
 

@@ -41,6 +41,7 @@ from linker_scripts_test import LinkerScriptsTest
 from build_from_subdir_test import BuildFromSubdirTest
 from root_command_test import RootCommandTest
 from deprecated_dep_test import TestDeprecatedDep
+from cc_coverage_test import TestCcCoverage
 
 from html_test_runner import HTMLTestRunner
 from test_target_test import TestTestRunner
@@ -76,6 +77,7 @@ def _main():
         unittest.defaultTestLoader.loadTestsFromTestCase(BuildFromSubdirTest),
         unittest.defaultTestLoader.loadTestsFromTestCase(RootCommandTest),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestDeprecatedDep),
+        unittest.defaultTestLoader.loadTestsFromTestCase(TestCcCoverage),
         ])
 
     generate_html = len(sys.argv) > 1 and sys.argv[1].startswith('html')

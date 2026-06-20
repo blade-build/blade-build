@@ -26,7 +26,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install coverage coveralls ninja
+        # gcovr drives the C/C++ coverage report exercised by cc_coverage_test.
+        python -m pip install coverage coveralls ninja gcovr
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Run integration tests
       run: |

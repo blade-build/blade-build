@@ -322,11 +322,16 @@ class TestRunner(binary_runner.BinaryRunner):
                                    reverse=True)
 
     def _generate_coverage_report(self):
-        reporter = coverage.JacocoReporter(self.build_dir,
-                                           self.target_database,
-                                           self.__command_targets,
-                                           self.test_jobs)
-        reporter.generate()
+        coverage.JacocoReporter(self.build_dir,
+                                self.target_database,
+                                self.__command_targets,
+                                self.test_jobs).generate()
+        # C/C++ coverage: gcov data (.gcno/.gcda) lands in the build dir under
+        # --coverage; gcovr turns it into an HTML report.
+        from blade import build_manager  # pylint: disable=import-outside-toplevel
+        toolchain = build_manager.instance.get_build_toolchain()
+        coverage.CcCoverageReporter(self.build_dir, os.getcwd(),
+                                    toolchain.cc_is('clang')).generate()
 
     def _show_banner(self, text):
         pads = int((76 - len(text)) / 2)

@@ -86,13 +86,19 @@ cc_test(
 
 Blade 支持 C++、Java、Scala 测试的覆盖率分析，使用 `--coverage` 选项即可开启。
 
-### C/C++ 覆盖率（GCOV）
+### C/C++ 覆盖率（gcov + gcovr）
 
-C/C++ 测试覆盖率基于 GCC 的 [gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html) 实现：
+C/C++ 测试覆盖率基于编译器的 [gcov](https://gcc.gnu.org/onlinedocs/gcc/Gcov.html) 插桩（GCC 原生支持，Clang 通过 `llvm-cov gcov`）：
 
-- 自动加入覆盖率相关的编译选项
-- 测试执行后自动收集覆盖率数据
-- 可通过 `gcov`、`lcov` 等第三方工具生成报告
+```bash
+blade test //foo/... --coverage
+```
+
+- 自动加入覆盖率相关的编译/链接选项；测试运行时产生 `.gcno`/`.gcda` 数据。
+- 测试结束后，Blade 调用 [gcovr](https://gcovr.com/) 在 `<build_dir>/cc_coverage_report/index.html` 生成可逐级目录下钻（目录 → 文件 → 逐行）的 HTML 报告（并附带 Cobertura 格式的 `coverage.xml`）。请先 `pip install gcovr`；若未安装，Blade 只会告警并跳过报告生成。
+- 构建目录下的源文件会被排除，报告只反映你自己的代码，而非生成代码（如 `*.pb.cc`）或第三方依赖（vcpkg 安装在构建目录下）。
+
+**独立的构建目录。** `--coverage` 构建的插桩方式与普通构建不同，因此 Blade 为它单独使用一个带 `_coverage` 后缀的兄弟目录——例如 `build64_release_coverage` 而非 `build64_release`。普通构建目录名保持不变，普通构建与覆盖率构建可以并存、互不覆盖、互不触发重新编译，现有工作区与脚本也完全不受影响。
 
 ### Java / Scala 覆盖率（JaCoCo）
 

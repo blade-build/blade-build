@@ -18,6 +18,24 @@ from blade import console
 from blade import util
 
 
+def _build_variant_suffix(options):
+    """Suffix appended to the build dir name for variant builds.
+
+    Each active variant contributes a `_<tag>` segment; with no variant the
+    result is the empty string, so the normal build dir keeps its exact
+    historical name (e.g. ``build64_release``). New variants only need to
+    append their tag here.
+    """
+    variants = []
+    if getattr(options, 'coverage', False):
+        variants.append('coverage')
+    # Future: sanitizers, e.g.
+    #   sanitizer = getattr(options, 'sanitizer', None)
+    #   if sanitizer:
+    #       variants.append(sanitizer)  # 'asan' / 'tsan' / 'ubsan'
+    return ''.join('_' + v for v in variants)
+
+
 def _generate_scm_svn():
     url = revision = 'unknown'
     returncode, stdout, stderr = util.run_command(['svn', 'info'])
@@ -109,6 +127,11 @@ class Workspace:
         build_path_format = config.get_item('global_config', 'build_path_template')
         s = string.Template(build_path_format)
         build_dir = s.substitute(bits=self.__options.bits, profile=self.__options.profile)
+        # Give variant builds (coverage, and later sanitizers) their own sibling
+        # build dir so they don't clobber or force-rebuild the normal one. The
+        # plain build keeps its exact historical name (no suffix), so existing
+        # workspaces/scripts/blade-bin are unaffected.
+        build_dir += _build_variant_suffix(self.__options)
 
         if not os.path.exists(build_dir):
             os.mkdir(build_dir)
