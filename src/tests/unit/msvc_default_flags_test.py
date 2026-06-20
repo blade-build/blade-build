@@ -29,6 +29,7 @@ def _compile_rules(profile='release', debug_info='mid', cppflags=None, cxxflags=
     gen.build_accelerator = mock.Mock()
     gen.options = mock.Mock()
     gen.options.profile = profile
+    gen.options.sanitizers = []
     gen.build_dir = 'build64_%s' % profile
     gen._msvc_tee_wrapper_py = mock.Mock(return_value='cc_wrapper.py')
     gen.generate_rule = mock.Mock()
@@ -47,7 +48,25 @@ def _compile_rules(profile='release', debug_info='mid', cppflags=None, cxxflags=
             for c in gen.generate_rule.call_args_list}
 
 
-def _link_flags(profile='release', debug_info='mid'):
+def _cc_vars_sanitize(sanitizers):
+    """The `sanitize = ...` binding _generate_windows_cc_vars emits."""
+    gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
+    gen.build_toolchain = mock.Mock()
+    gen.build_toolchain.filter_cc_flags = lambda f, *a: list(f)
+    gen.build_toolchain.cc_is.side_effect = lambda v: v == 'msvc'
+    gen.options = mock.Mock()
+    gen.options.sanitizers = sanitizers
+    captured = []
+    gen._add_line = lambda s: captured.extend(s.splitlines())
+    section = {'msvc_config': {'warnings': []},
+               'cc_config': {'c_warnings': [], 'cxx_warnings': []}}
+    with mock.patch('blade.cc_rule_support.config') as cfg:
+        cfg.get_section.side_effect = lambda n: section[n]
+        gen._generate_windows_cc_vars()
+    return next(s for s in captured if s.startswith('sanitize ='))
+
+
+def _link_flags(profile='release', debug_info='mid', sanitizers=None):
     gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
     gen.build_accelerator = mock.Mock()
     gen.build_accelerator.get_cc_commands.return_value = ('cl', 'cl', 'link.exe')
@@ -62,6 +81,7 @@ def _link_flags(profile='release', debug_info='mid'):
     gen.generate_rule = mock.Mock()
     gen.options = mock.Mock()
     gen.options.profile = profile
+    gen.options.sanitizers = sanitizers or []
     section = {'msvc_config': {'linkflags': []}, 'cc_config': {'linkflags': []},
                'global_config': {'debug_info_level': debug_info}}
     with mock.patch('blade.cc_rule_support.config') as cfg:
@@ -104,6 +124,28 @@ class MsvcDefaultFlagsTest(unittest.TestCase):
 
     def test_link_no_debug_info_omits_debug(self):
         self.assertNotIn('/DEBUG', _link_flags(profile='debug', debug_info='no'))
+
+    # --- Sanitizer (ASan) wiring, issue #1038 Phase 3 ---
+
+    def test_sanitize_var_off_is_empty(self):
+        self.assertEqual('sanitize =', _cc_vars_sanitize([]).rstrip())
+
+    def test_sanitize_var_asan(self):
+        line = _cc_vars_sanitize(['address'])
+        self.assertIn('/fsanitize=address', line)
+        self.assertIn('/Z7', line)
+
+    def test_link_asan_forces_incremental_off_and_debug(self):
+        # Even a debug build (no /OPT, normally incremental) gets /INCREMENTAL:NO
+        # and /DEBUG under ASan.
+        line = _link_flags(profile='debug', debug_info='no', sanitizers=['address'])
+        self.assertIn('/INCREMENTAL:NO', line)
+        self.assertIn('/DEBUG', line)
+
+    def test_link_asan_no_duplicate_incremental(self):
+        # Release already adds /INCREMENTAL:NO; ASan must not add a second.
+        line = _link_flags(profile='release', sanitizers=['address'])
+        self.assertEqual(1, line.split().count('/INCREMENTAL:NO'))
 
 
 if __name__ == '__main__':

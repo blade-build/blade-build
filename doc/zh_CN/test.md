@@ -153,11 +153,12 @@ blade test //... --sanitizer=thread             # ThreadSanitizer（别名：tsa
 blade test //... --sanitizer=address,undefined  # 组合（ASan + UBSan）
 ```
 
-sanitizer 是**每次运行的选择**（命令行开关），不是项目配置。`--sanitizer` 对 `build`/`run`/`test` 均生效，取值是逗号分隔的**集合**：`address`（`asan`）、`undefined`（`ubsan`）、`leak`（`lsan`）、`thread`（`tsan`）——在 gcc / clang / Apple clang 上支持（MemorySanitizer 及 MSVC 后续支持）。集合会被规范化（去重并排序），因此 `--sanitizer=ubsan,address` 与 `--sanitizer=address,undefined` 是同一个构建。运行时不同的 sanitizer 不能组合——`address`/`leak`/`undefined` 可以共存，但 `thread` 与 `address`/`leak` 互斥（非法组合会在启动时明确报错）。
+sanitizer 是**每次运行的选择**（命令行开关），不是项目配置。`--sanitizer` 对 `build`/`run`/`test` 均生效，取值是逗号分隔的**集合**：`address`（`asan`）、`undefined`（`ubsan`）、`leak`（`lsan`）、`thread`（`tsan`）——在 gcc / clang / Apple clang 上支持（MemorySanitizer 后续支持）。集合会被规范化（去重并排序），因此 `--sanitizer=ubsan,address` 与 `--sanitizer=address,undefined` 是同一个构建。运行时不同的 sanitizer 不能组合——`address`/`leak`/`undefined` 可以共存，但 `thread` 与 `address`/`leak` 互斥（非法组合会在启动时明确报错）。
 
 - **编译选项：** 给编译和链接都加上 `-fsanitize=<集合> -fno-omit-frame-pointer -g`（链接以引入 sanitizer 运行时）。UBSan 被设为**致命**（`-fno-sanitize-recover=undefined`），使其发现问题时让测试失败，而非仅打印。对测试，Blade 还会设置合理的 `*_OPTIONS` 默认值（如 `TSAN_OPTIONS=halt_on_error=1`），使检测能可靠地以非零退出——你在环境变量中已设置的值仍然优先。因此 `blade test` 会把检测判为失败。
+- **MSVC：** MSVC 工具链**仅**支持 AddressSanitizer——`--sanitizer=address` 用 `/fsanitize=address` 编译（并加 `/Z7` 以便符号化报告），以非增量方式链接（`/INCREMENTAL:NO /DEBUG`；ASan 运行时由编译器自动引入），并把 ASan 运行时 DLL 加入测试的 `PATH`。在 MSVC 上请求其它 sanitizer 会在启动时明确报错。
 - **独立的构建目录：** sanitizer 构建与普通构建在 ABI/代码生成上不兼容，因此使用带 sanitizer 标记的独立兄弟目录——`build64_release_asan`。普通的 `build64_release` 不受影响，两者可并存、互不覆盖、互不触发重新编译。
-- **按目标退出：** 不应被插桩的目标（有意的 UB、性能热点、对未插桩预编译库的包装）可设置 `sanitize = False`。它仍参与链接（仍获得运行时），只是自身的编译不再插桩。
+- **按目标退出：** 不应被插桩的目标（有意的 UB、性能热点、对未插桩预编译库的包装）可设置 `sanitize = False`。它仍参与链接（仍获得运行时），只是自身的编译不再插桩。（在 MSVC 上无效——`cl` 没有按文件关闭 ASan 的选项。）
 
 ```python
 cc_library(name = 'crc32_hw', srcs = ['crc32_hw.cc'], sanitize = False)

@@ -29,6 +29,7 @@ from blade import target_pattern
 from blade.test_scheduler import TestScheduler  # lgtm[py/cyclic-import]
 # pylint: disable=unused-import
 from blade.test_scheduler import TestRunResult  # Used by eval
+from blade.util import environ_add_path
 from blade.util import md5sum
 
 
@@ -494,6 +495,16 @@ class TestRunner(binary_runner.BinaryRunner):
                 for var, value in sanitizer.runtime_env(sanitizers).items():
                     if var not in os.environ:
                         test_env[var] = value
+                # MSVC ASan links the dynamic runtime (clang_rt.asan_dynamic-*.dll),
+                # which ships beside cl.exe; blade invokes cl by absolute path so
+                # that dir may not be on PATH. Put it there so the test can load
+                # the DLL (issue #1038, Phase 3).
+                if 'address' in sanitizers:
+                    from blade import build_manager  # pylint: disable=import-outside-toplevel
+                    tc = build_manager.instance.get_build_toolchain()
+                    cc = tc.tool('cc') if tc.cc_is('msvc') else ''
+                    if cc:
+                        environ_add_path(test_env, 'PATH', os.path.dirname(cc))
             tests_run_list.append((target, self._runfiles_dir(target), test_env, cmd))
 
         console.notice('%d tests to run' % len(tests_run_list))

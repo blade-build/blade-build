@@ -89,13 +89,29 @@ class SanitizerHelperTest(unittest.TestCase):
         self.assertIn('halt_on_error=1', env['UBSAN_OPTIONS'])
         self.assertEqual({}, sanitizer.runtime_env([]))
 
-    def test_check_toolchain_rejects_msvc(self):
+    def test_check_toolchain_msvc_allows_only_address(self):
         msvc = mock.Mock()
         msvc.cc_is.side_effect = lambda v: v == 'msvc'
+        # address is supported on MSVC (Phase 3); others are not.
+        sanitizer.check_toolchain(['address'], msvc)  # ok, no raise
         with self.assertRaises(SystemExit):
-            sanitizer.check_toolchain(['address'], msvc)
+            sanitizer.check_toolchain(['thread'], msvc)
+        with self.assertRaises(SystemExit):
+            sanitizer.check_toolchain(['address', 'undefined'], msvc)
         # No sanitizer -> no check, no error.
         sanitizer.check_toolchain([], msvc)
+
+    def test_msvc_compile_flags(self):
+        flags = sanitizer.msvc_compile_flags(['address'])
+        self.assertIn('/fsanitize=address', flags)
+        self.assertIn('/Z7', flags)  # symbolized reports
+        self.assertEqual([], sanitizer.msvc_compile_flags([]))
+
+    def test_msvc_link_flags(self):
+        flags = sanitizer.msvc_link_flags(['address'])
+        self.assertIn('/INCREMENTAL:NO', flags)  # ASan + incremental link clash
+        self.assertIn('/DEBUG', flags)
+        self.assertEqual([], sanitizer.msvc_link_flags([]))
 
 
 class BuildVariantSuffixSanitizerTest(unittest.TestCase):
@@ -116,12 +132,15 @@ class BuildVariantSuffixSanitizerTest(unittest.TestCase):
 class PerTargetOptOutTest(unittest.TestCase):
     """`sanitize=False` adds -fno-sanitize for that target's compiles."""
 
-    def _cc_target(self, sanitize, sanitizers):
+    def _cc_target(self, sanitize, sanitizers, vendor='gcc'):
         from blade import cc_targets
         target = cc_targets.CcTarget.__new__(cc_targets.CcTarget)
         target.attr = {'defs': [], 'extra_cppflags': [], 'sanitize': sanitize}
         target.blade = mock.Mock()
         target.blade.get_options.return_value = _Opts(sanitizers=sanitizers)
+        tc = mock.Mock()
+        tc.cc_is.side_effect = lambda v: v == vendor
+        target.blade.get_build_toolchain.return_value = tc
         target._get_incs_list = mock.Mock(return_value=([], []))
         return target
 
@@ -139,6 +158,32 @@ class PerTargetOptOutTest(unittest.TestCase):
         target = self._cc_target(sanitize=False, sanitizers=[])
         cpp_flags, _r, _s = target._get_cc_flags()
         self.assertNotIn('-fno-sanitize=address', cpp_flags)
+
+    def test_msvc_optout_emits_no_gcc_flag(self):
+        # cl.exe has no per-TU /fsanitize opt-out; sanitize=False must not emit
+        # the GCC -fno-sanitize flag (cl would reject it).
+        target = self._cc_target(sanitize=False, sanitizers=['address'], vendor='msvc')
+        cpp_flags, _r, _s = target._get_cc_flags()
+        self.assertNotIn('-fno-sanitize=address', cpp_flags)
+
+    def _vars(self, target):
+        from unittest import mock as _mock
+        target._get_cc_flags = _mock.Mock(return_value=([], [], []))
+        target._get_optimize_flags = _mock.Mock(return_value=None)
+        return target._get_cc_vars()
+
+    def test_msvc_optout_blanks_sanitize_var(self):
+        # sanitize=False blanks the overridable ${sanitize} var on MSVC.
+        target = self._cc_target(sanitize=False, sanitizers=['address'], vendor='msvc')
+        self.assertEqual('', self._vars(target)['sanitize'])
+
+    def test_msvc_instrumented_target_no_sanitize_override(self):
+        target = self._cc_target(sanitize=True, sanitizers=['address'], vendor='msvc')
+        self.assertNotIn('sanitize', self._vars(target))
+
+    def test_msvc_no_sanitizer_no_override(self):
+        target = self._cc_target(sanitize=False, sanitizers=[], vendor='msvc')
+        self.assertNotIn('sanitize', self._vars(target))
 
 
 if __name__ == '__main__':

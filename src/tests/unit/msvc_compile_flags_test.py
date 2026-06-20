@@ -32,13 +32,16 @@ class MsvcCompileFlagsTest(unittest.TestCase):
         gen.build_accelerator = mock.Mock()
         gen.options = mock.Mock()
         gen.options.profile = 'release'
+        gen.options.sanitizers = []
         gen.build_dir = 'build64_release'
         gen._msvc_tee_wrapper_py = mock.Mock(return_value='cc_wrapper.py')
         gen.generate_rule = mock.Mock()
         return gen
 
-    def _rules(self):
+    def _rules(self, sanitizers=None):
         gen = self._make_gen()
+        if sanitizers is not None:
+            gen.options.sanitizers = sanitizers
         section = {
             'msvc_config': {'cppflags': [], 'cflags': [], 'cxxflags': [],
                             'optimize': {'release': ['/O2']},
@@ -73,6 +76,14 @@ class MsvcCompileFlagsTest(unittest.TestCase):
         rules = self._rules()
         for name in ('cc', 'cxx', 'cxxhdrs'):
             self.assertIn('/external:W0', rules[name])
+
+    def test_compiles_reference_sanitize_var(self):
+        """cc / cxx carry the overridable ${sanitize} var (the instrumentation
+        flags live in that binding, blanked per-target for sanitize=False).
+        cxxhdrs only preprocesses, so it doesn't need it. (issue #1038, Phase 3)"""
+        rules = self._rules()
+        for name in ('cc', 'cxx'):
+            self.assertIn('${sanitize}', rules[name])
 
 
 if __name__ == '__main__':

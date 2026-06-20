@@ -456,6 +456,19 @@ class CcRuleGenerator:
                 cxx_warnings = %s
                 ''') % (' '.join(c_warnings), ' '.join(cxx_warnings)))
 
+        # Sanitizer instrumentation (issue #1038) as an overridable variable: the
+        # global default is the active set's compile flags (/fsanitize=address),
+        # and a per-target `sanitize=False` blanks it on that target's edges --
+        # cl has no `-fno-sanitize` to subtract per file. The compile rules below
+        # reference `${sanitize}`. Validate the set once here.
+        sanitizers = getattr(self.options, 'sanitizers', None)
+        sanitize = ''
+        if sanitizers:
+            sanitizer.check_compat(sanitizers)
+            sanitizer.check_toolchain(sanitizers, self.build_toolchain)
+            sanitize = ' '.join(sanitizer.msvc_compile_flags(sanitizers))
+        self._add_line('sanitize = %s\n' % sanitize)
+
     def _generate_windows_cc_compile_rules(self, cc, cxx):
         """Generate Windows CC compilation rules."""
         windows_config = config.get_section('msvc_config')
@@ -504,7 +517,7 @@ class CcRuleGenerator:
         wrapper = self._msvc_tee_wrapper_py()
         template = '"%s" -B %s ${inclusion_stack} -- ' % (py, wrapper)
 
-        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} /external:W0 ${cppflags} ${includes} ${extra_compile_flags} ${in}' % (
+        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} /external:W0 ${cppflags} ${sanitize} ${includes} ${extra_compile_flags} ${in}' % (
             cc, optimize, ' '.join(cppflags), ' '.join(cflags), include_flags))
         self.generate_rule(name='cc',
                            command=cc_command,
@@ -512,7 +525,7 @@ class CcRuleGenerator:
                            deps='msvc',
                            restat=True)
 
-        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} /external:W0 ${cppflags} ${includes} ${extra_compile_flags} ${in}' % (
+        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} /external:W0 ${cppflags} ${sanitize} ${includes} ${extra_compile_flags} ${in}' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxx',
                            command=cxx_command,
@@ -585,6 +598,15 @@ class CcRuleGenerator:
             linkflags = linkflags + ['/DEBUG']
         if self.options.profile == 'release':
             linkflags = linkflags + ['/OPT:REF', '/OPT:ICF', '/INCREMENTAL:NO']
+
+        # Sanitizers (issue #1038): ASan needs incremental linking off (the
+        # runtime libs auto-link via /DEFAULTLIB). Harmless if already added
+        # above for release.
+        sanitizers = getattr(self.options, 'sanitizers', None)
+        if sanitizers:
+            for flag in sanitizer.msvc_link_flags(sanitizers):
+                if flag not in linkflags:
+                    linkflags = linkflags + [flag]
 
         # System library paths (MSVC + Windows SDK) discovered by the toolchain
         lib_paths = self.build_toolchain.get_system_lib_paths()

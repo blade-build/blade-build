@@ -647,7 +647,10 @@ class CcTarget(Target):
             blade = getattr(self, 'blade', None)
             options = blade.get_options() if blade else None
             sanitizers = getattr(options, 'sanitizers', None)
-            if sanitizers:
+            # cl.exe has no per-TU `/fsanitize` opt-out, so `sanitize=False`
+            # can't drop instrumentation on MSVC -- skip rather than emit a flag
+            # cl rejects. (GCC/Clang use -fno-sanitize, where the later flag wins.)
+            if sanitizers and not (blade and blade.get_build_toolchain().cc_is('msvc')):
                 cpp_flags.append(
                     '-fno-sanitize=' + sanitizer.fsanitize_value(sanitizers))
 
@@ -757,6 +760,16 @@ class CcTarget(Target):
         optimize = self._get_optimize_flags()
         if optimize is not None:
             vars['optimize'] = optimize
+
+        # Per-target sanitizer opt-out on MSVC: cl has no `-fno-sanitize` to
+        # subtract per file (the GCC path uses that in _get_cc_flags), so blank
+        # the overridable `${sanitize}` var on this target's edges instead. The
+        # binary still links the runtime; only this target's compiles drop the
+        # instrumentation. (#1038 Phase 3.)
+        if (not self.attr.get('sanitize', True)
+                and self.blade.get_build_toolchain().cc_is('msvc')
+                and getattr(self.blade.get_options(), 'sanitizers', None)):
+            vars['sanitize'] = ''
 
         return vars
 

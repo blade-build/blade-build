@@ -91,6 +91,38 @@ def build_tag(sanitizers):
     return '+'.join(_TAGS[s] for s in sanitizers)
 
 
+# MSVC's cl.exe (and clang-cl) implements only AddressSanitizer; the others
+# (thread/leak/undefined/memory) have no /fsanitize equivalent there.
+_MSVC_SUPPORTED = {'address'}
+
+
+def msvc_compile_flags(sanitizers):
+    """MSVC (cl.exe / clang-cl) compile flags for the active sanitizer set.
+
+    Only ``/fsanitize=address`` exists on MSVC; ``check_toolchain`` rejects any
+    other sanitizer there first. ``/Z7`` forces CodeView debug info so reports
+    symbolize even at ``debug_info_level='no'`` -- the parallel-safe equivalent
+    of the ``/Zi`` the design calls for, mirroring GCC/Clang's forced ``-g``.
+    Returns [] when address is not in the set.
+    """
+    if 'address' in sanitizers:
+        return ['/fsanitize=address', '/Z7']
+    return []
+
+
+def msvc_link_flags(sanitizers):
+    """MSVC link flags for the active sanitizer set.
+
+    The compiler emits ``/DEFAULTLIB`` directives for the ASan runtime, so the
+    libs link automatically. ASan is incompatible with incremental linking
+    (force ``/INCREMENTAL:NO``), and ``/DEBUG`` emits the PDB the runtime needs
+    to symbolize reports. Returns [] when address is not active.
+    """
+    if 'address' in sanitizers:
+        return ['/INCREMENTAL:NO', '/DEBUG']
+    return []
+
+
 def runtime_env(sanitizers):
     """Default ``*_OPTIONS`` env so a detection reliably fails the test.
 
@@ -124,5 +156,9 @@ def check_toolchain(sanitizers, toolchain):
     if not sanitizers:
         return
     if toolchain.cc_is('msvc'):
-        # MSVC /fsanitize=address support is a later phase (#1038 Phase 3).
-        console.fatal('--sanitizer is not supported on the MSVC toolchain yet')
+        # MSVC implements only AddressSanitizer (issue #1038, Phase 3).
+        unsupported = [s for s in sanitizers if s not in _MSVC_SUPPORTED]
+        if unsupported:
+            console.fatal(
+                'the MSVC toolchain supports only the "address" sanitizer, '
+                'not %s' % ', '.join(unsupported))

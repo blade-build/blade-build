@@ -48,6 +48,7 @@ class MsvcLinkToolPathTest(unittest.TestCase):
         gen.generate_rule = mock.Mock()
         gen.options = mock.Mock()
         gen.options.profile = 'release'
+        gen.options.sanitizers = []
         with mock.patch('blade.cc_rule_support.config') as cfg:
             cfg.get_section.side_effect = lambda n: {
                 'msvc_config': {'linkflags': []}, 'cc_config': {'linkflags': []},
