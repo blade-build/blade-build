@@ -130,7 +130,7 @@ class BuildVariantSuffixSanitizerTest(unittest.TestCase):
 
 
 class PerTargetOptOutTest(unittest.TestCase):
-    """`sanitize=False` adds -fno-sanitize for that target's compiles."""
+    """`sanitize=False` blanks the ${sanitize} ninja var on every compiler."""
 
     def _cc_target(self, sanitize, sanitizers, vendor='gcc'):
         from blade import cc_targets
@@ -144,46 +144,32 @@ class PerTargetOptOutTest(unittest.TestCase):
         target._get_incs_list = mock.Mock(return_value=([], []))
         return target
 
-    def test_optout_drops_instrumentation(self):
-        target = self._cc_target(sanitize=False, sanitizers=['address'])
-        cpp_flags, _r, _s = target._get_cc_flags()
-        self.assertIn('-fno-sanitize=address', cpp_flags)
-
-    def test_instrumented_target_has_no_override(self):
-        target = self._cc_target(sanitize=True, sanitizers=['address'])
-        cpp_flags, _r, _s = target._get_cc_flags()
-        self.assertNotIn('-fno-sanitize=address', cpp_flags)
-
-    def test_no_sanitizer_no_override(self):
-        target = self._cc_target(sanitize=False, sanitizers=[])
-        cpp_flags, _r, _s = target._get_cc_flags()
-        self.assertNotIn('-fno-sanitize=address', cpp_flags)
-
-    def test_msvc_optout_emits_no_gcc_flag(self):
-        # cl.exe has no per-TU /fsanitize opt-out; sanitize=False must not emit
-        # the GCC -fno-sanitize flag (cl would reject it).
-        target = self._cc_target(sanitize=False, sanitizers=['address'], vendor='msvc')
-        cpp_flags, _r, _s = target._get_cc_flags()
-        self.assertNotIn('-fno-sanitize=address', cpp_flags)
-
     def _vars(self, target):
-        from unittest import mock as _mock
-        target._get_cc_flags = _mock.Mock(return_value=([], [], []))
-        target._get_optimize_flags = _mock.Mock(return_value=None)
+        target._get_cc_flags = mock.Mock(return_value=([], [], []))
+        target._get_optimize_flags = mock.Mock(return_value=None)
         return target._get_cc_vars()
 
-    def test_msvc_optout_blanks_sanitize_var(self):
-        # sanitize=False blanks the overridable ${sanitize} var on MSVC.
-        target = self._cc_target(sanitize=False, sanitizers=['address'], vendor='msvc')
-        self.assertEqual('', self._vars(target)['sanitize'])
+    def test_optout_blanks_var_on_every_compiler(self):
+        # The opt-out is uniform: blank ${sanitize} regardless of toolchain.
+        for vendor in ('gcc', 'clang', 'msvc'):
+            target = self._cc_target(sanitize=False, sanitizers=['address'],
+                                     vendor=vendor)
+            self.assertEqual('', self._vars(target)['sanitize'],
+                             'opt-out should blank ${sanitize} on %s' % vendor)
 
-    def test_msvc_instrumented_target_no_sanitize_override(self):
-        target = self._cc_target(sanitize=True, sanitizers=['address'], vendor='msvc')
+    def test_instrumented_target_no_var_override(self):
+        target = self._cc_target(sanitize=True, sanitizers=['address'])
         self.assertNotIn('sanitize', self._vars(target))
 
-    def test_msvc_no_sanitizer_no_override(self):
-        target = self._cc_target(sanitize=False, sanitizers=[], vendor='msvc')
+    def test_no_sanitizer_no_var_override(self):
+        target = self._cc_target(sanitize=False, sanitizers=[])
         self.assertNotIn('sanitize', self._vars(target))
+
+    def test_get_cc_flags_never_emits_fno_sanitize(self):
+        # The old per-compiler -fno-sanitize path is gone; opt-out is var-based.
+        target = self._cc_target(sanitize=False, sanitizers=['address'])
+        cpp_flags, _r, _s = target._get_cc_flags()
+        self.assertNotIn('-fno-sanitize=address', cpp_flags)
 
 
 if __name__ == '__main__':

@@ -23,7 +23,6 @@ from blade import build_manager
 from blade import build_rules
 from blade import cc_rule_support
 from blade import config  # lgtm[py/cyclic-import]
-from blade import sanitizer
 from blade import console
 from blade import inclusion_check
 from blade import rule_registry
@@ -638,21 +637,9 @@ class CcTarget(Target):
         cpp_flags += [('-D' + macro) for macro in defs]
         cpp_flags += self.attr.get('extra_cppflags', [])
 
-        # Per-target sanitizer opt-out: drop instrumentation for this TU. The
-        # global -fsanitize=<set> still applies at link (keeping the runtime),
-        # so the target links fine -- it's just not instrumented. Check the
-        # (always-present) attr first so global options are only consulted for
-        # the rare opt-out target -- keeps this method usable in isolation.
-        if not self.attr.get('sanitize', True):
-            blade = getattr(self, 'blade', None)
-            options = blade.get_options() if blade else None
-            sanitizers = getattr(options, 'sanitizers', None)
-            # cl.exe has no per-TU `/fsanitize` opt-out, so `sanitize=False`
-            # can't drop instrumentation on MSVC -- skip rather than emit a flag
-            # cl rejects. (GCC/Clang use -fno-sanitize, where the later flag wins.)
-            if sanitizers and not (blade and blade.get_build_toolchain().cc_is('msvc')):
-                cpp_flags.append(
-                    '-fno-sanitize=' + sanitizer.fsanitize_value(sanitizers))
+        # Sanitizer opt-out is handled uniformly by blanking the `${sanitize}`
+        # ninja var in _get_cc_vars (works on every compiler, including those
+        # without a -fno-sanitize), not by subtracting a flag here.
 
         # Incs
         regular_incs, system_incs = self._get_incs_list()
@@ -761,13 +748,12 @@ class CcTarget(Target):
         if optimize is not None:
             vars['optimize'] = optimize
 
-        # Per-target sanitizer opt-out on MSVC: cl has no `-fno-sanitize` to
-        # subtract per file (the GCC path uses that in _get_cc_flags), so blank
-        # the overridable `${sanitize}` var on this target's edges instead. The
-        # binary still links the runtime; only this target's compiles drop the
-        # instrumentation. (#1038 Phase 3.)
+        # Per-target sanitizer opt-out (every compiler): blank the overridable
+        # `${sanitize}` var on this target's edges so its compiles drop the
+        # instrumentation. The binary still links the runtime (a global link
+        # flag), so it links fine. Uniform across gcc/clang/MSVC -- no
+        # -fno-sanitize subtraction needed. Check the always-present attr first.
         if (not self.attr.get('sanitize', True)
-                and self.blade.get_build_toolchain().cc_is('msvc')
                 and getattr(self.blade.get_options(), 'sanitizers', None)):
             vars['sanitize'] = ''
 

@@ -347,7 +347,11 @@ class CcRuleGenerator:
         if sanitizers:
             sanitizer.check_compat(sanitizers)
             sanitizer.check_toolchain(sanitizers, self.build_toolchain)
-            cppflags += sanitizer.compile_flags(sanitizers)
+            # Compile-side instrumentation rides the overridable `${sanitize}`
+            # ninja var (emitted by _generate_cc_vars) so a per-target
+            # sanitize=False can blank it for that target's edges -- the same
+            # mechanism the MSVC path uses, instead of subtracting -fno-sanitize.
+            # Only the link flags (which pull in the runtime) stay global.
             linkflags += sanitizer.link_flags(sanitizers)
 
         if hasattr(self.options, 'profile-generate') and getattr(self.options, 'profile-generate') is not None:
@@ -674,15 +678,23 @@ class CcRuleGenerator:
         # optimize_flags is need for `always_optimize`
         optimize_flags = config.get_item('cc_config', 'optimize')
         optimize = '$optimize_flags' if self.options.profile == 'release' else ''
+        # Sanitizer instrumentation (issue #1038) as an overridable variable:
+        # the default is the active set's compile flags, and a per-target
+        # sanitize=False blanks `${sanitize}` on that target's edges (see
+        # CcTarget._get_cc_vars). The set is already validated in
+        # _get_intrinsic_cc_flags, which runs first.
+        sanitizers = getattr(self.options, 'sanitizers', None)
+        sanitize = ' '.join(sanitizer.compile_flags(sanitizers)) if sanitizers else ''
         self._add_line(textwrap.dedent('''\
                 c_warnings = %s
                 cxx_warnings = %s
                 cu_warnings = %s
                 optimize_flags = %s
                 optimize = %s
+                sanitize = %s
                 ''') % (' '.join(c_warnings), ' '.join(cxx_warnings),
                         ' '.join(cu_warnings),
-                        ' '.join(optimize_flags), optimize))
+                        ' '.join(optimize_flags), optimize, sanitize))
 
     def _generate_cc_compile_rules(self, cc, cxx, cppflags):
         self._generate_cc_vars()
@@ -697,7 +709,7 @@ class CcRuleGenerator:
         template = self._cc_compile_command_wrapper_template('${inclusion_stack}')
 
         cc_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
-                      '${c_warnings} ${cppflags} ${extra_compile_flags} %s ${includes} ${in}') % (
+                      '${c_warnings} ${cppflags} ${sanitize} ${extra_compile_flags} %s ${includes} ${in}') % (
                               cc, ' '.join(cflags), ' '.join(cppflags), includes)
         self.generate_rule(name='cc',
                            command=template % cc_command,
@@ -710,7 +722,7 @@ class CcRuleGenerator:
                            restat=True)
 
         cxx_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
-                       '${cxx_warnings} ${cppflags} ${extra_compile_flags} %s ${includes} ${in}') % (
+                       '${cxx_warnings} ${cppflags} ${sanitize} ${extra_compile_flags} %s ${includes} ${in}') % (
                                cxx, ' '.join(cxxflags), ' '.join(cppflags), includes)
         self.generate_rule(name='cxx',
                            command=template % cxx_command,
@@ -934,6 +946,13 @@ class CcRuleGenerator:
         cuda_config = config.get_section('cuda_config')
         cxxflags = cc_config['cxxflags']
         cppflags, _ = self._get_intrinsic_cc_flags()
+        # cc/cxx carry sanitizer instrumentation via the overridable ${sanitize}
+        # var (so per-target opt-out can blank it); the cuda rule has no such var,
+        # so fold the compile flags in here directly -- cuda has no per-target
+        # opt-out, so it just always instruments under --sanitizer (as before).
+        sanitizers = getattr(self.options, 'sanitizers', None)
+        if sanitizers:
+            cppflags = cppflags + sanitizer.compile_flags(sanitizers)
         cppflags = cc_config['cppflags'] + cppflags
         cxxflags = ['-Xcompiler %s' % flag for flag in cxxflags]
         cppflags = ['-Xcompiler %s' % flag for flag in cppflags]
