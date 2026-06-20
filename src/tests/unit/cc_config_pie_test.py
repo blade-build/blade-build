@@ -147,6 +147,7 @@ class GetIntrinsicCcFlagsInterpositionTest(unittest.TestCase):
         gen.options.profile = 'release'
         gen.options.gprof = False
         gen.options.coverage = False
+        gen.options.sanitizers = []
         # `hasattr(self.options, '...')` on a Mock returns True by default;
         # explicitly delete the attrs so the PGO branches stay out.
         for attr in ('profile-generate', 'profile-use'):

@@ -22,6 +22,7 @@ except ImportError:
 
 from blade import console
 from blade import constants
+from blade import sanitizer
 from blade.toolchain import BuildArchitecture
 from blade.toolchain import ToolChain
 
@@ -69,6 +70,9 @@ class CommandLineParser:
         command = options.command
         # Check the options with different sub command
         self._check_subcommand(command, options, targets)
+
+        # Canonicalize --sanitizer (off for subcommands without build args).
+        options.sanitizers = sanitizer.parse(getattr(options, 'sanitizer', ''))
 
         return command, options, targets
 
@@ -293,6 +297,12 @@ class CommandLineParser:
             action='store_true', default=False,
             help=argparse.SUPPRESS)
 
+    def __add_sanitizer_arguments(self, parser):
+        """Add sanitizer arguments."""
+        parser.add_argument(
+            '--sanitizer', dest='sanitizer', type=str, default='', metavar='SET',
+            help='Build and test under sanitizers, e.g. --sanitizer=address')
+
     def __add_pgo_arguments(self, parser):
         """Add Profile-guided Optimization arguments."""
         parser.add_argument(
@@ -400,6 +410,7 @@ class CommandLineParser:
             self.__add_build_actions_arguments(parser)
             self.__add_generate_arguments(parser)
             self.__add_coverage_arguments(parser)
+            self.__add_sanitizer_arguments(parser)
             self.__add_pgo_arguments(parser)
             self.__add_fission_arguments(parser)
 

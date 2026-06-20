@@ -19,6 +19,7 @@ import textwrap
 
 from blade import config
 from blade import console
+from blade import sanitizer
 from blade import util
 from blade.ninja_rule import NinjaRule
 
@@ -341,6 +342,14 @@ class CcRuleGenerator:
         if getattr(self.options, 'coverage', False):
             cppflags.append('--coverage')
             linkflags.append('--coverage')
+
+        sanitizers = getattr(self.options, 'sanitizers', None)
+        if sanitizers:
+            sanitizer.check_toolchain(sanitizers, self.build_toolchain)
+            fsanitize = '-fsanitize=' + sanitizer.fsanitize_value(sanitizers)
+            # Frame pointers + debug info for readable, symbolized reports.
+            cppflags += [fsanitize, '-fno-omit-frame-pointer', '-g']
+            linkflags.append(fsanitize)  # link the sanitizer runtime
 
         if hasattr(self.options, 'profile-generate') and getattr(self.options, 'profile-generate') is not None:
             pgo_gen_dir = getattr(self.options, 'profile-generate')

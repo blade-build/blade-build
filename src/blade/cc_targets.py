@@ -23,6 +23,7 @@ from blade import build_manager
 from blade import build_rules
 from blade import cc_rule_support
 from blade import config  # lgtm[py/cyclic-import]
+from blade import sanitizer
 from blade import console
 from blade import inclusion_check
 from blade import rule_registry
@@ -353,6 +354,11 @@ class CcTarget(Target):
         if src_exts is None:
             src_exts = list(_SOURCE_FILE_EXTS)
 
+        # 'sanitize' (cc-only, default True) lets a target opt out of sanitizer
+        # instrumentation under `--sanitizer`. Consumed here (before the base
+        # unknown-kwargs check) so it's accepted only on cc targets.
+        sanitize = kwargs.pop('sanitize', True)
+
         super().__init__(
                 name=name,
                 type=type,
@@ -363,6 +369,7 @@ class CcTarget(Target):
                 tags=tags,
                 kwargs=kwargs)
 
+        self.attr['sanitize'] = bool(sanitize)
         self._check_defs(defs)
         self._check_incorrect_no_warning(warning)
 
@@ -630,6 +637,19 @@ class CcTarget(Target):
         defs = self.attr.get('defs', [])
         cpp_flags += [('-D' + macro) for macro in defs]
         cpp_flags += self.attr.get('extra_cppflags', [])
+
+        # Per-target sanitizer opt-out: drop instrumentation for this TU. The
+        # global -fsanitize=<set> still applies at link (keeping the runtime),
+        # so the target links fine -- it's just not instrumented. Check the
+        # (always-present) attr first so global options are only consulted for
+        # the rare opt-out target -- keeps this method usable in isolation.
+        if not self.attr.get('sanitize', True):
+            blade = getattr(self, 'blade', None)
+            options = blade.get_options() if blade else None
+            sanitizers = getattr(options, 'sanitizers', None)
+            if sanitizers:
+                cpp_flags.append(
+                    '-fno-sanitize=' + sanitizer.fsanitize_value(sanitizers))
 
         # Incs
         regular_incs, system_incs = self._get_incs_list()

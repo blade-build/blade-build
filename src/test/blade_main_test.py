@@ -44,6 +44,7 @@ from deprecated_dep_test import TestDeprecatedDep
 from cc_coverage_test import TestCcCoverage
 from go_coverage_test import TestGoCoverage
 from py_coverage_test import TestPyCoverage
+from sanitizer_test import TestSanitizerAsan
 
 from html_test_runner import HTMLTestRunner
 from test_target_test import TestTestRunner
@@ -82,6 +83,7 @@ def _main():
         unittest.defaultTestLoader.loadTestsFromTestCase(TestCcCoverage),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestGoCoverage),
         unittest.defaultTestLoader.loadTestsFromTestCase(TestPyCoverage),
+        unittest.defaultTestLoader.loadTestsFromTestCase(TestSanitizerAsan),
         ])
 
     generate_html = len(sys.argv) > 1 and sys.argv[1].startswith('html')

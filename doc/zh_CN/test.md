@@ -141,6 +141,25 @@ java_test_config(
 - 覆盖率报告会生成到构建目录下的 `jacoco_coverage_report` 目录
 - 若需要行级覆盖率，`global_config.debug_info_level` 需设置为 `mid` 或更高（要求编译时带 `-g:line` 选项）
 
+## Sanitizer（消毒器）
+
+只需一个命令行开关，即可让现有目标树在 sanitizer 下构建并运行，无需改动 BUILD 文件：
+
+```bash
+blade test //...                       # 普通
+blade test //... --sanitizer=address   # AddressSanitizer（别名：asan）
+```
+
+sanitizer 是**每次运行的选择**（命令行开关），不是项目配置。`--sanitizer` 对 `build`/`run`/`test` 均生效。当前在 gcc / clang / Apple clang 上支持 **AddressSanitizer**；更多 sanitizer 及 MSVC 后续支持。
+
+- **编译选项：** 给编译和链接都加上 `-fsanitize=address -fno-omit-frame-pointer -g`（链接以引入 sanitizer 运行时）。sanitizer 检测到问题会让测试进程以非零退出，因此 `blade test` 会判为失败。
+- **独立的构建目录：** sanitizer 构建与普通构建在 ABI/代码生成上不兼容，因此使用带 sanitizer 标记的独立兄弟目录——`build64_release_asan`。普通的 `build64_release` 不受影响，两者可并存、互不覆盖、互不触发重新编译。
+- **按目标退出：** 不应被插桩的目标（有意的 UB、性能热点、对未插桩预编译库的包装）可设置 `sanitize = False`。它仍参与链接（仍获得运行时），只是自身的编译不再插桩。
+
+```python
+cc_library(name = 'crc32_hw', srcs = ['crc32_hw.cc'], sanitize = False)
+```
+
 ## 测试排除
 
 Blade 支持通过 `--exclude-tests` 参数在批量执行测试时选择性地排除部分测试。

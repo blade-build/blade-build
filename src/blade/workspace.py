@@ -15,6 +15,7 @@ import string
 
 from blade import config
 from blade import console
+from blade import sanitizer
 from blade import util
 
 
@@ -29,10 +30,9 @@ def _build_variant_suffix(options):
     variants = []
     if getattr(options, 'coverage', False):
         variants.append('coverage')
-    # Future: sanitizers, e.g.
-    #   sanitizer = getattr(options, 'sanitizer', None)
-    #   if sanitizer:
-    #       variants.append(sanitizer)  # 'asan' / 'tsan' / 'ubsan'
+    sanitizers = getattr(options, 'sanitizers', None)
+    if sanitizers:
+        variants.append(sanitizer.build_tag(sanitizers))  # e.g. 'asan'
     return ''.join('_' + v for v in variants)
 
 

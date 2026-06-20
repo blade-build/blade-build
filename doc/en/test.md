@@ -145,6 +145,25 @@ java_test_config(
 - Coverage reports are generated in `jacoco_coverage_report` directory under build directory
 - Line coverage requires `global_config.debug_info_level` of `mid` or higher (requires `-g:line` compilation flag)
 
+## Sanitizers
+
+Build and run an existing target tree under a sanitizer with a single command-line switch — no BUILD-file changes:
+
+```bash
+blade test //...                       # normal
+blade test //... --sanitizer=address   # AddressSanitizer (alias: asan)
+```
+
+A sanitizer is a **per-run choice** (a flag), not project config. `--sanitizer` applies to `build`, `run`, and `test`. Currently **AddressSanitizer** is supported on gcc / clang / Apple clang; more sanitizers and MSVC follow.
+
+- **Flags:** `-fsanitize=address -fno-omit-frame-pointer -g` are added to compiles and links (the link pulls in the sanitizer runtime). A sanitizer detection makes the test exit non-zero, so `blade test` reports it as a failure.
+- **Isolated build directory:** a sanitized build is ABI/codegen-incompatible with a normal one, so it gets its own sibling dir with a sanitizer tag — `build64_release_asan`. The plain `build64_release` is untouched, so the two coexist without clobbering or rebuilding each other.
+- **Per-target opt-out:** a target that must not be instrumented (intentional UB, a hot path, a wrapper around a non-instrumented prebuilt) sets `sanitize = False`. It still links (and still gets the runtime); only its own compiles drop the instrumentation.
+
+```python
+cc_library(name = 'crc32_hw', srcs = ['crc32_hw.cc'], sanitize = False)
+```
+
 ## Test Exclusion
 
 Blade supports selective test exclusion using the `--exclude-tests` parameter for batch test execution scenarios.
