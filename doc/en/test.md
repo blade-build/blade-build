@@ -147,6 +147,8 @@ java_test_config(
 
 ## Sanitizers
 
+Sanitizers are compiler-based **runtime** bug detectors. Pioneered by Google in LLVM/Clang (AddressSanitizer, 2012) and later adopted by GCC, they instrument your code at compile time and check it as it runs for bugs that are otherwise silent or nondeterministic: out-of-bounds accesses and use-after-free (ASan), reads of uninitialized memory (MSan), undefined behavior (UBSan), data races (TSan), and memory leaks (LSan). Instead of a heisenbug you can only reproduce with luck, you get a symbolized report at the exact point of the fault. Coverage varies by toolchain — Clang supports the full set; GCC has all but MSan; MSVC provides only ASan.
+
 Build and run an existing target tree under a sanitizer with a single command-line switch — no BUILD-file changes:
 
 ```bash
@@ -154,6 +156,7 @@ blade test //...                                # normal
 blade test //... --sanitizer=address            # AddressSanitizer (alias: asan)
 blade test //... --sanitizer=undefined          # UndefinedBehaviorSanitizer (alias: ubsan)
 blade test //... --sanitizer=thread             # ThreadSanitizer (alias: tsan)
+blade test //... --sanitizer=memory             # MemorySanitizer (alias: msan, Clang + Linux only)
 blade test //... --sanitizer=address,undefined  # combined (ASan + UBSan)
 ```
 

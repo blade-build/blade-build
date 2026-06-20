@@ -141,7 +141,9 @@ java_test_config(
 - 覆盖率报告会生成到构建目录下的 `jacoco_coverage_report` 目录
 - 若需要行级覆盖率，`global_config.debug_info_level` 需设置为 `mid` 或更高（要求编译时带 `-g:line` 选项）
 
-## Sanitizer（消毒器）
+## Sanitizer
+
+Sanitizer 是基于编译器的**运行时**缺陷检测工具，由 Google 在 LLVM/Clang 中首创（AddressSanitizer，2012 年），随后被 GCC 采纳。它在编译期对代码插桩，在程序运行时捕获那些通常无声无息、难以复现的缺陷：越界访问与释放后使用（ASan）、读取未初始化内存（MSan）、未定义行为（UBSan）、数据竞争（TSan）以及内存泄漏（LSan）。你得到的不再是飘忽不定、依赖运气才能复现的 bug，而是在出错点当场给出的符号化报告。各工具链支持程度不同——Clang 支持全部；GCC 除 MSan 外都支持；MSVC 仅支持 ASan。
 
 只需一个命令行开关，即可让现有目标树在 sanitizer 下构建并运行，无需改动 BUILD 文件：
 
@@ -150,6 +152,7 @@ blade test //...                                # 普通
 blade test //... --sanitizer=address            # AddressSanitizer（别名：asan）
 blade test //... --sanitizer=undefined          # UndefinedBehaviorSanitizer（别名：ubsan）
 blade test //... --sanitizer=thread             # ThreadSanitizer（别名：tsan）
+blade test //... --sanitizer=memory             # MemorySanitizer（别名：msan，仅 Clang + Linux）
 blade test //... --sanitizer=address,undefined  # 组合（ASan + UBSan）
 ```
 
