@@ -157,5 +157,34 @@ class GeneratePythonBinaryBootstrapTest(unittest.TestCase):
         self.assertTrue(mode & stat.S_IXOTH, 'other exec bit missing: %o' % mode)
 
 
+class NmDynamicTableSelectionTest(unittest.TestCase):
+    """`_nm_extract_externals` reads an ELF shared lib's dynamic table (#1261).
+
+    A stripped `.so`'s exports live only in the dynamic symbol table, so `nm`
+    needs `-D` there -- but not for a `.a` (no dynamic table) or a macOS
+    `.dylib` (regular table; macOS nm has no `-D`).
+    """
+
+    def _nm_argv_for(self, archive):
+        from unittest import mock
+        calls = []
+
+        def fake_check_output(cmd, **_kw):
+            calls.append(cmd)
+            return b''  # no symbols; we only care about the argv
+
+        with mock.patch('subprocess.check_output', side_effect=fake_check_output):
+            builtin_tools._nm_extract_externals(archive)
+        return calls[0]
+
+    def test_so_uses_dash_d(self):
+        self.assertIn('-D', self._nm_argv_for('lib/libfoo.so'))
+        self.assertIn('-D', self._nm_argv_for('lib/libfoo.so.1.2'))
+
+    def test_archive_and_dylib_do_not(self):
+        self.assertNotIn('-D', self._nm_argv_for('lib/libfoo.a'))
+        self.assertNotIn('-D', self._nm_argv_for('lib/libfoo.dylib'))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -254,11 +254,22 @@ def _nm_extract_externals(archive, dumpbin=None):
     data (e.g. fmt's ``basic_data<void>::left_padding_shifts``) -- and
     must be counted as defined, or downstream cc_libraries that pull
     them in transitively will fail the undefined-symbol check.
+
+    For an ELF shared object (``.so[.N]``) we add ``-D`` to read its dynamic
+    symbol table: that is the set of symbols a linker actually resolves against,
+    and -- unlike the regular table that plain ``nm`` reads -- it survives
+    stripping. A macOS ``.dylib`` keeps its exports in the regular table (plain
+    ``nm`` suffices; macOS ``nm`` has no ``-D``), and a ``.a`` has no dynamic
+    table, so the flag is ELF-shared-only (issue #1261).
     """
     if dumpbin:
         return _dumpbin_extract_externals(dumpbin, archive)
+    base = os.path.basename(archive)
+    nm_flags = ['-P', '-g']
+    if base.endswith('.so') or '.so.' in base:
+        nm_flags = ['-D'] + nm_flags
     try:
-        out = subprocess.check_output(['nm', '-P', '-g', archive], stderr=subprocess.STDOUT)
+        out = subprocess.check_output(['nm'] + nm_flags + [archive], stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         # nm exits non-zero when a static archive has no symbol table (e.g.
         # foreign_cc archives) — treat as empty. Same for missing files.

@@ -1829,6 +1829,12 @@ class PrebuiltCcLibrary(CcTarget):
         if not static_source and not dynamic_source and not import_source:
             return  # error already emitted by _resolve_library_sources
 
+        # Whichever library serves static linking (STATIC_LIB_LABEL below) is the
+        # one check_undefined reads, so remember it to emit its `.syms` in
+        # generate(). Priority matches the label assignment: a real archive,
+        # else the import lib (MSVC), else the shared lib serving static-link.
+        self.attr['link_source'] = static_source or import_source or dynamic_source
+
         if static_source:
             self.attr['static_source'] = static_source
             self._add_target_file(tc.STATIC_LIB_LABEL, static_source)
@@ -1928,14 +1934,18 @@ class PrebuiltCcLibrary(CcTarget):
         if not self._is_depended_on():
             return
         objs, inclusion_check_result = self._cc_objects([])
-        # Emit ``ccsyms`` for the prebuilt static archive when present. Has to
+        # Emit ``ccsyms`` for whatever library serves static linking. Has to
         # happen here in generate() rather than _setup() because _setup() runs
         # at BUILD-loading time and emitting a build rule that early forces
         # __build_code initialization, which breaks the
         # ``assert __build_code is None`` invariant in ``before_generate``.
-        static_source = self.attr.get('static_source')
-        if static_source:
-            self._emit_archive_syms(static_source)
+        # A dynamic-only prebuilt (or an import lib serving static-link) must
+        # also emit its syms, or a consumer's check_undefined misses its symbols
+        # (#1261): the syms tool reads a shared lib's dynamic table (nm -D) and
+        # an import lib via dumpbin.
+        link_source = self.attr.get('link_source')
+        if link_source:
+            self._emit_archive_syms(link_source)
         dynamic_source = self.attr.get('dynamic_source')
         dynamic_target = self.attr.get('dynamic_target')
         if dynamic_source and dynamic_target:
