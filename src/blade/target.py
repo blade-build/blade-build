@@ -718,7 +718,7 @@ class Target:
         return os.path.normpath(os.path.join(self.target_dir, file_name))
 
     def _remove_build_dir_prefix(self, path):
-        """Remove the build dir prefix of path (e.g. build64_release/)
+        """Remove the build dir prefix of path (e.g. build_release/)
         Args:
             path:str, the full path starts from the workspace root
         """

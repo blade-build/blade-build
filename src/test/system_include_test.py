@@ -164,7 +164,7 @@ class DeclareHdrsVirtualPathTest(unittest.TestCase):
         class _FakeTargetWithHdrs:
             def __init__(self, key, src_dir, export_incs=(), system_export_incs=()):
                 self.key = key
-                self.build_dir = 'build64_release'
+                self.build_dir = 'build_release'
                 self._src_dir = src_dir
                 self.attr = {}
                 if export_incs:

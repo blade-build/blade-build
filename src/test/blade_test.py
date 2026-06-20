@@ -30,14 +30,14 @@ class TargetTest(unittest.TestCase):
         self.cur_dir = os.getcwd()
         self.blade_path = '../../blade'
         self.working_dir = '.'
-        self.current_building_path = 'build64_release'
+        self.current_building_path = 'build_release'
         self.current_source_dir = '.'
         self.build_output = []
         self.build_output_file = 'build_output.txt'
         self.build_error = []
         self.build_error_file = 'build_error.txt'
         os.chdir('testdata')
-        self.removeTree('build64_release')
+        self.removeTree('build_release')
 
     def tearDown(self):
         """tear down method."""
@@ -49,7 +49,7 @@ class TargetTest(unittest.TestCase):
 
     def removeTree(self, path):
         try:
-            shutil.rmtree('build64_release', ignore_errors=True)
+            shutil.rmtree('build_release', ignore_errors=True)
         except OSError as e:
             print(e)
 

@@ -282,7 +282,7 @@ exact names off the installed tree:
 
 ```bash
 # managed mode (manage=True): under the build dir, with the blade- overlay triplet
-ls build64_release/.cache/vcpkg/installed/blade-<triplet>/lib/lib*.a
+ls build_release/.cache/vcpkg/installed/blade-<triplet>/lib/lib*.a
 
 # unmanaged mode (manage=False): under the vcpkg root
 ls $VCPKG_ROOT/installed/<triplet>/lib/lib*.a

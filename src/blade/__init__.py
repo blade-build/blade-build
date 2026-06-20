@@ -24,7 +24,7 @@ def current_source_dir():
 
 
 def current_target_dir():
-    """Get corresponding target dir of current source dir, such as build64_release/xxx."""
+    """Get corresponding target dir of current source dir, such as build_release/xxx."""
     import os
     import blade.build_manager
     return os.path.join(blade.build_manager.instance.get_build_dir(), current_source_dir())

@@ -71,8 +71,8 @@ python -V  # Check Python version
 1. **Documentation Review:** Examine ccache documentation - direct mode may experience internal errors
 2. **Configuration Isolation:** Test with modified configuration to isolate cache-related issues
 3. **Preprocessing Analysis:** Header file changes not reflected in preprocessed output
-4. **Path Resolution Discovery:** Identical header files exist in both `build64_release` and source directories
-5. **Include Path Order:** Default ordering (`-Ibuild64_release -I.`) prioritizes `build64_release` directory
+4. **Path Resolution Discovery:** Identical header files exist in both `build_release` and source directories
+5. **Include Path Order:** Default ordering (`-Ibuild_release -I.`) prioritizes `build_release` directory
 6. **File Placement Conflict:** Colleagues placed files in output directory while modifications occurred in project files
 
 **Resolution:**

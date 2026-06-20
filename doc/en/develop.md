@@ -172,7 +172,7 @@ blade build //foo/... --backend-builder-options="-v"
 You can also run ninja directly against the generated build file (handy after `blade build --stop-after generate`, which keeps it instead of deleting it). Blade runs ninja from the workspace root, so use the build-dir-relative path; add `-n` for a dry run that explains without building:
 
 ```bash
-ninja -f build64_release/build.ninja -d explain -n
+ninja -f build_release/build.ninja -d explain -n
 ```
 
 Tip: ninja only strips its `msvc_deps_prefix` (`Note: including file:`) lines from console output as a side effect of `deps = msvc`; all other tool chatter is echoed verbatim. On MSVC, Blade's `cc_wrapper.py` / `link_wrapper.py` (written into the build dir) filter compiler/linker noise that ninja won't.

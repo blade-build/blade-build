@@ -31,7 +31,7 @@
 - **构建目录的符号链接**（`runfiles/<build_dir_basename> ->
   <绝对构建目录>`）。blade 自编的共享库以相对构建路径为身份（没有
   soname / 没有 `@rpath`），所以靠这条符号链接才能让
-  `build64_release/lib/libfoo.so` 在测试 cwd 下解析得到。这是 issue
+  `build_release/lib/libfoo.so` 在测试 cwd 下解析得到。这是 issue
   #1167 的修复，也让 macOS dyld 与 Linux ld.so 行为一致而无需按 OS
   分支。
 - **按 soname 的符号链接**给确实带 soname 的预制库

@@ -26,7 +26,7 @@ class BuildFromSubdirTest(unittest.TestCase):
         # The blade wrapper lives at the repo root; this file is in src/test.
         self.blade = os.path.join(here, '..', '..', 'blade')
         self.root = os.path.join(here, 'testdata')
-        self.build_dir = os.path.join(self.root, 'build64_release')
+        self.build_dir = os.path.join(self.root, 'build_release')
         shutil.rmtree(self.build_dir, ignore_errors=True)
 
     def tearDown(self):

@@ -67,7 +67,7 @@ class TestGoCoverage(unittest.TestCase):
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8')
         self.assertEqual(p.returncode, 0,
                          'blade test --coverage (go) failed:\n%s' % p.stdout)
-        report = os.path.join('build64_release_coverage',
+        report = os.path.join('build_release_coverage',
                               'go_coverage_report', 'index.html')
         self.assertTrue(os.path.exists(report),
                         'no Go coverage report at %s\n%s' % (report, p.stdout))

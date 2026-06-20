@@ -41,7 +41,7 @@ def config_rule(func):
 _CONFIG_TEMPLATE = {
     'global_config': {
         '__help__': 'Global Configuration',
-        'build_path_template': 'build${bits}_${profile}',
+        'build_path_template': 'build_${profile}',
         'duplicated_source_action': 'warning',
         'duplicated_source_action__help__': "Can be 'warning', 'error', 'none'",
         'test_timeout': 0,

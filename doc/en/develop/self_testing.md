@@ -37,7 +37,7 @@ The harness is `src/test/blade_test.py` with `TargetTest` as the base
 class. A test:
 
 - Calls `doSetUp('subdir', target='...')` to chdir into the shared
-  `src/test/testdata/` workspace and reset its `build64_release/`
+  `src/test/testdata/` workspace and reset its `build_release/`
   artifacts.
 - Calls `runBlade('build')` (or `'test'`) which spawns a real
   `../../../blade build <targets> --generate-dynamic --verbose` and

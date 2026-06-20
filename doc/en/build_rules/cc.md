@@ -529,7 +529,7 @@ zlib can be the simplest example of autotools package. Assuming that `zlib-1.2.1
 `thirdparty/zlib/BUILD`:
 
 ```python
-# Assume that after executing this rule, the built package will be installed under `build64_release/thirdparty/openssl`,
+# Assume that after executing this rule, the built package will be installed under `build_release/thirdparty/openssl`,
 # then the header file is under `include/openssl`, and the library file is under `lib`.
 # We have developed general build rules for autotools and cmake, but they are still in the experimental state.
 # Here we still use `gen_rule` to examplify.
@@ -544,7 +544,7 @@ gen_rule(
 
 foreign_cc_library(
     name = 'z',  # The name of the library is `libz.a`, under the `lib` subdirectory
-    install_dir = '', # The installation directory is `build64_release/thirdparty/libz`
+    install_dir = '', # The installation directory is `build_release/thirdparty/libz`
     # lib_dir= 'lib', # The dafault os OK and can be omitted.
     deps = [':zlib_build'],
 )
@@ -578,7 +578,7 @@ However, its header file paths have package name prefix, which is not directly u
 Suppose openssl-1.1.0.tar.gz is in the thirparty/openssl directory, and its BUILD file is thirdparty/openssl/BUILD:
 
 ```python
-# Assuming that after executing this rule, the built package will be installed under `build64_release/thirdparty/openssl`,
+# Assuming that after executing this rule, the built package will be installed under `build_release/thirdparty/openssl`,
 # then the header file is under `include/openssl` and the library file is under `lib`.
 gen_rule(
     name = 'openssl_build',
@@ -592,7 +592,7 @@ gen_rule(
 
 foreign_cc_library(
     name = 'crypto',  # The name of the library is libcrypto.a, under the `lib` subdirectory
-    install_dir = '', # The installation directory is `build64_release/thirdparty/openssl`
+    install_dir = '', # The installation directory is `build_release/thirdparty/openssl`
     deps = [':openssl_build'],
 )
 

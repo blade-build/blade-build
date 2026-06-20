@@ -93,7 +93,7 @@
 获得当前[工作空间](workspace.md)的一些信息，包括：
 
 - `root_dir` 属性：返回当前根工作空间的目录
-- `build_dir` 属性：返回工作空间下的 build 子目录名，比如 `build64_release`
+- `build_dir` 属性：返回工作空间下的 build 子目录名，比如 `build_release`
 
 ### `blade.getenv`
 

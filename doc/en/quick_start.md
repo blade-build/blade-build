@@ -148,7 +148,7 @@ Blade(info): Build success.
 $ blade run :hello-world
 Blade(info): Building...
 Blade(info): Build success.
-Blade(info): Run['~/quick-start/build64_release/hello-world']
+Blade(info): Run['~/quick-start/build_release/hello-world']
 Hello, World!
 ```
 

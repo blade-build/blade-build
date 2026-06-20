@@ -92,7 +92,7 @@ Some auxiliary functions, including:
 Get some information about the current [workspace](workspace.md), including:
 
 - `root_dir` property: Returns the directory of the current root workspace
-- `build_dir` property: Returns the name of the build subdirectory under the workspace, such as `build64_release`
+- `build_dir` property: Returns the name of the build subdirectory under the workspace, such as `build_release`
 
 ### `blade.getenv`
 

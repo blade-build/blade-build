@@ -169,7 +169,7 @@ blade build //foo/... --backend-builder-options="-v"
 也可以直接对生成的构建文件运行 ninja（在 `blade build --stop-after generate` 之后很方便，该选项会保留而非删除它）。blade 从工作区根目录运行 ninja，所以用相对 build 目录的路径；加 `-n` 做只解释不构建的 dry-run：
 
 ```bash
-ninja -f build64_release/build.ninja -d explain -n
+ninja -f build_release/build.ninja -d explain -n
 ```
 
 提示：ninja 只会作为 `deps = msvc` 的副作用从控制台输出中剥掉它的 `msvc_deps_prefix`（`Note: including file:`）行；其余工具输出都原样回显。在 MSVC 上，blade 的 `cc_wrapper.py` / `link_wrapper.py`（生成在 build 目录里）会过滤 ninja 不处理的编译器/链接器噪音。

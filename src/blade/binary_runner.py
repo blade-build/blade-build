@@ -107,7 +107,7 @@ class BinaryRunner:
         """Symlink shared libraries into the runfiles dir so the target finds them.
 
         Tests/binaries run with ``cwd=runfiles_dir``. blade links its own dynamic
-        libraries by their relative build path (e.g. ``build64_release/pkg/libfoo.so``)
+        libraries by their relative build path (e.g. ``build_release/pkg/libfoo.so``)
         with no soname/install_name, so that path is baked into the binary and both
         ld.so (Linux) and dyld (macOS) resolve it relative to ``cwd``. A
         ``runfiles/<build_dir>`` symlink to the real build dir makes those paths

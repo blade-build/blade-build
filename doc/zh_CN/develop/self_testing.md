@@ -30,7 +30,7 @@ blade-build 的测试金字塔有三层——单元（UT）、集成 / E2E、烟
 harness 是 `src/test/blade_test.py`，基类是 `TargetTest`。一个测试：
 
 - 调 `doSetUp('subdir', target='...')` 切到共享 `src/test/testdata/`
-  工作区，并重置其 `build64_release/` 产物。
+  工作区，并重置其 `build_release/` 产物。
 - 调 `runBlade('build')`（或 `'test'`），它启一个真实
   `../../../blade build <targets> --generate-dynamic --verbose`，把
   stdout/stderr 捕获到文件。

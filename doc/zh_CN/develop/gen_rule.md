@@ -85,7 +85,7 @@ dep）才完整实现了"gen_rule 在消费者眼里就跟普通源一样"。
   具，no-op codegen 路径几乎零代价。
 - **`$(location //pkg:target)` 是引用其它生成器的规范方式。** ninja 生
   成期解析路径，与生产 target 在树里的位置无关；在 `cmd` 里硬编码
-  `build64_release/...` 路径很脆弱。
+  `build_release/...` 路径很脆弱。
 - **生成头可见性与 proto 共用机制。** 产出 `.h` 的 gen_rule 通过与
   proto target 相同的路径注册，[hdrs check](hdrs_check.md) 统一处理；
   不必再维护第二条路径。

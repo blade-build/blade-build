@@ -85,7 +85,7 @@ the global rule templates expand:
   always-present `-I.` (workspace root) and `-Ibuild_dir`.
 
 The `-Ibuild_dir` is what lets a source `#include "proto/foo.pb.h"` resolve
-to the generated header at `build64_release/proto/foo.pb.h`. Generated
+to the generated header at `build_release/proto/foo.pb.h`. Generated
 headers from `gen_rule`/`proto_library` deps are also collected into
 `declared_incs` for the inclusion check, but the search-path side is
 covered by that single `-Ibuild_dir`.

@@ -54,8 +54,8 @@
 
 ```text
 . ./app/example/foo.h
-.. build64_release/app/example/proto/foo.pb.h
-... build64_release/common/rpc/rpc_service.pb.h
+.. build_release/app/example/proto/foo.pb.h
+... build_release/common/rpc/rpc_service.pb.h
 . ./common/rpc/rpc_client.h
 ```
 

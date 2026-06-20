@@ -21,7 +21,7 @@ class TestHeaderOnlyIncstk(blade_test.TargetTest):
 
     def testIncstkRecordsDirectInclude(self):
         self.assertTrue(self.runBlade('build'))
-        incstk = 'build64_release/header_only_incstk/hdr_only.objs/hdr_only.h.incstk'
+        incstk = 'build_release/header_only_incstk/hdr_only.objs/hdr_only.h.incstk'
         self.assertTrue(os.path.exists(incstk), '%s was not generated' % incstk)
         self.assertGreater(
             os.path.getsize(incstk), 0,

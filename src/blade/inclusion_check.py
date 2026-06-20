@@ -210,11 +210,11 @@ def _parse_inclusion_stacks(path, build_dir, system_incs=()):
     Given the following inclusions found in the app/example/foo.cc.incstk:
 
         . ./app/example/foo.h
-        .. build64_release/app/example/proto/foo.pb.h
-        ... build64_release/common/rpc/rpc_service.pb.h
-        . build64_release/app/example/proto/bar.pb.h
+        .. build_release/app/example/proto/foo.pb.h
+        ... build_release/common/rpc/rpc_service.pb.h
+        . build_release/app/example/proto/bar.pb.h
         . ./common/rpc/rpc_client.h
-        .. build64_release/common/rpc/rpc_options.pb.h
+        .. build_release/common/rpc/rpc_options.pb.h
 
     Return a list of all directly included header files and a list with each item being a list
     representing where the header is included from in the current translation unit.
@@ -228,16 +228,16 @@ def _parse_inclusion_stacks(path, build_dir, system_incs=()):
 
         [
             'app/example/foo.h',
-            'build64_release/app/example/proto/bar.pb.h',
+            'build_release/app/example/proto/bar.pb.h',
             'common/rpc/rpc_client.h',
         ]
 
     and the inclusion stacks:
 
         [
-            ['app/example/foo.h', 'build64_release/app/example/proto/foo.pb.h'],
-            ['build64_release/app/example/proto/bar.pb.h'],
-            ['common/rpc/rpc_client.h', 'build64_release/common/rpc/rpc_options.pb.h'],
+            ['app/example/foo.h', 'build_release/app/example/proto/foo.pb.h'],
+            ['build_release/app/example/proto/bar.pb.h'],
+            ['common/rpc/rpc_client.h', 'build_release/common/rpc/rpc_options.pb.h'],
         ]
     """
     direct_hdrs = []  # The directly included header files
@@ -350,7 +350,7 @@ def _parse_msvc_hdr_level_line(line, system_incs=()):
 
 
 def _remove_build_dir_prefix(path, build_dir):
-    """Remove the build dir prefix of path (e.g. build64_release/)
+    """Remove the build dir prefix of path (e.g. build_release/)
     Args:
         path:str, the full path starts from the workspace root
     """

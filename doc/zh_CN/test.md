@@ -121,7 +121,7 @@ blade test //foo/... --coverage
 - 测试结束后，Blade 合并它们并调用 `coverage html` 在 `<build_dir>/py_coverage_report/index.html` 生成报告。请为测试解释器 `pip install coverage`；若未安装，Blade 只会告警并跳过报告生成。
 - 由于测试从打包的 zip 中运行，报告里的文件路径会带有 `.zip/` 前缀。
 
-**独立的构建目录。** `--coverage` 构建的插桩方式与普通构建不同，因此 Blade 为它单独使用一个带 `_coverage` 后缀的兄弟目录——例如 `build64_release_coverage` 而非 `build64_release`。普通构建目录名保持不变，普通构建与覆盖率构建可以并存、互不覆盖、互不触发重新编译，现有工作区与脚本也完全不受影响。
+**独立的构建目录。** `--coverage` 构建的插桩方式与普通构建不同，因此 Blade 为它单独使用一个带 `_coverage` 后缀的兄弟目录——例如 `build_release_coverage` 而非 `build_release`。普通构建目录名保持不变，普通构建与覆盖率构建可以并存、互不覆盖、互不触发重新编译，现有工作区与脚本也完全不受影响。
 
 ### Java / Scala 覆盖率（JaCoCo）
 
@@ -161,7 +161,7 @@ sanitizer 是**每次运行的选择**（命令行开关），不是项目配置
 - **编译选项：** 给编译和链接都加上 `-fsanitize=<集合> -fno-omit-frame-pointer -g`（链接以引入 sanitizer 运行时）。UBSan 被设为**致命**（`-fno-sanitize-recover=undefined`），使其发现问题时让测试失败，而非仅打印。对测试，Blade 还会设置合理的 `*_OPTIONS` 默认值（如 `TSAN_OPTIONS=halt_on_error=1`），使检测能可靠地以非零退出——你在环境变量中已设置的值仍然优先。因此 `blade test` 会把检测判为失败。
 - **MSVC：** MSVC 工具链**仅**支持 AddressSanitizer——`--sanitizer=address` 用 `/fsanitize=address` 编译（并加 `/Z7` 以便符号化报告），以非增量方式链接（`/INCREMENTAL:NO /DEBUG`；ASan 运行时由编译器自动引入），并把 ASan 运行时 DLL 加入测试的 `PATH`。在 MSVC 上请求其它 sanitizer 会在启动时明确报错。
 - **MemorySanitizer：** `--sanitizer=memory`（别名 `msan`）检测对未初始化内存的读取。它**仅限 Clang + Linux**——GCC 没有 MSan，运行时在 macOS 上也不可用，在其它环境请求会在启动时明确报错。Blade 会加上 `-fsanitize-memory-track-origins=2`，使报告能回溯到未初始化值的来源。MSan 只有在**所有**参与链接的代码都被插桩时才不会误报：你需要自行构建（或提供）一个经 MSan 插桩的 C++ 标准库，并让依赖项也在 MSan 下构建——否则未插桩的系统库会带来大量误报。
-- **独立的构建目录：** sanitizer 构建与普通构建在 ABI/代码生成上不兼容，因此使用带 sanitizer 标记的独立兄弟目录——`build64_release_asan`。普通的 `build64_release` 不受影响，两者可并存、互不覆盖、互不触发重新编译。
+- **独立的构建目录：** sanitizer 构建与普通构建在 ABI/代码生成上不兼容，因此使用带 sanitizer 标记的独立兄弟目录——`build_release_asan`。普通的 `build_release` 不受影响，两者可并存、互不覆盖、互不触发重新编译。
 - **按目标退出：** 不应被插桩的目标（有意的 UB、性能热点、对未插桩预编译库的包装）可设置 `sanitize = False`。它仍参与链接（仍获得运行时），只是自身的编译不再插桩。在 MSVC 上同样有效——由于 `cl` 没有 `-fno-sanitize`，Blade 改为将该目标的 `/fsanitize` 标志置空。
 
   ```python

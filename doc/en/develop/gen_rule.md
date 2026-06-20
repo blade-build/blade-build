@@ -109,7 +109,7 @@ gen_rule looks like a normal source to its consumers" work end to end.
 - **`$(location //pkg:target)` is the disciplined way to call other
   generators.** It resolves at ninja-generation time so the path is
   correct regardless of where the producing target lives in the tree;
-  hard-coding `build64_release/...` paths in a `cmd` is brittle.
+  hard-coding `build_release/...` paths in a `cmd` is brittle.
 - **Generated-header visibility is the same machinery as proto.** A
   gen_rule that produces `.h` files registers them via the same paths
   proto targets use, so the [hdrs check](hdrs_check.md) treats them

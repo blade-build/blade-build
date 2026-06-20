@@ -45,6 +45,13 @@ class BuildDirNameTest(unittest.TestCase):
             'build_release',
             _build_dir_name('build_${profile}', _Opts(), _TC()))
 
+    def test_shipped_default_template_is_flat(self):
+        # The v3 default dropped the legacy `64`.
+        from blade import config
+        self.assertEqual(
+            'build_${profile}',
+            config._CONFIG_TEMPLATE['global_config']['build_path_template'])
+
     def test_os_arch_template(self):
         # os/arch come from the toolchain, not a flag.
         self.assertEqual(

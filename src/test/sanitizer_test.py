@@ -7,7 +7,7 @@
 
 A cc_test with a heap-buffer-overflow passes normally (the OOB read returns
 garbage) but is caught and fails under `--sanitizer=address`, which also
-builds into the isolated `build64_release_asan` sibling dir.
+builds into the isolated `build_release_asan` sibling dir.
 """
 
 
@@ -20,7 +20,7 @@ import blade_test
 class TestSanitizerAsan(blade_test.TargetTest):
     """AddressSanitizer catches a bug the normal build misses."""
 
-    ASAN_BUILD_DIR = 'build64_release_asan'
+    ASAN_BUILD_DIR = 'build_release_asan'
 
     def setUp(self):
         """setup method."""
@@ -46,7 +46,7 @@ class TestSanitizerAsan(blade_test.TargetTest):
 class TestSanitizerUbsan(blade_test.TargetTest):
     """UBSan (made fatal) catches undefined behavior the normal build wraps."""
 
-    UBSAN_BUILD_DIR = 'build64_release_ubsan'
+    UBSAN_BUILD_DIR = 'build_release_ubsan'
 
     def setUp(self):
         """setup method."""
@@ -71,7 +71,7 @@ class TestSanitizerUbsan(blade_test.TargetTest):
 class TestSanitizerTsan(blade_test.TargetTest):
     """ThreadSanitizer catches a data race the normal build runs through."""
 
-    TSAN_BUILD_DIR = 'build64_release_tsan'
+    TSAN_BUILD_DIR = 'build_release_tsan'
 
     def setUp(self):
         """setup method."""

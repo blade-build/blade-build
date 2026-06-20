@@ -8,6 +8,7 @@ V3 is a comprehensive modernization upgrade with the following goals:
 - **Full type annotations**, all build target modules now have PEP 604 type hints with pyright static checking
 - **Code cleanup**, removing dead code and invalid tests, fixing known bugs
 - **Experimental macOS support**, fixing multiple macOS compilation compatibility issues
+- **Modernized build-dir naming**, the default drops the legacy `64` (`build64_release` → `build_release`) and gains `${os}`/`${arch}` template variables for multi-platform builds
 
 Upgrading to V3 gives you:
 
@@ -65,6 +66,27 @@ The `fbthrift_library_config` call has been removed from `blade.conf`. If your `
 - `cc_library.incs` and `cc_library.export_incs` disallow `..`
 - `glob()` include patterns disallow `..`
 
+### Build directory name
+
+The default build directory was renamed from `build64_<profile>` to `build_<profile>` — e.g. `build64_release` → `build_release`. The legacy `64` was a 32-/64-bit multilib leftover that couldn't distinguish `arm64` from `x86_64`; the platform now comes from the selected toolchain, and `global_config.build_path_template` gained `${os}`/`${arch}` variables for projects that build for several platforms:
+
+```python
+global_config(build_path_template = 'build_${os}_${arch}_${profile}')
+# build_linux_x86_64_release, build_darwin_arm64_release, ...
+```
+
+This is the only change with a one-time cost:
+
+- Your old `build64_*` trees go cold (one rebuild into the new `build_*` dir). Blade prints a one-time notice when it finds a stale `build64_*` beside the new dir; delete the old tree at your convenience.
+- Update `.gitignore`, CI cache keys, and any scripts that reference `build64_*` to `build_*` (or a glob covering both).
+- **To keep the old name**, pin it in `BLADE_ROOT` — it reproduces the v2 layout exactly:
+
+```python
+global_config(build_path_template = 'build${bits}_${profile}')   # -> build64_release
+```
+
+The legacy `-m32`/`-m64` flag is also deprecated (it was the x86 multilib selector); select a toolchain whose arch is 32-/64-bit instead — the toolchain then determines `${arch}`/`${bits}`.
+
 ## V2 → V3 Upgrade Steps
 
 1. **Upgrade Python**: ensure Python 3.10+ is available and set as blade's default interpreter.
@@ -72,6 +94,7 @@ The `fbthrift_library_config` call has been removed from `blade.conf`. If your `
 3. **Check BUILD files**: replace any `fbthrift_library` references with `thrift_library`.
 4. **Check BLADE_ROOT**: remove `fbthrift_library_config` calls (optional but recommended).
 5. **Verify compiler**: macOS users, confirm clang is available; Linux users, confirm GCC or clang.
-6. **Run build**: `blade build ...` to verify the project builds correctly.
+6. **Build dir rename**: the default build dir is now `build_<profile>` (was `build64_<profile>`); update `.gitignore` / CI cache keys / scripts, or pin `build_path_template = 'build${bits}_${profile}'` to keep the old name.
+7. **Run build**: `blade build ...` to verify the project builds correctly.
 
 If you encounter problems, please file an [issue](https://github.com/blade-build/blade-build/issues).

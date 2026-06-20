@@ -482,7 +482,7 @@ foreign_cc_library 和 prebuilt_cc_library 的主要区别是其描述的库是 
 zlib 是最简单的 autotools 包，假设 zlib-1.2.11.tar.gz 在 thirdparty/zlib 目录下，其 BUILD 文件则是 thirdparty/zlib/BUILD：
 
 ```python
-# 假设执行本规则后，会把构建好的包安装到 `build64_release/thirdparty/zlib` 下，那么头文件在 `include` 下，库文件则在 `lib` 下。
+# 假设执行本规则后，会把构建好的包安装到 `build_release/thirdparty/zlib` 下，那么头文件在 `include` 下，库文件则在 `lib` 下。
 # 我们为 autotools 和 cmake 开发了通用的构建规则，不过还处于实验状态，这里还是假设用 gen_rule 来构建。
 gen_rule(
     name = 'zlib_build',
@@ -496,7 +496,7 @@ gen_rule(
 
 foreign_cc_library(
     name = 'z',  # 库的名字为 libz.a，在 `lib` 子目录下
-    install_dir = '', # 包的安装目录是 `build64_release/thirdparty/zlib`
+    install_dir = '', # 包的安装目录是 `build_release/thirdparty/zlib`
     # lib_dir= 'lib', # 默认值满足要求，因此可以不写
     deps = [':zlib_build'],
 )
@@ -528,7 +528,7 @@ use_zlib.cc：
 假设 openssl-1.1.0.tar.gz 在 thirparty/openssl 目录下，其 BUILD 文件则是 thirdparty/openssl/BUILD：
 
 ```python
-# 假设执行本规则后，会把构建好的包安装到 `build64_release/thirdparty/openssl` 下，那么头文件在 `include/openssl` 下，库文件则在 `lib` 下。
+# 假设执行本规则后，会把构建好的包安装到 `build_release/thirdparty/openssl` 下，那么头文件在 `include/openssl` 下，库文件则在 `lib` 下。
 gen_rule(
     name = 'openssl_build',
     srcs = ['openssl-1.1.0.tar.gz'],
@@ -541,13 +541,13 @@ gen_rule(
 
 foreign_cc_library(
     name = 'crypto',  # 库的名字为 libcrypto.a，在 `lib` 子目录下
-    install_dir = '', # 包的安装目录是 `build64_release/thirdparty/openssl`
+    install_dir = '', # 包的安装目录是 `build_release/thirdparty/openssl`
     deps = [':openssl_build'],
 )
 
 foreign_cc_library(
     name = 'ssl',  # 库的名字为 libssl.a，在 `lib` 子目录下
-    install_dir = '', # 包的安装目录是 `build64_release/thirdparty/openssl`
+    install_dir = '', # 包的安装目录是 `build_release/thirdparty/openssl`
     deps = [':openssl_build', ':crypto'],
 )
 ```

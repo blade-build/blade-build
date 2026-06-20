@@ -5,6 +5,9 @@
 
 blade-bin
 .Building.lock
+# Build output dirs: build_<profile> (v3 default), plus the pre-v3 build${bits}_*
+# legacy names kept for projects still on the old default.
+build_*
 build32_*
 build64_*
 

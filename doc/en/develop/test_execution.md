@@ -36,7 +36,7 @@ from scratch every run; into it go:
 - **A symlink of the build dir** (`runfiles/<build_dir_basename> ->
   <abs build dir>`). Blade-built shared libs carry their relative
   build path as their identity (no soname / no `@rpath`), so this
-  symlink is what lets `build64_release/lib/libfoo.so` resolve at
+  symlink is what lets `build_release/lib/libfoo.so` resolve at
   runtime from the test's cwd. This was the fix for issue #1167 and
   also makes macOS dyld and Linux ld.so behave the same way without an
   OS branch.

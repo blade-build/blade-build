@@ -25,7 +25,7 @@ class TestGuardSuppression(blade_test.TargetTest):
 
     def testDirectHdrsIncludeGuardSuppressedInclude(self):
         self.assertTrue(self.runBlade('build'))
-        details_path = 'build64_release/guard_suppression/qux.incchk.details'
+        details_path = 'build_release/guard_suppression/qux.incchk.details'
         self.assertTrue(os.path.exists(details_path),
                         '%s not produced by ccincchk' % details_path)
         with open(details_path, 'rb') as f:

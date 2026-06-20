@@ -8,6 +8,7 @@ V3 是一次全面的现代化升级，主要目标是：
 - **全量类型标注**，所有构建目标模块均已添加 PEP 604 类型注解，通过 pyright 静态检查
 - **代码清理**，移除死代码和失效测试，修复已知 bug
 - **macOS 实验性支持**，修复了多个 macOS 上的编译兼容性问题
+- **构建目录命名现代化**，默认目录去掉遗留的 `64`（`build64_release` → `build_release`），并新增 `${os}`/`${arch}` 模板变量以支持多平台构建
 
 升级到 V3，可以获得这些好处：
 
@@ -66,6 +67,27 @@ V3 中 `load()` 和 `glob()` 等扩展机制保持不变。以下新增了路径
 - `cc_library.incs` 和 `cc_library.export_incs` 不允许包含 `..`
 - `glob()` 的 include 模式中不允许包含 `..`
 
+### 构建目录名
+
+默认构建目录已从 `build64_<profile>` 改名为 `build_<profile>`——例如 `build64_release` → `build_release`。遗留的 `64` 是 32/64 位 multilib 时代的产物，无法区分 `arm64` 与 `x86_64`；平台信息现在来自所选工具链，`global_config.build_path_template` 也新增了 `${os}`/`${arch}` 变量，供需要构建多个平台的项目使用：
+
+```python
+global_config(build_path_template = 'build_${os}_${arch}_${profile}')
+# build_linux_x86_64_release, build_darwin_arm64_release, ...
+```
+
+这是唯一带有一次性成本的变更：
+
+- 旧的 `build64_*` 目录会失效（一次重新构建到新的 `build_*` 目录）。当 blade 在新目录旁发现遗留的 `build64_*` 时会打印一次提示；你可以择机删除旧目录。
+- 将 `.gitignore`、CI 缓存键以及引用了 `build64_*` 的脚本更新为 `build_*`（或同时覆盖两者的通配）。
+- **若要保留旧名称**，在 `BLADE_ROOT` 中固定模板即可——它会逐字复现 v2 的布局：
+
+```python
+global_config(build_path_template = 'build${bits}_${profile}')   # -> build64_release
+```
+
+遗留的 `-m32`/`-m64` 选项同样已废弃（它是 x86 multilib 选择器）；请改为选择 arch 为 32/64 位的工具链——由工具链决定 `${arch}`/`${bits}`。
+
 ## V2 → V3 升级步骤
 
 1. **升级 Python 环境**：确保 Python 3.10+ 可用，并设置为 blade 的默认解释器。
@@ -73,6 +95,7 @@ V3 中 `load()` 和 `glob()` 等扩展机制保持不变。以下新增了路径
 3. **检查 BUILD 文件**：如有 `fbthrift_library` 引用，改为 `thrift_library`。
 4. **检查 BLADE_ROOT**：移除 `fbthrift_library_config` 调用（非必须，建议清理）。
 5. **验证编译器**：macOS 用户确认 clang 可用；Linux 用户确认 GCC 或 clang 可用。
-6. **运行构建**：`blade build ...` 验证项目可正常编译。
+6. **构建目录改名**：默认构建目录现在是 `build_<profile>`（原为 `build64_<profile>`）；请更新 `.gitignore` / CI 缓存键 / 脚本，或固定 `build_path_template = 'build${bits}_${profile}'` 以保留旧名称。
+7. **运行构建**：`blade build ...` 验证项目可正常编译。
 
 如有问题，请提交 [issue](https://github.com/blade-build/blade-build/issues)。

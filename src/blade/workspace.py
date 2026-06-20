@@ -23,9 +23,8 @@ def _build_variant_suffix(options):
     """Suffix appended to the build dir name for variant builds.
 
     Each active variant contributes a `_<tag>` segment; with no variant the
-    result is the empty string, so the normal build dir keeps its exact
-    historical name (e.g. ``build64_release``). New variants only need to
-    append their tag here.
+    result is the empty string, so the normal build dir keeps its plain name
+    (e.g. ``build_release``). New variants only need to append their tag here.
     """
     variants = []
     if getattr(options, 'coverage', False):
@@ -157,6 +156,17 @@ class Workspace:
 
         if not os.path.exists(build_dir):
             os.mkdir(build_dir)
+            # v3 renamed the default build dir build64_<profile> -> build_<profile>
+            # (the legacy `64` couldn't tell arm64 from x86_64). Nudge once, when
+            # the new dir is first created beside a stale legacy one, unless the
+            # project pinned the old name back.
+            legacy = 'build64_' + self.__options.profile
+            if not build_dir.startswith('build64') and os.path.isdir(legacy):
+                console.notice(
+                    'Blade now defaults to "%s"; the pre-v3 "%s" is stale -- '
+                    'delete it, or set global_config(build_path_template='
+                    '"build${bits}_${profile}") to keep the old name.'
+                    % (build_dir, legacy))
         # Drop a `.bladeskip` sentinel so the BUILD-file walker skips this
         # directory without needing to know its name (see issue #518).
         # Touched on every setup so projects that pre-create the build dir
