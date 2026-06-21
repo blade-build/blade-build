@@ -129,11 +129,11 @@ Different subcommands support different options. Run `blade <subcommand> --help`
 - `--generate-go` - Generate Go files for proto_library
 - `--gprof` - Enable GNU gprof profiling support. **Linux only** (gcc and clang): `-pg`/gprof instrumentation only works on Linux. On macOS the flag is silently ignored (Darwin clang accepts `-pg` but treats it as a no-op, and there is no gprof tool / `gmon.out`); on Windows MSVC does not understand it. Blade skips the flag and warns once on these platforms — use `--coverage`, or a native sampling profiler (Instruments/`sample` on macOS, `perf` on Linux).
 - `--coverage` - Generate code coverage reports (supports GNU gcov and Java jacoco). For C/C++ this is the gcc/clang `--coverage` instrumentation and works on **gcc and clang on every platform, including clang-cl on Windows**. Native MSVC `cl.exe` has no gcov-style instrumentation, so blade skips the flag and warns once there — on Windows use **clang-cl** (LLVM source coverage) or **OpenCppCoverage** (PDB-based, no rebuild).
-- `--profile-generate[=path]` / `--profile-use[=path]` - [Profile-Guided Optimization](#profile-guided-optimization-pgo) (gcc/clang). Phase 1 instruments, phase 2 rebuilds with the collected profile. Native MSVC is not yet wired (`/LTCG:PG*` is a separate mechanism) and is skipped with a warning — use clang-cl.
+- `--profile-generate[=path]` / `--profile-use[=path]` - [Profile-Guided Optimization](#profile-guided-optimization-pgo) (gcc, clang, and native MSVC). Phase 1 instruments, phase 2 rebuilds with the collected profile.
 
 ## Profile-Guided Optimization (PGO)
 
-PGO is a **global build mode** (not a per-target attribute): you instrument the whole build, run a representative workload, then rebuild using the collected profile. It is wired for **gcc and clang**; both phases use a dedicated `build_*_pgo` directory so they never clobber your normal `build_*` objects.
+PGO is a **global build mode** (not a per-target attribute): you instrument the whole build, run a representative workload, then rebuild using the collected profile. It is wired for **gcc, clang, and native MSVC**; both phases use a dedicated `build_*_pgo` directory so they never clobber your normal `build_*` objects.
 
 ```bash
 # Phase 1 — instrument, then run a representative workload to collect data
@@ -148,7 +148,7 @@ Toolchain differences blade handles for you:
 
 - **gcc** reads the `.gcda` files directly and adds `-fprofile-correction` (tolerates the count skew of multithreaded programs). Both phases **must** share the build dir — gcc keys its `.gcda` lookup by object path — which the dedicated `build_*_pgo` dir guarantees.
 - **clang** needs a *merged* `.profdata`: its instrumented run emits `.profraw`, and `-fprofile-use=` must point at a merged file, not a directory. Point `--profile-use` at the directory of `.profraw` (or an already-merged `.profdata`) and **blade runs `llvm-profdata merge` for you**. clang's `-fprofile-correction` does not exist, so it is not emitted.
-- **MSVC** uses a different mechanism (`/GL` + `/LTCG:PGINSTRUMENT`/`PGOPTIMIZE`) that is not yet wired; `--profile-*` is skipped with a one-time warning. Use **clang-cl** for PGO on Windows.
+- **MSVC** uses whole-program (LTCG) instrumentation: blade compiles with `/GL`, links the instrument phase with `/LTCG /GENPROFILE` and the optimize phase with `/LTCG /USEPROFILE` (and archives with `lib /LTCG`). The instrumented run writes `<binary>!N.pgc` next to the `<binary>.pgd`, and `/USEPROFILE` **auto-merges** them on the optimize link — no `pgomgr` step. The `.pgd` is keyed to the output name, so the shared `build_*_pgo` dir is what lets the optimize phase find the instrument phase's profile. The `path` argument is gcc/clang-specific and is not needed on MSVC (the profile lives next to the binary).
 
 Blade owns the build flags and the clang merge step; producing a *representative* workload (and deciding when a profile is stale) is your job. Profiles are **not** portable across compilers — instrument, run, and optimize all on one toolchain.
 

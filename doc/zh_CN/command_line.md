@@ -129,11 +129,11 @@ $ blade dump --all-tags ...
 - `--generate-go` —— 为 `proto_library` 生成 Go 文件
 - `--gprof` —— 启用 GNU gprof 性能分析。**仅限 Linux**（gcc 与 clang）：`-pg`/gprof 插桩只在 Linux 上有效。macOS 上该标志被静默忽略（Darwin clang 接受 `-pg` 但当作空操作，且没有 gprof 工具 / `gmon.out`），Windows 上 MSVC 根本不认。在这些平台 blade 会跳过该标志并仅警告一次——请改用 `--coverage`，或原生采样分析器（macOS 用 Instruments/`sample`，Linux 用 `perf`）。
 - `--coverage` —— 生成代码覆盖率报告（支持 GNU gcov 与 Java jacoco）。C/C++ 走的是 gcc/clang 的 `--coverage` 插桩，**在所有平台的 gcc 与 clang 上均可用，含 Windows 上的 clang-cl**。原生 MSVC `cl.exe` 没有 gcov 风格插桩，因此 blade 在该工具链下跳过该标志并仅警告一次——Windows 上请使用 **clang-cl**（LLVM 源码级覆盖率）或 **OpenCppCoverage**（基于 PDB，无需重新编译）。
-- `--profile-generate[=path]` / `--profile-use[=path]` —— [按性能剖析引导优化（PGO）](#按性能剖析引导优化pgo)（gcc/clang）。第一阶段插桩，第二阶段用采集到的 profile 重新构建。原生 MSVC 尚未接入（`/LTCG:PG*` 是另一套机制），会被跳过并警告——请用 clang-cl。
+- `--profile-generate[=path]` / `--profile-use[=path]` —— [按性能剖析引导优化（PGO）](#按性能剖析引导优化pgo)（gcc、clang 与原生 MSVC）。第一阶段插桩，第二阶段用采集到的 profile 重新构建。
 
 ## 按性能剖析引导优化（PGO）
 
-PGO 是一个**全局构建模式**（不是 per-target 属性）：先对整个构建插桩，跑一遍代表性负载，再用采集到的 profile 重新构建。目前接入了 **gcc 与 clang**；两个阶段都使用独立的 `build_*_pgo` 目录，绝不污染普通的 `build_*` 对象。
+PGO 是一个**全局构建模式**（不是 per-target 属性）：先对整个构建插桩，跑一遍代表性负载，再用采集到的 profile 重新构建。目前接入了 **gcc、clang 与原生 MSVC**；两个阶段都使用独立的 `build_*_pgo` 目录，绝不污染普通的 `build_*` 对象。
 
 ```bash
 # 第一阶段——插桩，然后跑代表性负载采集数据
@@ -148,7 +148,7 @@ blade 替你处理的工具链差异：
 
 - **gcc** 直接读 `.gcda` 文件，并加 `-fprofile-correction`（容忍多线程程序的计数偏差）。两阶段**必须**共用构建目录——gcc 按对象文件路径定位 `.gcda`——独立的 `build_*_pgo` 目录正好保证了这一点。
 - **clang** 需要一个**已合并的** `.profdata`：插桩运行产出 `.profraw`，而 `-fprofile-use=` 必须指向合并后的文件而非目录。把 `--profile-use` 指向 `.profraw` 所在目录（或已合并的 `.profdata`），**blade 会替你执行 `llvm-profdata merge`**。clang 没有 `-fprofile-correction`，因此不会发出该标志。
-- **MSVC** 用的是另一套机制（`/GL` + `/LTCG:PGINSTRUMENT`/`PGOPTIMIZE`），尚未接入；`--profile-*` 会被跳过并仅警告一次。Windows 上的 PGO 请用 **clang-cl**。
+- **MSVC** 用的是全程序（LTCG）插桩：blade 用 `/GL` 编译，插桩阶段链接 `/LTCG /GENPROFILE`、优化阶段链接 `/LTCG /USEPROFILE`（静态库用 `lib /LTCG` 归档）。插桩后的程序运行时把 `<binary>!N.pgc` 写在 `<binary>.pgd` 旁边，优化链接时 `/USEPROFILE` 会**自动合并**它们——无需 `pgomgr`。`.pgd` 以输出名为键，因此共用 `build_*_pgo` 目录正是优化阶段能找到插桩阶段 profile 的关键。`path` 参数是 gcc/clang 专用的，MSVC 上无需指定（profile 就在二进制旁边）。
 
 blade 负责构建标志和 clang 的合并步骤；而产出**代表性**负载（以及判断 profile 是否过期）是你的职责。profile **不能**跨编译器复用——插桩、运行、优化都要在同一套工具链上完成。
 

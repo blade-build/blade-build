@@ -21,7 +21,22 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 from blade import cc_rule_support  # noqa: E402
 
 
-def _compile_rules(profile='release', debug_info='mid', cppflags=None, cxxflags=None):
+def _set_pgo(options, profile_generate, profile_use):
+    """Set/clear the dashed PGO option attrs so the probes read them like
+    argparse (absent => not given). Default (both None) keeps PGO off."""
+    for attr, val in (('profile-generate', profile_generate),
+                      ('profile-use', profile_use)):
+        if val is None:
+            try:
+                delattr(options, attr)
+            except AttributeError:
+                pass
+        else:
+            setattr(options, attr, val)
+
+
+def _compile_rules(profile='release', debug_info='mid', cppflags=None, cxxflags=None,
+                   profile_generate=None, profile_use=None):
     gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
     gen.build_toolchain = mock.Mock()
     gen.build_toolchain.filter_cc_flags = lambda flags, *a: list(flags)
@@ -30,6 +45,7 @@ def _compile_rules(profile='release', debug_info='mid', cppflags=None, cxxflags=
     gen.options = mock.Mock()
     gen.options.profile = profile
     gen.options.sanitizers = []
+    _set_pgo(gen.options, profile_generate, profile_use)
     gen.build_dir = 'build64_%s' % profile
     gen._msvc_tee_wrapper_py = mock.Mock(return_value='cc_wrapper.py')
     gen.generate_rule = mock.Mock()
@@ -66,7 +82,8 @@ def _cc_vars_sanitize(sanitizers):
     return next(s for s in captured if s.startswith('sanitize ='))
 
 
-def _link_flags(profile='release', debug_info='mid', sanitizers=None):
+def _link_flags(profile='release', debug_info='mid', sanitizers=None,
+                profile_generate=None, profile_use=None):
     gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
     gen.build_accelerator = mock.Mock()
     gen.build_accelerator.get_cc_commands.return_value = ('cl', 'cl', 'link.exe')
@@ -82,6 +99,7 @@ def _link_flags(profile='release', debug_info='mid', sanitizers=None):
     gen.options = mock.Mock()
     gen.options.profile = profile
     gen.options.sanitizers = sanitizers or []
+    _set_pgo(gen.options, profile_generate, profile_use)
     section = {'msvc_config': {'linkflags': []}, 'cc_config': {'linkflags': []},
                'global_config': {'debug_info_level': debug_info}}
     with mock.patch('blade.cc_rule_support.config') as cfg:
@@ -146,6 +164,38 @@ class MsvcDefaultFlagsTest(unittest.TestCase):
         # Release already adds /INCREMENTAL:NO; ASan must not add a second.
         line = _link_flags(profile='release', sanitizers=['address'])
         self.assertEqual(1, line.split().count('/INCREMENTAL:NO'))
+
+    # --- PGO wiring, issue #1366 Phase 2 ---
+
+    def test_compile_gl_off_without_pgo(self):
+        self.assertNotIn('/GL', _compile_rules()['cc'])
+
+    def test_compile_gl_under_pgo(self):
+        for mode in (dict(profile_generate=''), dict(profile_use='/p')):
+            rules = _compile_rules(**mode)
+            for name in ('cc', 'cxx'):
+                self.assertIn('/GL', rules[name])
+
+    def test_link_pgo_generate(self):
+        line = _link_flags(profile_generate='')
+        self.assertIn('/LTCG', line)
+        self.assertIn('/GENPROFILE', line)
+        self.assertNotIn('/USEPROFILE', line)
+
+    def test_link_pgo_use(self):
+        line = _link_flags(profile_use='/p')
+        self.assertIn('/LTCG', line)
+        self.assertIn('/USEPROFILE', line)
+        self.assertNotIn('/GENPROFILE', line)
+
+    def test_link_pgo_debug_forces_incremental_off(self):
+        # LTCG is incompatible with incremental linking, so even a debug PGO
+        # build (normally incremental) gets /INCREMENTAL:NO, exactly once.
+        line = _link_flags(profile='debug', debug_info='no', profile_generate='')
+        self.assertEqual(1, line.split().count('/INCREMENTAL:NO'))
+
+    def test_link_no_pgo_no_ltcg(self):
+        self.assertNotIn('/LTCG', _link_flags())
 
 
 if __name__ == '__main__':

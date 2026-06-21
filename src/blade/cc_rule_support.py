@@ -272,21 +272,9 @@ def _warn_coverage_unsupported():
 #   * clang REJECTS `-fprofile-correction`; its instrumented run emits
 #     `.profraw`, which must be `llvm-profdata merge`'d into a `.profdata` that
 #     `-fprofile-use=` then points at (a file, not a directory).
-# Native MSVC is a different flag family (/LTCG:PG*) and is gated here until the
-# Windows backend lands.
-
-_pgo_msvc_warned = False
-
-
-def _warn_pgo_msvc_unsupported(phase):
-    global _pgo_msvc_warned
-    if _pgo_msvc_warned:
-        return
-    _pgo_msvc_warned = True
-    console.warning(
-        'PGO (%s) is not yet wired for native MSVC -- cl.exe uses /LTCG:PG*, a '
-        'different mechanism; the flag is ignored. Use clang-cl, or build PGO '
-        'on a gcc/clang toolchain.' % phase)
+# Native MSVC is a different flag family (/GL + /LTCG:PG*) and is implemented in
+# the Windows compile/lib/link rules below (see the `_pgo_msvc_*` helpers); the
+# gcc/clang `-fprofile-*` path here never runs for MSVC.
 
 
 def _pgo_option(options, name):
@@ -364,6 +352,46 @@ def _resolve_clang_profdata(toolchain, path):
     console.info('PGO: merged %d .profraw into %s' % (len(raws), profdata))
     _clang_profdata_cache[path] = profdata
     return profdata
+
+
+# --- MSVC PGO (#1366 Phase 2) ------------------------------------------------
+#
+# MSVC PGO is a different flag family from gcc/clang's `-fprofile-*`: it is
+# whole-program (LTCG) instrumentation. Verified end to end on VS:
+#   instrument: compile `/GL`, link `/LTCG /GENPROFILE` -> binary + `<name>.pgd`
+#   run:        the binary writes `<name>!N.pgc` next to the `.pgd`
+#   optimize:   link `/LTCG /USEPROFILE` -- auto-merges the `.pgc` into the
+#               `.pgd` and rebuilds optimized (no separate `pgomgr` step)
+# The `.pgd` is keyed to the output name, so the instrument and optimize builds
+# share one `build_*_pgo` dir (the same dir gcc needs for `.gcda` lookup).
+
+def _pgo_msvc_active(options):
+    return (_pgo_option(options, 'profile-generate') is not None
+            or _pgo_option(options, 'profile-use') is not None)
+
+
+def _pgo_msvc_compile_flags(options):
+    """MSVC compile flags for an active PGO mode: `/GL` (whole-program info LTCG
+    PGO needs; same flag for the instrument and the optimize build) plus the
+    PROFILE_GUIDED_OPTIMIZATION define, for parity with the gcc/clang path."""
+    if _pgo_msvc_active(options):
+        return ['/GL', '/DPROFILE_GUIDED_OPTIMIZATION']
+    return []
+
+
+def _pgo_msvc_lib_flags(options):
+    """`lib.exe` needs `/LTCG` to archive the `/GL` objects a PGO build emits."""
+    return ['/LTCG'] if _pgo_msvc_active(options) else []
+
+
+def _pgo_msvc_link_flags(options):
+    """MSVC PGO link flags: `/LTCG /GENPROFILE` to instrument, `/LTCG /USEPROFILE`
+    to optimize (the latter auto-merges the run's `.pgc` into the `.pgd`)."""
+    if _pgo_option(options, 'profile-generate') is not None:
+        return ['/LTCG', '/GENPROFILE']
+    if _pgo_option(options, 'profile-use') is not None:
+        return ['/LTCG', '/USEPROFILE']
+    return []
 
 
 class CcRuleGenerator:
@@ -504,25 +532,21 @@ class CcRuleGenerator:
             # Only the link flags (which pull in the runtime) stay global.
             linkflags += sanitizer.link_flags(sanitizers)
 
-        # PGO -- see the module-level "PGO" note for the gcc/clang/MSVC split.
+        # PGO -- see the module-level "PGO" note. This is the gcc/clang path
+        # (MSVC uses /GL + /LTCG:PG* in the Windows rules and never gets here).
         pgo_gen = _pgo_option(self.options, 'profile-generate')
         if pgo_gen is not None:
-            if self.build_toolchain.cc_is('msvc'):
-                _warn_pgo_msvc_unsupported('profile-generate')
-            else:
-                # gcc and clang share this spelling. The runtime (libgcov /
-                # clang's profile runtime) is pulled in at link, so the flag
-                # rides both cppflags and linkflags.
-                flag = '-fprofile-generate' + ('=' + pgo_gen if pgo_gen else '')
-                cppflags.append(flag)
-                linkflags.append(flag)
-                cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+            # gcc and clang share this spelling. The runtime (libgcov /
+            # clang's profile runtime) is pulled in at link, so the flag
+            # rides both cppflags and linkflags.
+            flag = '-fprofile-generate' + ('=' + pgo_gen if pgo_gen else '')
+            cppflags.append(flag)
+            linkflags.append(flag)
+            cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
 
         pgo_use = _pgo_option(self.options, 'profile-use')
         if pgo_use is not None:
-            if self.build_toolchain.cc_is('msvc'):
-                _warn_pgo_msvc_unsupported('profile-use')
-            elif self.build_toolchain.cc_is('clang'):
+            if self.build_toolchain.cc_is('clang'):
                 # clang rejects -fprofile-correction and needs a *merged*
                 # .profdata file (blade merges the .profraw for you).
                 profdata = _resolve_clang_profdata(self.build_toolchain, pgo_use)
@@ -683,6 +707,10 @@ class CcRuleGenerator:
         global_config = config.get_section('global_config')
         cppflags = cppflags + windows_config['debug_info_levels'][global_config['debug_info_level']]
 
+        # PGO (#1366): `/GL` on every compile when a profile mode is active, so
+        # the link can do LTCG instrumentation / optimization.
+        cppflags = cppflags + _pgo_msvc_compile_flags(self.options)
+
         # The Python stderr-tee wrapper captures /showIncludes output and tees
         # it to both stderr (for Ninja's deps=msvc) and the inclusion stack
         # file (for inclusion checking).
@@ -749,8 +777,11 @@ class CcRuleGenerator:
                             'does not support thin archives)')
         ar = self.build_accelerator.get_ar_command()
         brepro = ' /Brepro' if deterministic else ''
+        # PGO (#1366): lib.exe needs /LTCG to archive the /GL objects a PGO
+        # build emits.
+        pgo = ''.join(' ' + f for f in _pgo_msvc_lib_flags(self.options))
         self.generate_rule(name='ar',
-                           command=f'{ar} /nologo{brepro} /out:${{out}} ${{in}}',
+                           command=f'{ar} /nologo{brepro}{pgo} /out:${{out}} ${{in}}',
                            description='LIB ${out}')
 
     def _generate_windows_link_rules(self):
@@ -778,6 +809,16 @@ class CcRuleGenerator:
         sanitizers = getattr(self.options, 'sanitizers', None)
         if sanitizers:
             for flag in sanitizer.msvc_link_flags(sanitizers):
+                if flag not in linkflags:
+                    linkflags = linkflags + [flag]
+
+        # PGO (#1366): LTCG instrument (/GENPROFILE) or optimize (/USEPROFILE).
+        # LTCG is incompatible with incremental linking, so force it off (a
+        # release build already did). The .pgd is auto-named from /out, so each
+        # binary gets its own profile in the shared build_*_pgo dir.
+        pgo_link = _pgo_msvc_link_flags(self.options)
+        if pgo_link:
+            for flag in pgo_link + ['/INCREMENTAL:NO']:
                 if flag not in linkflags:
                     linkflags = linkflags + [flag]
 

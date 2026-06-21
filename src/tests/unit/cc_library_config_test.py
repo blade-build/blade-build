@@ -108,6 +108,9 @@ class CcArchiveRulesTest(unittest.TestCase):
         from blade import cc_rule_support
         gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
         gen._add_line = mock.Mock()
+        # spec=[] -> hasattr is False for every name, so the PGO option probes
+        # (profile-generate / profile-use) read as "not given" (PGO off).
+        gen.options = mock.Mock(spec=[])
         gen.build_toolchain = mock.Mock()
         gen.build_toolchain.target_os = target_os
         gen.build_accelerator = mock.Mock()

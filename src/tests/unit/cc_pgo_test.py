@@ -12,8 +12,9 @@ PGO is a global build mode (#1366). The generate phase shares the
   * gcc: `-fprofile-use` reads `.gcda` directly + `-fprofile-correction`.
   * clang: rejects `-fprofile-correction`; needs a *merged* `.profdata`
     (blade merges `.profraw` via llvm-profdata) + clang mismatch suppressions.
-  * native MSVC: a different flag family (/LTCG:PG*) -- gated with a warning
-    until the Windows backend lands.
+  * native MSVC: a different flag family -- `/GL` on compile, `/LTCG /GENPROFILE`
+    (instrument) or `/LTCG /USEPROFILE` (optimize, auto-merges the `.pgc`) on
+    link, `/LTCG` on lib. Wired in the Windows rules, not the gcc/clang path.
 """
 
 import os
@@ -97,16 +98,6 @@ class PgoGenerateTest(unittest.TestCase):
         self.assertIn('-fprofile-generate=/tmp/p', cppflags)
         self.assertIn('-fprofile-generate=/tmp/p', linkflags)
 
-    def test_msvc_generate_warns_and_skips(self):
-        cc_rule_support._pgo_msvc_warned = False
-        gen, fake = _make_generator(cc_vendor='msvc', target_os='windows',
-                                    profile_generate='')
-        with mock.patch.object(cc_rule_support.console, 'warning') as warn:
-            cppflags, linkflags = _flags(gen, fake)
-        self.assertFalse([f for f in cppflags if 'profile-generate' in f])
-        warn.assert_called_once()
-
-
 class PgoUseTest(unittest.TestCase):
     """--profile-use: gcc keeps -fprofile-correction; clang must not."""
 
@@ -152,15 +143,43 @@ class PgoUseTest(unittest.TestCase):
         self.assertIn('merge', args)
         self.assertIn('/tmp/pgodir/a.profraw', args)
 
-    def test_msvc_use_warns_and_skips(self):
-        cc_rule_support._pgo_msvc_warned = False
-        gen, fake = _make_generator(cc_vendor='msvc', target_os='windows',
-                                    profile_use='/tmp/prof')
-        with mock.patch.object(cc_rule_support.console, 'warning') as warn:
-            cppflags, _ = _flags(gen, fake)
-        self.assertFalse([f for f in cppflags if 'profile-use' in f])
-        self.assertNotIn('-fprofile-correction', cppflags)
-        warn.assert_called_once()
+class PgoMsvcTest(unittest.TestCase):
+    """Native MSVC PGO: /GL on compile, /LTCG + GEN/USEPROFILE on link, /LTCG on
+    lib (#1366 Phase 2). The gcc/clang `-fprofile-*` path never runs for MSVC."""
+
+    def _opts(self, generate=None, use=None):
+        opts = mock.Mock()
+        for attr, val in (('profile-generate', generate), ('profile-use', use)):
+            if val is None:
+                try:
+                    delattr(opts, attr)
+                except AttributeError:
+                    pass
+            else:
+                setattr(opts, attr, val)
+        return opts
+
+    def test_compile_flags(self):
+        # /GL (+ the parity define) under either mode; nothing when off.
+        for mode in (dict(generate=''), dict(use='/tmp/p'), dict(generate='/tmp/p')):
+            flags = cc_rule_support._pgo_msvc_compile_flags(self._opts(**mode))
+            self.assertIn('/GL', flags)
+            self.assertIn('/DPROFILE_GUIDED_OPTIMIZATION', flags)
+        self.assertEqual([], cc_rule_support._pgo_msvc_compile_flags(self._opts()))
+
+    def test_lib_flags(self):
+        self.assertEqual(['/LTCG'],
+                         cc_rule_support._pgo_msvc_lib_flags(self._opts(generate='')))
+        self.assertEqual(['/LTCG'],
+                         cc_rule_support._pgo_msvc_lib_flags(self._opts(use='/p')))
+        self.assertEqual([], cc_rule_support._pgo_msvc_lib_flags(self._opts()))
+
+    def test_link_flags_dispatch(self):
+        self.assertEqual(['/LTCG', '/GENPROFILE'],
+                         cc_rule_support._pgo_msvc_link_flags(self._opts(generate='')))
+        self.assertEqual(['/LTCG', '/USEPROFILE'],
+                         cc_rule_support._pgo_msvc_link_flags(self._opts(use='/p')))
+        self.assertEqual([], cc_rule_support._pgo_msvc_link_flags(self._opts()))
 
 
 class PgoBuildDirTest(unittest.TestCase):
