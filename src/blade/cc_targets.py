@@ -17,7 +17,7 @@ import os
 import pickle
 import sys
 from string import Template
-from typing import Any, TYPE_CHECKING
+from typing import Any, Protocol
 
 from blade import build_manager
 from blade import build_rules
@@ -38,8 +38,14 @@ from blade.util import (
     var_to_list_or_none)
 from blade.version import LooseVersion as version_parse
 
-if TYPE_CHECKING:
-    from blade.toolchain import ToolChain
+
+class _LibSourceToolChain(Protocol):
+    """The slice of a ToolChain that ``_resolve_library_sources`` needs -- so the
+    real toolchain and the lightweight test stubs both satisfy it structurally."""
+    static_lib_suffix: str
+    dynamic_lib_suffix: str
+
+    def cc_is(self, vendor: str) -> bool: ...
 
 
 # See https://gcc.gnu.org/onlinedocs/gcc/Overall-Options.html#Overall-Options
@@ -1745,7 +1751,7 @@ class PrebuiltCcLibrary(CcTarget):
         self._setup()
 
     def _resolve_library_sources(
-            self, tc: 'ToolChain') -> tuple[str | None, str | None, str | None]:
+            self, tc: _LibSourceToolChain) -> tuple[str | None, str | None, str | None]:
         """Resolve the static/dynamic/import library source paths, in either mode.
 
         - **Explicit** (``static_library`` / ``dynamic_library`` /
