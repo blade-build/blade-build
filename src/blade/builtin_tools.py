@@ -202,6 +202,12 @@ _CHECK_UNDEFINED_RESIDUAL_BASELINE = (
     r'_*__gcov_\w*',
     r'_*__(?:a|ub|t|m|l)san_\w*',
     r'_*__sanitizer_\w*',
+    # ThreadSanitizer dynamic-annotation interface: the ANNOTATE_* macros (e.g.
+    # ANNOTATE_BENIGN_RACE_SIZED) expand to `Annotate*` / `RunningOnValgrind`
+    # calls under -fsanitize=thread, provided by the TSan runtime. These do NOT
+    # use the __tsan_ prefix.
+    r'_*Annotate\w*',
+    r'_*RunningOnValgrind',
 )
 
 

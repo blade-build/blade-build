@@ -135,7 +135,10 @@ class ResidualBaselineTest(unittest.TestCase):
                   '__gcov_init', '__gcov_merge_add',
                   '___ubsan_handle_type_mismatch_v1_abort', '__asan_init',
                   '___asan_report_load8', '__tsan_func_entry', '__msan_init',
-                  '__lsan_ignore_object', '__sanitizer_cov_trace_pc'):
+                  '__lsan_ignore_object', '__sanitizer_cov_trace_pc',
+                  # TSan dynamic-annotation interface (no __tsan_ prefix).
+                  '_AnnotateBenignRaceSized', 'AnnotateHappensBefore',
+                  '_RunningOnValgrind'):
             self.assertTrue(self._allowed(n), n)
 
     def test_user_namespace_symbols_not_matched(self):
