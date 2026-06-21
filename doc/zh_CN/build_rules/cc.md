@@ -631,6 +631,18 @@ cc_binary(
 
   详情请参考 man ld(1) 中查找 --export-dynamic 的说明。
 
+- `strip`: bool = False
+
+  链接后对可执行文件执行 strip 以减小体积（去除符号/调试信息）。Blade 会先链接到 `<name>.unstripped` 旁文件，再 strip 成最终输出。仅在 GNU 工具链（gcc）上支持，其它工具链会跳过并给出提示。与 DebugFission 兼容——`.dwp` 是从目标文件打包的，因此可以发布 strip 后的可执行文件，同时保留单独的 `.dwp` 用于调试。
+
+- `strip_options`: string[] = []
+
+  `strip = True` 时传给 `strip` 的选项，默认为 `['--strip-unneeded']`。最小化体积可用 `['--strip-all']`（或 `['-s']`），只去调试信息用 `['--strip-debug']`，保留特定符号用 `['-K', '<symbol>']`。详见 `man strip(1)`。
+
+- `extra_linkflags`: string[] = []
+
+  传给链接器的额外选项（见上文通用属性），例如 `extra_linkflags=['-Wl,-z,now']`。
+
 ### 使用 dwp 文件
 
 当开启 DebugFission（通过 [`cc_config.fission`](../config.md#cc_config) 配置）并开启 dwp 打包
@@ -714,7 +726,8 @@ cc_plugin(
 - `prefix`: str | None, 生成的动态库的文件名前缀。默认为 `None`，表示沿用当前工具链的平台默认前缀（Linux/macOS 为 `lib`，Windows 为空）。
 - `suffix`: str | None, 生成的动态库的文件名后缀。默认为 `None`，表示沿用当前工具链的平台默认后缀（Linux 为 `.so`，macOS 为 `.dylib`，Windows 为 `.dll`）。
 - `allow_undefined`: bool, 链接时是否允许未定义的符号。因为很多插件库运行时依赖宿主进程提供的符号名，链接阶段并不存在这些符号的定义。
-- `strip`: bool, 是否去除调试符号信息，开启后可以减少生成的库的大小，但是无法进行符号化调试。
+- `strip`: bool, 是否去除调试符号信息，开启后可以减少生成的库的大小，但是无法进行符号化调试。仅在 GNU 工具链（gcc）上支持，其它工具链会跳过并给出提示。
+- `strip_options`: string[] = [], `strip = True` 时传给 `strip` 的选项，默认为 `['--strip-unneeded']`（对动态库安全）。例如只去调试信息用 `['--strip-debug']`，保留特定符号用 `['-K', '<symbol>']`。详见 `man strip(1)`。
 - `linker_script`: str，单个[链接器脚本](https://sourceware.org/binutils/docs/ld/Scripts.html)，用来控制链接过程。
   它的作用主要是规定如何把输入文件内的 section 放入输出文件内，并控制输入文件内各部分在程序地址空间内的布局。
   链接器有个默认的内置链接脚本，可用 `ld --verbose` 查看。此选项将会替换系统的默认链接脚本。

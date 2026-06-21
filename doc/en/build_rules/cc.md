@@ -688,6 +688,18 @@ cc_binary(
   This attribute tells linker to put all symbols into its dynamic symbol table. make them visible
    for loaded shared libraries. for more details, see `--export-dynamic` in man ld(1).
 
+- `strip`: bool = False
+
+  Strip the executable after linking to reduce its size (symbols/debug info are removed). Blade links to a `<name>.unstripped` sidecar and runs `strip` into the final output. Only supported on the GNU toolchain (gcc); skipped with a notice elsewhere. Compatible with DebugFission — the `.dwp` is packaged from the objects, so you can ship a stripped binary alongside a separate `.dwp` for debugging.
+
+- `strip_options`: string[] = []
+
+  Options passed to `strip` when `strip = True`. Defaults to `['--strip-unneeded']`. Use `['--strip-all']` (or `['-s']`) for the smallest binary, `['--strip-debug']` to drop only debug info, or `['-K', '<symbol>']` to keep specific symbols. See `man strip(1)`.
+
+- `extra_linkflags`: string[] = []
+
+  Extra flags passed to the linker for this target (see the common attribute above), e.g. `extra_linkflags=['-Wl,-z,now']`.
+
 ### Using dwp files
 
 When DebugFission is enabled (via [`cc_config.fission`](../config.md#cc_config)) and dwp packaging is enabled
@@ -772,7 +784,8 @@ Attributes:
 - `allow_undefined`: bool = False, whether undefined symbols are allowed when linking. Because many plug-in libraries depend on the symbol names provided by the
   host process at runtime, the definition of these symbols does not exist in the link phase.
 - `strip`: bool = False, whether to remove the debugging symbol information. If enabled, the size of the generated library can be reduced, but symbolic debugging
-  cannot be performed.
+  cannot be performed. Only supported on the GNU toolchain (gcc); skipped with a notice elsewhere.
+- `strip_options`: string[] = [], options passed to `strip` when `strip = True`. Defaults to `['--strip-unneeded']` (safe for a shared object). Use e.g. `['--strip-debug']` to drop only debug info, or `['-K', '<symbol>']` to keep specific symbols. See `man strip(1)`.
 - `linker_script`: str, a single [linker script](https://sourceware.org/binutils/docs/ld/Scripts.html) used to control the linking process.
   Its role is mainly to specify how to put the sections in the input file into the output file and to control the layout of the sections in the input file in the program address space.
   The linker has a default built-in linking script, which can be viewed with `ld --verbose`. This option will replace the system's default linking script.

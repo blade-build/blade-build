@@ -1286,6 +1286,17 @@ class CcTarget(Target):
                 return parts[1]
         return None
 
+    def _strip_command_options(self):
+        """The options passed to `strip` for this target (issue #694).
+
+        `strip_options` gives full control of what is removed; when unset the
+        default is `--strip-unneeded` (the historical behavior -- safe for shared
+        objects). Use e.g. `strip_options='--strip-all'` for a smaller executable,
+        or `--strip-debug` / `-K <sym>` to keep more.
+        """
+        options = self.attr.get('strip_options')
+        return ' '.join(var_to_list(options)) if options else '--strip-unneeded'
+
     def _setup_library_link_targets(self, tc, static_source, dynamic_source,
                                     import_source, dynamic_link_path):
         """Wire STATIC/DYNAMIC_LIB_LABEL from resolved library sources.
@@ -2718,6 +2729,8 @@ class CcBinary(CcTarget):
                  export_map: str | None,
                  version_scripts: StrOrListOpt,
                  export_dynamic: bool,
+                 strip: bool,
+                 strip_options: StrOrListOpt,
                  kwargs: dict[str, object]):
         """Init method.
 
@@ -2764,6 +2777,8 @@ class CcBinary(CcTarget):
         self.attr['export_map_fullpath'] = self._resolve_linker_input_file(
             export_map, version_scripts, 'export_map', 'version_scripts')
         self.attr['export_dynamic'] = export_dynamic
+        self.attr['strip'] = strip
+        self.attr['strip_options'] = var_to_list(strip_options)
         self.attr['dwp'] = is_fission() and need_dwp()
         self._add_tags('lang:cc', 'type:binary')
 
@@ -2888,14 +2903,24 @@ class CcBinary(CcTarget):
                 os.path.join(self.build_dir, 'scm.cc'))
             objs.append(scm)
             order_only_deps.append(scm)
-        output = self._target_file_path(
-            self.blade.get_build_toolchain().executable_file_name(self.name))
-        self._cc_link(output, 'link', objs=objs, deps=usr_libs, sys_libs=sys_libs,
+        tc = self.blade.get_build_toolchain()
+        output = self._target_file_path(tc.executable_file_name(self.name))
+        # When stripping (#694), link to a `.unstripped` sidecar and strip it into
+        # the final output; dwp packages debug from the objects, not the binary,
+        # so a stripped exe + a separate `.dwp` is the intended fission workflow.
+        do_strip = self.attr['strip'] and tc.cc_is('gcc')
+        link_output = '%s.unstripped' % output if do_strip else output
+        self._cc_link(link_output, 'link', objs=objs, deps=usr_libs, sys_libs=sys_libs,
                       linker_scripts=self.attr.get('linker_script_fullpath'),
                       version_scripts=self.attr.get('export_map_fullpath'),
                       target_linkflags=target_linkflags,
                       implicit_deps=implicit_deps,
                       order_only_deps=order_only_deps)
+        if do_strip:
+            self.generate_build('strip', output, inputs=link_output,
+                                variables={'strip_options': self._strip_command_options()})
+        elif self.attr['strip']:
+            console.notice('strip is not supported on this toolchain, skipping')
         self._add_default_target_file('bin', output)
         self._remove_on_clean(self._target_file_path(self.name + '.runfiles'))
         if is_fission() and self.attr.get("dwp"):
@@ -2955,6 +2980,8 @@ def cc_binary(name: str,
               export_map: str | None = None,
               version_scripts: StrOrListOpt = None,
               export_dynamic: bool = False,
+              strip: bool = False,
+              strip_options: StrOrListOpt = None,
               **kwargs: object):
     """cc_binary target."""
     keep_deps = var_to_list(keep_deps)
@@ -2981,6 +3008,8 @@ def cc_binary(name: str,
             export_map=export_map,
             version_scripts=version_scripts,
             export_dynamic=export_dynamic,
+            strip=strip,
+            strip_options=strip_options,
             kwargs=kwargs)
     cc_binary_target.attr['keep_deps'] = [cc_binary_target._unify_dep(d) for d in keep_deps]
     build_manager.instance.register_target(cc_binary_target)
@@ -3034,6 +3063,7 @@ class CcPlugin(CcTarget):
                  version_scripts: 'StrOrListOpt',
                  allow_undefined: bool,
                  strip: bool,
+                 strip_options: 'StrOrListOpt',
                  kwargs: dict[str, object]):
         """Init method.
 
@@ -3094,6 +3124,7 @@ class CcPlugin(CcTarget):
         self.attr['suffix'] = suffix
         self.attr['allow_undefined'] = allow_undefined
         self.attr['strip'] = strip
+        self.attr['strip_options'] = var_to_list(strip_options)
         self.attr['linker_script_fullpath'] = self._resolve_linker_input_file(
             linker_script, linker_scripts, 'linker_script', 'linker_scripts')
         self.attr['export_map_fullpath'] = self._resolve_linker_input_file(
@@ -3135,7 +3166,8 @@ class CcPlugin(CcTarget):
                           implicit_deps=link_all_symbols_libs, order_only_deps=incchk_deps)
             if self.attr['strip']:
                 if self.blade.get_build_toolchain().cc_is('gcc'):
-                    self.generate_build('strip', output, inputs=link_output)
+                    self.generate_build('strip', output, inputs=link_output,
+                                        variables={'strip_options': self._strip_command_options()})
                 else:
                     console.notice('strip is not supported on this toolchain, skipping')
             self._add_default_target_file(self.blade.get_build_toolchain().DYNAMIC_LIB_LABEL, output)
@@ -3166,6 +3198,7 @@ def cc_plugin(
         version_scripts: 'StrOrListOpt' = None,
         allow_undefined: bool = True,
         strip: bool = False,
+        strip_options: 'StrOrListOpt' = None,
         **kwargs: object):
     """cc_plugin target."""
     keep_deps = var_to_list(keep_deps)
@@ -3193,6 +3226,7 @@ def cc_plugin(
             version_scripts=version_scripts,
             allow_undefined=allow_undefined,
             strip=strip,
+            strip_options=strip_options,
             kwargs=kwargs)
     target.attr['keep_deps'] = [target._unify_dep(d) for d in keep_deps]
     build_manager.instance.register_target(target)
@@ -3262,6 +3296,8 @@ class CcTest(CcBinary):
                 export_map=None,
                 version_scripts=[],
                 export_dynamic=export_dynamic,
+                strip=False,
+                strip_options=None,
                 kwargs=kwargs)
         self.type = 'cc_test'
         self.attr['testdata'] = var_to_list(testdata)

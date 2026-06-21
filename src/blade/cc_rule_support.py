@@ -431,8 +431,11 @@ class CcRuleGenerator:
             self._generate_cc_check_undefined_rule()
             self._generate_cc_ar_rules()
             self._generate_cc_link_rules(ld, linkflags)
+            # ${strip_options} is set per target (defaults to --strip-unneeded;
+            # see CcTarget._strip_command_options), so each binary/plugin can
+            # control what `strip` removes (issue #694).
             self.generate_rule(name='strip',
-                               command='strip --strip-unneeded -o ${out} ${in}',
+                               command='strip ${strip_options} -o ${out} ${in}',
                                description='STRIP ${out}')
 
     def _generate_windows_cc_rules(self):
