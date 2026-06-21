@@ -32,6 +32,15 @@ def _build_variant_suffix(options):
     sanitizers = getattr(options, 'sanitizers', None)
     if sanitizers:
         variants.append(sanitizer.build_tag(sanitizers))  # e.g. 'asan'
+    # PGO instrument/optimize builds are codegen-incompatible with a normal
+    # build, so they get their own build dir (like coverage/asan). Both phases
+    # share ONE `_pgo` dir on purpose: gcc keys its `.gcda` lookup by the object
+    # file path, so the generate and use builds must place objects at identical
+    # paths or gcc can't find the profile (-Wmissing-profile). (clang is keyed
+    # by function, so it wouldn't care -- but a single dir is correct for both.)
+    if (getattr(options, 'profile-generate', None) is not None or
+            getattr(options, 'profile-use', None) is not None):
+        variants.append('pgo')
     return ''.join('_' + v for v in variants)
 
 

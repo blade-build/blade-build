@@ -313,12 +313,18 @@ class CommandLineParser:
         parser.add_argument(
             '--profile-generate', dest='profile-generate', metavar='path',
             action='store', type=str, nargs='?', const='',
-            help='Add build options to support profile-generate')
+            help='PGO phase 1: instrument the build to collect a profile '
+                 '(gcc/clang; optional path is where profile data is written). '
+                 'Uses a dedicated build_*_pgo dir (shared with --profile-use).')
 
         parser.add_argument(
             '--profile-use', dest='profile-use', metavar='path',
             action='store', type=str, nargs='?', const='',
-            help='Add build options to support profile-use')
+            help='PGO phase 2: rebuild using a collected profile (gcc/clang; '
+                 'path is a .gcda dir for gcc, or a .profdata/.profraw dir for '
+                 'clang -- blade merges clang .profraw automatically). Uses the '
+                 'same build_*_pgo dir as --profile-generate so gcc finds its '
+                 '.gcda (keyed by object path).')
 
     def __add_fission_arguments(self, parser):
         """Add fission support to cc_binary."""
