@@ -631,6 +631,21 @@ cc_binary(
 
   详情请参考 man ld(1) 中查找 --export-dynamic 的说明。
 
+  `export_dynamic` 是 ELF（GNU-ld / ld64）特性，**在 MSVC 上无效**（Windows 没有“导出全部符号”
+  的模式，该选项会被忽略并给出告警）。在 Windows 上请用下面的 `export_map` **显式**导出符号。
+
+- `export_map`（用于 `cc_binary`）：`cc_library` 使用的同一个导出控制文件也可让**可执行文件**导出
+  选定的符号，使 `LoadLibrary` 加载的插件 DLL 能回调宿主中的这些符号（issue #1201）。在 GNU-ld / ld64
+  上它照常作为链接期 version script；在 **MSVC** 上 blade 会把它转成一个按 COMDAT 过滤的 `.def`，
+  通过 `/DEF` 让可执行文件只导出列出的符号，并让 `link.exe` 额外产出一个**导入库 `<name>.lib`**，
+  插件 DLL 链接该导入库（例如通过 `prebuilt_cc_library`）即可回调宿主。导出始终是**显式**的——Windows
+  倾向于精选集合而非全部导出（否则会触及 PE 64K 导出上限并暴露内部实现）；若只导出个别符号，用
+  `linkflags = ['/EXPORT:<symbol>']` 无需导出文件即可。
+
+  ```python
+  cc_binary(name = 'host', srcs = ['host.cc'], export_map = 'host_api.map')
+  ```
+
 - `strip`: bool = False
 
   链接后对可执行文件执行 strip 以减小体积（去除符号/调试信息）。Blade 会先链接到 `<name>.unstripped` 旁文件，再 strip 成最终输出。仅在 GNU 工具链（gcc）上支持，其它工具链会跳过并给出提示。与 DebugFission 兼容——`.dwp` 是从目标文件打包的，因此可以发布 strip 后的可执行文件，同时保留单独的 `.dwp` 用于调试。

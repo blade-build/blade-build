@@ -397,5 +397,57 @@ class CheckIncorrectNoWarningTest(unittest.TestCase):
         target.warning.assert_not_called()
 
 
+class WindowsExportLinkInputsTest(unittest.TestCase):
+    """cc_binary Windows symbol export (#1201): on MSVC an `export_map` drives a
+    COMDAT-filtered `.def` (cc_windef) + /DEF + /IMPLIB so the exe exports the
+    selected symbols and emits an import library dependents can link."""
+
+    def _binary(self, export_map):
+        t = cc_targets.CcBinary.__new__(cc_targets.CcBinary)
+        t.name = 'host'
+        t.attr = {'export_map_fullpath': export_map}
+        t.data = {}
+        self.tc = mock.Mock()
+        self.tc.static_lib_suffix = '.lib'
+        self.tc.DYNAMIC_LIB_LABEL = 'so'
+        t._target_file_path = lambda p: os.path.join('BD/host', p)
+        t.target_files = {}
+        t._add_target_file = lambda label, path: t.target_files.__setitem__(label, path)
+        t.generate_build_calls = []
+        t.generate_build = lambda rule, output, **kw: t.generate_build_calls.append(
+            {'rule': rule, 'output': output, **kw})
+        return t
+
+    def _call(self, t, objs=('a.o',), order_only=()):
+        return t._windows_export_link_inputs(self.tc, self.flags, list(objs), list(order_only))
+
+    def setUp(self):
+        self.flags = ['/SUBSYSTEM:CONSOLE']
+
+    def test_no_export_map_is_noop(self):
+        t = self._binary([])
+        self.assertEqual(([], None), self._call(t))
+        self.assertEqual(['/SUBSYSTEM:CONSOLE'], self.flags)
+        self.assertEqual([], t.generate_build_calls)
+
+    def test_export_map_generates_def_and_implib(self):
+        t = self._binary(['api.map'])
+        deps, outs = self._call(t, objs=['a.o', 'b.o'])
+        def_file = os.path.join('BD/host', 'host.def')
+        implib = os.path.join('BD/host', 'host.lib')
+        # cc_windef builds the filtered .def from the objs, gated by the map.
+        windef = [c for c in t.generate_build_calls if c['rule'] == 'cc_windef']
+        self.assertEqual(1, len(windef))
+        self.assertEqual(def_file, windef[0]['output'])
+        self.assertEqual(['a.o', 'b.o'], windef[0]['inputs'])
+        self.assertEqual('--export_map=api.map', windef[0]['variables']['defflags'])
+        # link gets /DEF + /IMPLIB; the def is an input, the implib an output.
+        self.assertIn('/DEF:%s' % def_file, self.flags)
+        self.assertIn('/IMPLIB:%s' % implib, self.flags)
+        self.assertEqual(([def_file], [implib]), (deps, outs))
+        self.assertEqual(implib, t.target_files['so'])     # dependents can link it
+        self.assertEqual(implib, t.data['windows_implib'])
+
+
 if __name__ == '__main__':
     unittest.main()

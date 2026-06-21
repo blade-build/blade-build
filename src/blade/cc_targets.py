@@ -2903,18 +2903,31 @@ class CcBinary(CcTarget):
                 os.path.join(self.build_dir, 'scm.cc'))
             objs.append(scm)
             order_only_deps.append(scm)
-        tc = self.blade.get_build_toolchain()
-        output = self._target_file_path(tc.executable_file_name(self.name))
+        toolchain = self.blade.get_build_toolchain()
+        output = self._target_file_path(toolchain.executable_file_name(self.name))
+        # `export_map` controls symbol export on every toolchain, but the
+        # mechanism differs: GNU-ld / ld64 take a version script at link time
+        # (handled by _cc_link via `version_scripts`); MSVC needs a `.def` +
+        # /DEF, which also makes link.exe emit an import library (#1201). So on
+        # MSVC route export_map through the Windows path and don't also pass it
+        # to _cc_link (where it would leak a bogus --version-script -> LNK4044).
+        version_scripts = self.attr.get('export_map_fullpath')
+        export_inputs, export_outputs = [], None
+        if toolchain.cc_is('msvc'):
+            export_inputs, export_outputs = self._windows_export_link_inputs(
+                toolchain, target_linkflags, objs, order_only_deps)
+            version_scripts = None
         # When stripping (#694), link to a `.unstripped` sidecar and strip it into
         # the final output; dwp packages debug from the objects, not the binary,
         # so a stripped exe + a separate `.dwp` is the intended fission workflow.
-        do_strip = self.attr['strip'] and tc.cc_is('gcc')
+        do_strip = self.attr['strip'] and toolchain.cc_is('gcc')
         link_output = '%s.unstripped' % output if do_strip else output
         self._cc_link(link_output, 'link', objs=objs, deps=usr_libs, sys_libs=sys_libs,
                       linker_scripts=self.attr.get('linker_script_fullpath'),
-                      version_scripts=self.attr.get('export_map_fullpath'),
+                      version_scripts=version_scripts,
                       target_linkflags=target_linkflags,
-                      implicit_deps=implicit_deps,
+                      implicit_deps=(implicit_deps or []) + export_inputs,
+                      implicit_outputs=export_outputs,
                       order_only_deps=order_only_deps)
         if do_strip:
             self.generate_build('strip', output, inputs=link_output,
@@ -2926,6 +2939,36 @@ class CcBinary(CcTarget):
         if is_fission() and self.attr.get("dwp"):
             self._generate_dwp(output, objs, implicit_deps, order_only_deps)
 
+    def _windows_export_link_inputs(self, tc, target_linkflags, objs, order_only_deps):
+        """Drive Windows exe symbol export from `export_map` (#1201).
+
+        On MSVC an `export_map` is turned into a COMDAT-filtered `.def` (the same
+        `cc_windef` path DLLs use), passed as `/DEF` so the exe exports exactly
+        the listed symbols, and link.exe additionally emits an import library
+        (`<name>.lib`) that a plugin DLL links to call back into the host. With
+        no export_map the exe exports nothing -- Windows favors an explicit,
+        curated set over export-all (which would blow the PE 64K ceiling).
+
+        Appends `/DEF` + `/IMPLIB` to *target_linkflags* (mutated in place) and
+        returns ``(implicit_deps, implicit_outputs)`` for the link edge.
+        """
+        export_map = self.attr.get('export_map_fullpath')
+        if not export_map:
+            return [], None
+        def_file = self._target_file_path(self.name + '.def')
+        # `<name>.lib` -- link.exe's own default name for an exe's import lib
+        # (not the DLL `import_library_name` -> `<name>.dll.lib`: there's no DLL).
+        implib = self._target_file_path(self.name + tc.static_lib_suffix)
+        self.generate_build('cc_windef', def_file, inputs=objs,
+                            implicit_deps=[export_map[0]],
+                            order_only_deps=order_only_deps,
+                            variables={'defflags': '--export_map=%s' % export_map[0]})
+        target_linkflags.append('/DEF:%s' % def_file)
+        target_linkflags.append('/IMPLIB:%s' % implib)
+        # Register the import lib so a dependent (e.g. a plugin DLL) can link it.
+        self._add_target_file(tc.DYNAMIC_LIB_LABEL, implib)
+        self.data['windows_implib'] = implib
+        return [def_file], [implib]
 
     def _generate_dwp(self, binary_path, objs, implicit_deps, order_only_deps):
         """Generate dwp file."""

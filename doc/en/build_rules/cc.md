@@ -688,6 +688,24 @@ cc_binary(
   This attribute tells linker to put all symbols into its dynamic symbol table. make them visible
    for loaded shared libraries. for more details, see `--export-dynamic` in man ld(1).
 
+  `export_dynamic` is an ELF (GNU-ld / ld64) feature. **It has no effect on MSVC** (Windows
+  has no "export all" mode; the option is ignored with a warning). On Windows, export symbols
+  *explicitly* with `export_map` (below).
+
+- `export_map` (on `cc_binary`): the same export-control file used by `cc_library` also lets an
+  **executable** export selected symbols, so a `LoadLibrary`'d plugin DLL can resolve them back
+  into the host (issue #1201). On GNU-ld / ld64 it is the link-time version script as usual; on
+  **MSVC** Blade turns it into a COMDAT-filtered `.def`, passes `/DEF` so the exe exports exactly
+  the listed symbols, and `link.exe` additionally emits an **import library `<name>.lib`** that a
+  plugin DLL links (e.g. via a `prebuilt_cc_library`) to call back into the host. Export is always
+  *explicit* — Windows favors a curated set over exporting everything (which would blow the PE 64K
+  export ceiling and expose internals); for a one-off symbol, `linkflags = ['/EXPORT:<symbol>']`
+  works without an export map.
+
+  ```python
+  cc_binary(name = 'host', srcs = ['host.cc'], export_map = 'host_api.map')
+  ```
+
 - `strip`: bool = False
 
   Strip the executable after linking to reduce its size (symbols/debug info are removed). Blade links to a `<name>.unstripped` sidecar and runs `strip` into the final output. Only supported on the GNU toolchain (gcc); skipped with a notice elsewhere. Compatible with DebugFission — the `.dwp` is packaged from the objects, so you can ship a stripped binary alongside a separate `.dwp` for debugging.
