@@ -231,6 +231,35 @@ _DARWIN_AR_WRAPPER_SH = r'''#!/bin/bash
 exec "$@" 2> >(grep -v 'table of contents is empty' >&2)
 '''
 
+# `--gprof` runs the cc flag computation per target; only complain once.
+_gprof_unsupported_warned = False
+
+
+def _warn_gprof_unsupported(target_os):
+    global _gprof_unsupported_warned
+    if _gprof_unsupported_warned:
+        return
+    _gprof_unsupported_warned = True
+    console.warning(
+        '--gprof is not supported on %s (gprof/-pg instrumentation only works '
+        'on Linux); the flag is ignored. Use --coverage, or a native profiler '
+        '(Instruments/sample on macOS).' % target_os)
+
+
+# `--coverage` runs the cc flag computation per target; only complain once.
+_coverage_unsupported_warned = False
+
+
+def _warn_coverage_unsupported():
+    global _coverage_unsupported_warned
+    if _coverage_unsupported_warned:
+        return
+    _coverage_unsupported_warned = True
+    console.warning(
+        '--coverage is not supported on MSVC (cl.exe has no gcov-style '
+        'instrumentation); the flag is ignored. Use clang-cl for LLVM source '
+        'coverage, or OpenCppCoverage (PDB-based, no rebuild).')
+
 
 class CcRuleGenerator:
     """Generate cc/cuda ninja rules from a RuleContext (see module docstring)."""
@@ -336,12 +365,28 @@ class CcRuleGenerator:
         ]
 
         if getattr(self.options, 'gprof', False):
-            cppflags.append('-pg')
-            linkflags.append('-pg')
+            # gprof's `-pg` instrumentation is only functional on Linux. Darwin
+            # clang accepts `-pg` but ignores it (spraying "argument unused"
+            # warnings, and there is no gprof tool / gmon.out on macOS); MSVC
+            # does not understand it at all. Skip the dead flag elsewhere and
+            # warn once instead of letting the toolchain complain per edge.
+            if self.build_toolchain.target_os == 'linux':
+                cppflags.append('-pg')
+                linkflags.append('-pg')
+            else:
+                _warn_gprof_unsupported(self.build_toolchain.target_os)
 
         if getattr(self.options, 'coverage', False):
-            cppflags.append('--coverage')
-            linkflags.append('--coverage')
+            # `--coverage` is the gcc/clang driver flag (-fprofile-arcs
+            # -ftest-coverage / instr-profile). Native MSVC cl.exe has no
+            # gcov-style instrumentation, so the flag is meaningless there --
+            # skip it and warn once instead of feeding cl.exe a flag it can't
+            # parse. (clang-cl reports as 'clang' and keeps the gcc-style path.)
+            if self.build_toolchain.cc_is('msvc'):
+                _warn_coverage_unsupported()
+            else:
+                cppflags.append('--coverage')
+                linkflags.append('--coverage')
 
         sanitizers = getattr(self.options, 'sanitizers', None)
         if sanitizers:

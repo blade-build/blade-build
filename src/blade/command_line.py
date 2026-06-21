@@ -289,7 +289,7 @@ class CommandLineParser:
         parser.add_argument(
             '--gprof', dest='gprof',
             action='store_true', default=False,
-            help='Add build options to support GNU gprof')
+            help='Add build options to support GNU gprof (Linux only; ignored on macOS/Windows)')
 
         parser.add_argument(
             '--coverage', dest='coverage',
