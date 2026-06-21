@@ -97,6 +97,7 @@ blade test //foo/... --coverage
 - 自动加入覆盖率相关的编译/链接选项；测试运行时产生 `.gcno`/`.gcda` 数据。
 - 测试结束后，Blade 调用 [gcovr](https://gcovr.com/) 在 `<build_dir>/cc_coverage_report/index.html` 生成可逐级目录下钻（目录 → 文件 → 逐行）的 HTML 报告（并附带 Cobertura 格式的 `coverage.xml`）。请先 `pip install gcovr`；若未安装，Blade 只会告警并跳过报告生成。
 - 构建目录下的源文件会被排除，报告只反映你自己的代码，而非生成代码（如 `*.pb.cc`）或第三方依赖（vcpkg 安装在构建目录下）。
+- **平台/工具链：** `--coverage` 在所有平台的 gcc 与 clang 上均可用，含 Windows 上的 **clang-cl**。原生 MSVC `cl.exe` 没有 gcov 风格插桩，因此 Blade 会跳过该标志并仅警告一次——Windows 上请用 [clang-cl](config.md#using-clang-cl-on-windows) 获得 LLVM 源码级覆盖率，或使用 [OpenCppCoverage](https://github.com/OpenCppCoverage/OpenCppCoverage)（基于 PDB，无需重新编译）。
 
 ### Go 覆盖率（go test -cover）
 

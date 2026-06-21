@@ -127,8 +127,8 @@ $ blade dump --all-tags ...
 - `--generate-java` —— 为 `proto_library` 和 `swig_library` 生成 Java 文件
 - `--generate-php` —— 为 `proto_library` 和 `swig_library` 生成 PHP 文件
 - `--generate-go` —— 为 `proto_library` 生成 Go 文件
-- `--gprof` —— 启用 GNU gprof 性能分析
-- `--coverage` —— 生成代码覆盖率报告（支持 GNU gcov 与 Java jacoco）
+- `--gprof` —— 启用 GNU gprof 性能分析。**仅限 Linux**（gcc 与 clang）：`-pg`/gprof 插桩只在 Linux 上有效。macOS 上该标志被静默忽略（Darwin clang 接受 `-pg` 但当作空操作，且没有 gprof 工具 / `gmon.out`），Windows 上 MSVC 根本不认。在这些平台 blade 会跳过该标志并仅警告一次——请改用 `--coverage`，或原生采样分析器（macOS 用 Instruments/`sample`，Linux 用 `perf`）。
+- `--coverage` —— 生成代码覆盖率报告（支持 GNU gcov 与 Java jacoco）。C/C++ 走的是 gcc/clang 的 `--coverage` 插桩，**在所有平台的 gcc 与 clang 上均可用，含 Windows 上的 clang-cl**。原生 MSVC `cl.exe` 没有 gcov 风格插桩，因此 blade 在该工具链下跳过该标志并仅警告一次——Windows 上请使用 **clang-cl**（LLVM 源码级覆盖率）或 **OpenCppCoverage**（基于 PDB，无需重新编译）。
 
 ## 使用示例
 

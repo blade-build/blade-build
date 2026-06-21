@@ -127,8 +127,8 @@ Different subcommands support different options. Run `blade <subcommand> --help`
 - `--generate-java` - Generate Java files for proto_library and swig_library
 - `--generate-php` - Generate PHP files for proto_library and swig_library
 - `--generate-go` - Generate Go files for proto_library
-- `--gprof` - Enable GNU gprof profiling support
-- `--coverage` - Generate code coverage reports (supports GNU gcov and Java jacoco)
+- `--gprof` - Enable GNU gprof profiling support. **Linux only** (gcc and clang): `-pg`/gprof instrumentation only works on Linux. On macOS the flag is silently ignored (Darwin clang accepts `-pg` but treats it as a no-op, and there is no gprof tool / `gmon.out`); on Windows MSVC does not understand it. Blade skips the flag and warns once on these platforms — use `--coverage`, or a native sampling profiler (Instruments/`sample` on macOS, `perf` on Linux).
+- `--coverage` - Generate code coverage reports (supports GNU gcov and Java jacoco). For C/C++ this is the gcc/clang `--coverage` instrumentation and works on **gcc and clang on every platform, including clang-cl on Windows**. Native MSVC `cl.exe` has no gcov-style instrumentation, so blade skips the flag and warns once there — on Windows use **clang-cl** (LLVM source coverage) or **OpenCppCoverage** (PDB-based, no rebuild).
 
 ## Usage Examples
 

@@ -101,6 +101,7 @@ blade test //foo/... --coverage
 - The coverage compile/link flags are added automatically; `.gcno`/`.gcda` data is produced during the test run.
 - After the tests finish, Blade runs [gcovr](https://gcovr.com/) to produce a directory-navigable HTML report (drill down folder by folder to per-file line views) at `<build_dir>/cc_coverage_report/index.html` (plus `coverage.xml` in Cobertura format). Install it with `pip install gcovr`; if gcovr is absent, Blade just warns and skips the report.
 - Sources under the build directory are excluded, so the report reflects your own code rather than generated sources (e.g. `*.pb.cc`) or vendored dependencies (vcpkg installs under the build dir).
+- **Platform/toolchain:** `--coverage` works on gcc and clang on every platform, including **clang-cl** on Windows. Native MSVC `cl.exe` has no gcov-style instrumentation, so Blade skips the flag and warns once — on Windows compile with [clang-cl](config.md#using-clang-cl-on-windows) for LLVM source coverage, or use [OpenCppCoverage](https://github.com/OpenCppCoverage/OpenCppCoverage) (PDB-based, needs no rebuild).
 
 ### Go Coverage (go test -cover)
 
