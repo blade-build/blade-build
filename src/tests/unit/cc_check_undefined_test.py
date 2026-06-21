@@ -127,6 +127,17 @@ class ResidualBaselineTest(unittest.TestCase):
         for n in ('_tlv_bootstrap', '__tlv_atexit', '___tlv_bootstrap'):
             self.assertTrue(self._allowed(n), n)
 
+    def test_instrumentation_runtime_symbols(self):
+        # Coverage (gcov) and sanitizer runtimes are pulled in by the `--coverage`
+        # / `-fsanitize=` LINK flags, not by declared deps, so the undefined-symbol
+        # check must treat them as ambient.
+        for n in ('_llvm_gcda_emit_arcs', '_llvm_gcov_init', '__llvm_gcda_end_file',
+                  '__gcov_init', '__gcov_merge_add',
+                  '___ubsan_handle_type_mismatch_v1_abort', '__asan_init',
+                  '___asan_report_load8', '__tsan_func_entry', '__msan_init',
+                  '__lsan_ignore_object', '__sanitizer_cov_trace_pc'):
+            self.assertTrue(self._allowed(n), n)
+
     def test_user_namespace_symbols_not_matched(self):
         """User code (now including libc functions like _malloc) must NOT
         match the residual baseline — those come from real lib enumeration."""

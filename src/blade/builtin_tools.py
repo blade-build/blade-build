@@ -189,6 +189,19 @@ _CHECK_UNDEFINED_RESIDUAL_BASELINE = (
     # implicitly because every dynamic executable runs through ld-linux.
     r'__tls_get_addr',
     r'__tls_get_offset',
+    # ---- Instrumentation runtimes (coverage / sanitizers) ----
+    # Instrumented objects call into a runtime that the corresponding *link*
+    # flag pulls in automatically -- not a `-l<alias>` user code can declare:
+    #   * `--coverage`  -> gcov runtime (`__llvm_gcov_*` / `__llvm_gcda_*` on
+    #     clang, `__gcov_*` on gcc)
+    #   * `-fsanitize=` -> ASan/UBSan/TSan/MSan/LSan runtime (`__asan_*`,
+    #     `__ubsan_*`, `__tsan_*`, `__msan_*`, `__lsan_*`, `__sanitizer_*`)
+    # These names never appear without the instrumentation, so exempting them
+    # unconditionally is safe in every build.
+    r'_*llvm_gc(?:ov|da)_\w*',
+    r'_*__gcov_\w*',
+    r'_*__(?:a|ub|t|m|l)san_\w*',
+    r'_*__sanitizer_\w*',
 )
 
 
