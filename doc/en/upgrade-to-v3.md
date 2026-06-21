@@ -7,7 +7,7 @@ V3 is a comprehensive modernization upgrade with the following goals:
 - **Python 3.10+ only**, removing all Python 2 and older Python 3 compatibility code
 - **Full type annotations**, all build target modules now have PEP 604 type hints with pyright static checking
 - **Code cleanup**, removing dead code and invalid tests, fixing known bugs
-- **Experimental macOS support**, fixing multiple macOS compilation compatibility issues
+- **macOS support**, fixing multiple macOS compilation compatibility issues
 - **Modernized build-dir naming**, the default drops the legacy `64` (`build64_release` → `build_release`) and gains `${os}`/`${arch}` template variables for multi-platform builds
 
 Upgrading to V3 gives you:
@@ -15,7 +15,7 @@ Upgrading to V3 gives you:
 - Better type safety, reducing parameter errors when writing BUILD files
 - Comprehensive unit tests and cross-repo E2E smoke test coverage
 - Cleaner code structure, easier to extend and develop
-- Blade can run on macOS (experimental)
+- Blade can run on macOS
 - Better documentation coverage (new Go build docs, `$(location)` syntax docs)
 
 ## Upgrade FAQ
@@ -52,7 +52,7 @@ V3 fixes the following macOS compatibility issues:
 - `-static-libgcc` / `-static-libstdc++` are no longer used on macOS (clang doesn't support these GCC-specific flags)
 - `--whole-archive` / `--no-whole-archive` replaced with `-force_load` on macOS
 
-macOS support is currently **experimental**. Validate in CI before production use.
+macOS is a fully supported platform.
 
 ### Global config changes
 
