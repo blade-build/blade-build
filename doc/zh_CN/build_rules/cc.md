@@ -504,6 +504,7 @@ foreign_cc_library 和 prebuilt_cc_library 的主要区别是其描述的库是 
 - `install_dir` 包构建完成后的安装目录
 - `lib_dir` 库在安装目录下的子目录名
 - `has_dynamic` 是否生成了动态库
+- `static_library` / `dynamic_library` / `import_library`：str，外部构建产出的库的显式路径（相对于 `install_dir`），用于覆盖 `lib_dir`/`has_dynamic` 的命名约定。当构建产出的名字无法用 `lib<name>.<后缀>` 约定表达时（带版本后缀、多个库等）很有用。`import_library` 是 Windows 上为产出的 `.dll` 链接所需的导入库 `.lib`（在 MSVC 上给定 `dynamic_library` 时必需）。与 `prebuilt_cc_library` 行为一致的双模式；链接选择、运行期文件与 `check_undefined` 的 `.syms` 处理在两个规则间共享。
 
 ### 示例 1，zlib
 

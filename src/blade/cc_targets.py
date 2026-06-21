@@ -1286,6 +1286,45 @@ class CcTarget(Target):
                 return parts[1]
         return None
 
+    def _setup_library_link_targets(self, tc, static_source, dynamic_source,
+                                    import_source, dynamic_link_path):
+        """Wire STATIC/DYNAMIC_LIB_LABEL from resolved library sources.
+
+        Shared by ``prebuilt_cc_library`` and ``foreign_cc_library`` (#1261,
+        #1262): the link selection (which of static / dynamic / import serves
+        static- vs dynamic-linking) and the MSVC import-lib handling are identical;
+        only *where* the libraries live differs. ``dynamic_link_path`` is the path
+        registered for dynamic linking when a *shared* lib serves it -- a
+        build-tree copy for a source-tree prebuilt, or the in-place output for a
+        foreign build.
+
+        Returns the ``link_source`` -- the library that serves static linking,
+        whose ``.syms`` the caller emits for check_undefined.
+        """
+        if static_source:
+            self._add_target_file(tc.STATIC_LIB_LABEL, static_source)
+            if not dynamic_source and not import_source:
+                # Using the static library for dynamic linking too.
+                self._add_target_file(tc.DYNAMIC_LIB_LABEL, static_source)
+        if import_source:
+            # MSVC: link the import lib; record the DLL (if any) as the runtime
+            # artifact the runner flattens into runfiles (see windows_dll), like
+            # blade's own generated DLLs (see _dynamic_cc_library_windows).
+            self._add_target_file(tc.DYNAMIC_LIB_LABEL, import_source)
+            if not static_source:
+                self._add_target_file(tc.STATIC_LIB_LABEL, import_source)
+            if dynamic_source:
+                self.data['windows_dll'] = dynamic_source
+        elif dynamic_source:
+            self._add_target_file(tc.DYNAMIC_LIB_LABEL, dynamic_link_path)
+            soname = self._soname_of(dynamic_source)
+            if soname:
+                self.data['soname_and_full_path'] = (soname, dynamic_link_path)
+            if not static_source:
+                # Using the shared library for static linking too.
+                self._add_target_file(tc.STATIC_LIB_LABEL, dynamic_link_path)
+        return static_source or import_source or dynamic_source
+
     def _cc_library(self, objs, inclusion_check_result=None):
         self._static_cc_library(objs, inclusion_check_result)
         if self.attr.get('generate_dynamic'):
@@ -1829,42 +1868,23 @@ class PrebuiltCcLibrary(CcTarget):
         if not static_source and not dynamic_source and not import_source:
             return  # error already emitted by _resolve_library_sources
 
-        # Whichever library serves static linking (STATIC_LIB_LABEL below) is the
-        # one check_undefined reads, so remember it to emit its `.syms` in
-        # generate(). Priority matches the label assignment: a real archive,
-        # else the import lib (MSVC), else the shared lib serving static-link.
-        self.attr['link_source'] = static_source or import_source or dynamic_source
-
         if static_source:
             self.attr['static_source'] = static_source
-            self._add_target_file(tc.STATIC_LIB_LABEL, static_source)
-            if not dynamic_source and not import_source:
-                # Using static library for dynamic linking
-                self._add_target_file(tc.DYNAMIC_LIB_LABEL, static_source)
-
-        if import_source:
-            # MSVC: link the import lib; record the DLL (if any) as the runtime
-            # artifact the runner flattens into runfiles (see windows_dll), like
-            # blade's own generated DLLs (see _dynamic_cc_library_windows).
-            self._add_target_file(tc.DYNAMIC_LIB_LABEL, import_source)
-            if not static_source:
-                self._add_target_file(tc.STATIC_LIB_LABEL, import_source)
-            if dynamic_source:
-                self.attr['dynamic_source'] = dynamic_source
-                self.data['windows_dll'] = dynamic_source
-        elif dynamic_source:
-            dynamic_target = self._target_file_path(os.path.basename(dynamic_source))
+        # A source-tree shared lib (not the import-lib case) is copied into the
+        # build tree so it lands in runfiles; that copy is what serves dynamic
+        # linking. The import-lib case keeps the DLL in place (windows_dll).
+        dynamic_target = None
+        if dynamic_source:
             self.attr['dynamic_source'] = dynamic_source
-            self.attr['dynamic_target'] = dynamic_target
-            self._add_target_file(tc.DYNAMIC_LIB_LABEL, dynamic_target)
+            if not import_source:
+                dynamic_target = self._target_file_path(
+                    os.path.basename(dynamic_source))
+                self.attr['dynamic_target'] = dynamic_target
 
-            soname = self._soname_of(dynamic_source)
-            if soname:
-                self.data['soname_and_full_path'] = (soname, dynamic_target)
-
-            if not static_source:
-                # Using dynamic library for static linking
-                self._add_target_file(tc.STATIC_LIB_LABEL, dynamic_target)
+        # Whichever library serves static linking is the one check_undefined
+        # reads; remember it to emit its `.syms` in generate().
+        self.attr['link_source'] = self._setup_library_link_targets(
+            tc, static_source, dynamic_source, import_source, dynamic_target)
 
     _default_libpath = None
 
@@ -2449,6 +2469,9 @@ class ForeignCcLibrary(CcTarget):
                  export_incs: 'StrOrListOpt',
                  lib_dir: str,
                  has_dynamic: bool,
+                 static_library: str | None,
+                 dynamic_library: str | None,
+                 import_library: str | None,
                  link_all_symbols: bool,
                  binary_link_only: bool,
                  deprecated: bool,
@@ -2493,6 +2516,9 @@ class ForeignCcLibrary(CcTarget):
         self.attr['deprecated'] = deprecated
         self.attr['lib_dir'] = lib_dir
         self.attr['has_dynamic'] = has_dynamic
+        self.attr['static_library'] = static_library
+        self.attr['dynamic_library'] = dynamic_library
+        self.attr['import_library'] = import_library
         self._add_tags('lang:cc', 'type:library', 'type:foreign')
 
         if hdrs:
@@ -2526,16 +2552,53 @@ class ForeignCcLibrary(CcTarget):
             self.attr['install_dir'], self.attr['lib_dir'],
             f'{tc.lib_prefix}{self.name}{suffix}'))
 
+    def _resolve_library_sources(self, tc):
+        """Resolve the static/dynamic/import library paths the foreign build
+        produces (#1262), in either mode.
+
+        - **Explicit** (``static_library`` / ``dynamic_library`` /
+          ``import_library`` set): paths relative to ``install_dir``, under the
+          build tree. ``import_library`` is MSVC-only (the ``.lib`` to link a
+          produced ``.dll``); on MSVC a ``dynamic_library`` requires it.
+        - **Convention** (none set): ``<install_dir>/<lib_dir>/lib<name>.<suffix>``,
+          with the shared lib gated by ``has_dynamic``.
+
+        Unlike a prebuilt, these are GENERATED by the foreign build, so the paths
+        are declared, not probed for existence. Returns
+        ``(static_source, dynamic_source, import_source)``.
+        """
+        static_library = self.attr.get('static_library')
+        dynamic_library = self.attr.get('dynamic_library')
+        import_library = self.attr.get('import_library')
+        if static_library or dynamic_library or import_library:
+            def under_install(value):
+                return self._target_file_path(
+                    os.path.join(self.attr['install_dir'], value)) if value else None
+            static_source = under_install(static_library)
+            dynamic_source = under_install(dynamic_library)
+            import_source = None
+            if tc.cc_is('msvc'):
+                if import_library:
+                    import_source = under_install(import_library)
+                elif dynamic_library:
+                    self.error('on MSVC, dynamic_library requires import_library '
+                               '(the .lib used to link the produced .dll)')
+            return static_source, dynamic_source, import_source
+        static_source = self._library_full_path(tc.static_lib_suffix)
+        dynamic_source = (self._library_full_path(tc.dynamic_lib_suffix)
+                          if self.attr['has_dynamic'] else None)
+        return static_source, dynamic_source, None
+
     def soname_and_full_path(self):
         """Return soname and full path of the shared library, if any"""
         if 'soname_and_full_path' not in self.data:
             self.data['soname_and_full_path'] = None
-            if self.attr['has_dynamic']:
-                tc = self.blade.get_build_toolchain()
-                so_path = self._library_full_path(tc.dynamic_lib_suffix)
-                soname = self._soname_of(so_path)
+            tc = self.blade.get_build_toolchain()
+            _static, dynamic_source, _import = self._resolve_library_sources(tc)
+            if dynamic_source:
+                soname = self._soname_of(dynamic_source)
                 if soname:
-                    self.data['soname_and_full_path'] = (soname, so_path)
+                    self.data['soname_and_full_path'] = (soname, dynamic_source)
         return self.data['soname_and_full_path']
 
     def _before_generate(self):  # override
@@ -2546,12 +2609,19 @@ class ForeignCcLibrary(CcTarget):
 
     def _ninja_rules(self):
         tc = self.blade.get_build_toolchain()
-        a_path = self._library_full_path(tc.static_lib_suffix)
-        so_path = self._library_full_path(tc.dynamic_lib_suffix)
-        self._add_default_target_file(tc.STATIC_LIB_LABEL, a_path)
-        self._emit_archive_syms(a_path)
-        self._add_target_file(tc.DYNAMIC_LIB_LABEL,
-                              so_path if self.attr['has_dynamic'] else a_path)
+        static_source, dynamic_source, import_source = \
+            self._resolve_library_sources(tc)
+        if not static_source and not dynamic_source and not import_source:
+            return  # error already emitted by _resolve_library_sources
+        if static_source:
+            # The static archive is the conventional default target file.
+            self._add_default_target_file(tc.STATIC_LIB_LABEL, static_source)
+        # Foreign outputs are already in the build tree -- the shared lib is
+        # linked in place (no copy), so dynamic_link_path == dynamic_source.
+        link_source = self._setup_library_link_targets(
+            tc, static_source, dynamic_source, import_source, dynamic_source)
+        if link_source:
+            self._emit_archive_syms(link_source)
 
     def generate(self):
         """Generate build code for cc object/library."""
@@ -2567,6 +2637,9 @@ def foreign_cc_library(
         export_incs: 'StrOrListOpt' = None,
         deps: 'StrOrListOpt' = None,
         has_dynamic: bool = False,
+        static_library: str | None = None,
+        dynamic_library: str | None = None,
+        import_library: str | None = None,
         link_all_symbols: bool = False,
         binary_link_only: bool = False,
         visibility: 'StrOrListOpt' = None,
@@ -2583,6 +2656,10 @@ def foreign_cc_library(
         hdr_dir: header file directory to be declared, always under the output directory
         lib_dir: str, the relative path of the lib dir under the `install_dir` dir.
         has_dynamic: bool, whether this library has a dynamic edition.
+        static_library / dynamic_library / import_library: str, explicit paths
+            (relative to `install_dir`) to the libraries the foreign build
+            produces, overriding the `lib_dir`/`has_dynamic` name convention.
+            `import_library` is the Windows import `.lib` for a produced `.dll`.
     """
     target = ForeignCcLibrary(
             name=name,
@@ -2595,6 +2672,9 @@ def foreign_cc_library(
             hdr_dir=hdr_dir,
             lib_dir=lib_dir,
             has_dynamic=has_dynamic,
+            static_library=static_library,
+            dynamic_library=dynamic_library,
+            import_library=import_library,
             link_all_symbols=link_all_symbols,
             binary_link_only=binary_link_only,
             deprecated=deprecated,

@@ -550,6 +550,14 @@ Attributes:
 - `install_dir`: str, The installation directory after the package is built
 - `lib_dir`: list, The subdirectory name of the library in the installation directory
 - `has_dynamic`: bool = False, Whether this library has a dynamic linked edition.
+- `static_library` / `dynamic_library` / `import_library`: str, explicit paths
+  (relative to `install_dir`) to the libraries the foreign build produces,
+  overriding the `lib_dir`/`has_dynamic` name convention. Useful when the build
+  emits names the `lib<name>.<suffix>` convention can't express (version
+  suffixes, several libs, etc.). `import_library` is the Windows import `.lib`
+  for a produced `.dll` (required on MSVC when a `dynamic_library` is given).
+  Same two-mode behaviour as `prebuilt_cc_library`; the link selection, runfiles,
+  and `check_undefined` `.syms` handling are shared between the two rules.
 
 ### Example1, zlib
 
