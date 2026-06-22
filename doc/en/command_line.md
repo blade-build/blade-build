@@ -154,6 +154,8 @@ Toolchain differences blade handles for you:
 
 Blade owns the build flags and the clang merge step; producing a *representative* workload (and deciding when a profile is stale) is your job. Profiles are **not** portable across compilers — instrument, run, and optimize all on one toolchain.
 
+> The **instrument** build defines `BLADE_PGO_GENERATE` (a Blade-private macro, not a compiler/industry standard), so source can flush the profile runtime in long-running or forking servers — e.g. `#ifdef BLADE_PGO_GENERATE` → `__llvm_profile_write_file()` (clang) / `__gcov_dump()` (gcc) / `PgoAutoSweep(...)` (MSVC). The **use** build and **AutoFDO** define nothing: those binaries should behave exactly like a normal release.
+
 ### Sample-based PGO (AutoFDO)
 
 The instrumentation-based PGO above needs two builds — instrument, then optimize — which is cumbersome, and the instrumented run carries real overhead.

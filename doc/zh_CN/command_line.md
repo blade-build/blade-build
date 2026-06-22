@@ -154,6 +154,8 @@ blade 替你处理的工具链差异：
 
 blade 负责构建标志和 clang 的合并步骤；而产出**代表性**负载（以及判断 profile 是否过期）是你的职责。profile **不能**跨编译器复用——插桩、运行、优化都要在同一套工具链上完成。
 
+> **插桩**构建会定义 `BLADE_PGO_GENERATE`（Blade 私有宏，非编译器/业界标准），便于源码在长跑或 fork 型服务里主动刷写 profile —— 例如 `#ifdef BLADE_PGO_GENERATE` → `__llvm_profile_write_file()`（clang）/ `__gcov_dump()`（gcc）/ `PgoAutoSweep(...)`（MSVC）。**优化（use）**构建和 **AutoFDO** 不定义任何宏：这些二进制应当与普通 release 行为完全一致。
+
 ### 采样式 PGO（AutoFDO）
 
 上面那套插桩式 PGO 要"插桩构建 → 跑负载 → 优化构建"两遍构建，比较繁琐，且插桩本身有运行开销。

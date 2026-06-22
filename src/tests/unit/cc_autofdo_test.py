@@ -87,6 +87,15 @@ class AutofdoGenerateTest(unittest.TestCase):
         cppflags, _ = _flags(gen, fake)
         self.assertNotIn('-fdebug-info-for-profiling', cppflags)
 
+    def test_autofdo_defines_no_pgo_macro(self):
+        # AutoFDO samples a *normal* binary -- no instrumentation runtime to
+        # flush -- so neither phase defines a PGO macro (keep it == production).
+        for opts in (dict(autofdo_generate=True), dict(autofdo_use=None)):
+            gen, fake = _make_generator(cc_vendor='clang', **opts)
+            cppflags, _ = _flags(gen, fake)
+            self.assertFalse([f for f in cppflags
+                              if 'PGO_GENERATE' in f or 'PROFILE_GUIDED' in f])
+
 
 class AutofdoUseTest(unittest.TestCase):
     def _profile_file(self, contents=b'not-perf-data'):

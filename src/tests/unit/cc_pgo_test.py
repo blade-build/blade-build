@@ -100,6 +100,17 @@ class PgoGenerateTest(unittest.TestCase):
         self.assertIn('-fprofile-generate=/tmp/p', cppflags)
         self.assertIn('-fprofile-generate=/tmp/p', linkflags)
 
+    def test_generate_defines_blade_pgo_generate_only(self):
+        # The instrument build defines BLADE_PGO_GENERATE (for profile flush);
+        # the use build is a normal release and defines nothing.
+        gen, fake = _make_generator(cc_vendor='clang', profile_generate='')
+        cppflags, _ = _flags(gen, fake)
+        self.assertIn('-DBLADE_PGO_GENERATE', cppflags)
+        gen2, fake2 = _make_generator(cc_vendor='gcc', profile_use='/tmp/p')
+        use_flags, _ = _flags(gen2, fake2)
+        self.assertNotIn('-DBLADE_PGO_GENERATE', use_flags)
+        self.assertFalse([f for f in use_flags if 'PROFILE_GUIDED' in f])
+
 class PgoUseTest(unittest.TestCase):
     """--profile-use: gcc keeps -fprofile-correction; clang must not."""
 
@@ -162,12 +173,20 @@ class PgoMsvcTest(unittest.TestCase):
         return opts
 
     def test_compile_flags(self):
-        # /GL (+ the parity define) under either mode; nothing when off.
+        # /GL under either mode (LTCG needs it); nothing when off.
         for mode in (dict(generate=''), dict(use='/tmp/p'), dict(generate='/tmp/p')):
             flags = cc_rule_support._pgo_msvc_compile_flags(self._opts(**mode))
             self.assertIn('/GL', flags)
-            self.assertIn('/DPROFILE_GUIDED_OPTIMIZATION', flags)
         self.assertEqual([], cc_rule_support._pgo_msvc_compile_flags(self._opts()))
+
+    def test_generate_define_only_on_instrument_build(self):
+        # BLADE_PGO_GENERATE is for the instrument build (profile flush); the
+        # optimize build behaves like a normal release and gets no PGO define.
+        gen = cc_rule_support._pgo_msvc_compile_flags(self._opts(generate=''))
+        self.assertIn('/DBLADE_PGO_GENERATE', gen)
+        use = cc_rule_support._pgo_msvc_compile_flags(self._opts(use='/tmp/p'))
+        self.assertNotIn('/DBLADE_PGO_GENERATE', use)
+        self.assertFalse([f for f in use if 'PROFILE_GUIDED' in f])
 
     def test_lib_flags(self):
         self.assertEqual(['/LTCG'],

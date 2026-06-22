@@ -59,7 +59,8 @@ class ClangClCompileFlagsTest(unittest.TestCase):
     def test_pgo_generate(self):
         flags = self._flags(generate='')
         self.assertIn('-fprofile-generate', flags)
-        self.assertIn('-DPROFILE_GUIDED_OPTIMIZATION', flags)
+        # Instrument build only -- lets source flush the profile runtime.
+        self.assertIn('-DBLADE_PGO_GENERATE', flags)
 
     def test_pgo_generate_with_path(self):
         self.assertIn('-fprofile-generate=/tmp/p', self._flags(generate='/tmp/p'))
@@ -71,6 +72,9 @@ class ClangClCompileFlagsTest(unittest.TestCase):
                 mock.Mock(), _opts(use='/tmp/raw'))
         self.assertIn('-fprofile-use=/m.profdata', flags)
         self.assertIn('-Wno-error=profile-instr-out-of-date', flags)
+        # The optimize build is a normal release -- no PGO define.
+        self.assertNotIn('-DBLADE_PGO_GENERATE', flags)
+        self.assertFalse([f for f in flags if 'PROFILE_GUIDED' in f])
         self.assertIn('-Wno-error=profile-instr-unprofiled', flags)
         # clang's gcc-style -fprofile-correction must NOT appear.
         self.assertNotIn('-fprofile-correction', flags)

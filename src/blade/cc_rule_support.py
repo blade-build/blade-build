@@ -357,11 +357,15 @@ def _pgo_msvc_active(options):
 
 def _pgo_msvc_compile_flags(options):
     """MSVC compile flags for an active PGO mode: `/GL` (whole-program info LTCG
-    PGO needs; same flag for the instrument and the optimize build) plus the
-    PROFILE_GUIDED_OPTIMIZATION define, for parity with the gcc/clang path."""
-    if _pgo_msvc_active(options):
-        return ['/GL', '/DPROFILE_GUIDED_OPTIMIZATION']
-    return []
+    PGO needs; same flag for the instrument and the optimize build). The
+    `BLADE_PGO_GENERATE` define is added on the instrument build only -- it lets
+    source flush profile data (`PgoAutoSweep`) in long-running servers."""
+    if not _pgo_msvc_active(options):
+        return []
+    flags = ['/GL']
+    if _pgo_option(options, 'profile-generate') is not None:
+        flags.append('/DBLADE_PGO_GENERATE')
+    return flags
 
 
 def _pgo_msvc_lib_flags(options):
@@ -478,7 +482,7 @@ def _instrument_clang_cl_compile_flags(toolchain, options):
     gen = _pgo_option(options, 'profile-generate')
     if gen is not None:
         flags.append('-fprofile-generate' + ('=' + gen if gen else ''))
-        flags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+        flags.append('-DBLADE_PGO_GENERATE')
     use = _pgo_option(options, 'profile-use')
     if use is not None:
         profdata = _resolve_clang_profdata(toolchain, use)
@@ -486,7 +490,6 @@ def _instrument_clang_cl_compile_flags(toolchain, options):
         # Tolerate stale/partial profiles as warnings, not errors.
         flags.append('-Wno-error=profile-instr-out-of-date')
         flags.append('-Wno-error=profile-instr-unprofiled')
-        flags.append('-DPROFILE_GUIDED_OPTIMIZATION')
     return flags
 
 
@@ -658,7 +661,11 @@ class CcRuleGenerator:
             flag = '-fprofile-generate' + ('=' + pgo_gen if pgo_gen else '')
             cppflags.append(flag)
             linkflags.append(flag)
-            cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+            # Only the instrument build defines BLADE_PGO_GENERATE -- it lets
+            # source flush profile data (__llvm_profile_write_file / __gcov_dump)
+            # in long-running/forking servers. The use build behaves like a
+            # normal release, so it gets no PGO define (avoid divergence).
+            cppflags.append('-DBLADE_PGO_GENERATE')
 
         pgo_use = _pgo_option(self.options, 'profile-use')
         if pgo_use is not None:
@@ -672,13 +679,11 @@ class CcRuleGenerator:
                 # the clang analogues of gcc's -Wno-error=coverage-mismatch.
                 cppflags.append('-Wno-error=profile-instr-out-of-date')
                 cppflags.append('-Wno-error=profile-instr-unprofiled')
-                cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
             else:  # gcc
                 cppflags.append('-fprofile-use=' + pgo_use if pgo_use
                                 else '-fprofile-use')
                 cppflags.append('-fprofile-correction')
                 cppflags.append('-Wno-error=coverage-mismatch')
-                cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
 
         # AutoFDO (sample-based PGO) -- see the module-level "AutoFDO" note.
         # gcc/clang path; MSVC never reaches here (it has no sample PGO; warned
@@ -691,7 +696,9 @@ class CcRuleGenerator:
             if self.build_toolchain.cc_is('clang'):
                 cppflags.append('-fdebug-info-for-profiling')
                 cppflags.append('-funique-internal-linkage-names')
-            cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+            # No define: AutoFDO samples a *normal* binary (no instrumentation
+            # runtime to flush), and the collection build should stay identical
+            # to what ships -- that's the whole point of "profile what you ship".
 
         autofdo_use = getattr(self.options, 'autofdo-use', None)
         if autofdo_use:
@@ -701,7 +708,7 @@ class CcRuleGenerator:
                     cppflags.append('-fprofile-sample-use=' + profile)
                 else:  # gcc
                     cppflags.append('-fauto-profile=' + profile)
-                cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+                # No define: the AutoFDO use build is a normal optimized binary.
 
         # Recover -fPIE-level optimization under -fPIC: tell the compiler the
         # current TU's symbol definitions aren't interposable, so it can
