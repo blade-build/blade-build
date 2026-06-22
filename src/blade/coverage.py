@@ -302,6 +302,62 @@ class CcCoverageReporter:
             console.warning('Failed to generate the C/C++ coverage report')
 
 
+class MsvcCoverageReporter:
+    """Merge native cl.exe (MSVC) per-test Cobertura reports into one.
+
+    Unlike GCC/Clang (gcov `.gcda` -> gcovr), cl.exe has no gcov data. Under
+    ``blade test --coverage`` each cc_test is run through
+    ``Microsoft.CodeCoverage.Console.exe collect`` (see TestRunner.run), which
+    instruments the test exe dynamically via its PDB and writes a
+    ``<exe>.cobertura.xml`` next to it. This reporter merges those per-test
+    files into one Cobertura report with the same tool's ``merge`` command.
+
+    Like the other reporters it degrades gracefully: a no-op when no per-test
+    Cobertura exists, and only warns (never fails) when the tool is missing or
+    merge errors. See issue #1369.
+    """
+
+    def __init__(self, build_dir, collector):
+        self.__build_dir = build_dir
+        self.__collector = collector
+
+    def _cobertura_files(self):
+        files = []
+        for dirpath, _dirnames, filenames in os.walk(self.__build_dir):
+            for f in filenames:
+                if f.endswith('.cobertura.xml'):
+                    files.append(os.path.join(dirpath, f))
+        return sorted(files)
+
+    def generate(self):
+        """Merge per-test Cobertura into one report under the build dir."""
+        report_dir = os.path.join(self.__build_dir, 'cc_coverage_report')
+        merged = os.path.join(report_dir, 'coverage.cobertura.xml')
+        # The merge tool refuses to overwrite, and a stale merged file would be
+        # re-merged into itself on the next run -- drop it first.
+        if os.path.isfile(merged):
+            os.remove(merged)
+
+        files = self._cobertura_files()
+        if not files:
+            console.debug('No C/C++ (MSVC) coverage data (.cobertura.xml) '
+                          'found, skipping the MSVC coverage report')
+            return
+        if not self.__collector:
+            console.warning('Microsoft.CodeCoverage.Console.exe not found, '
+                            'skipping the MSVC coverage report')
+            return
+
+        if not os.path.exists(report_dir):
+            os.makedirs(report_dir)
+        console.info('Generating C/C++ (MSVC) coverage report `%s`' % merged)
+        cmd = ([self.__collector, 'merge', '-o', merged,
+                '-f', 'cobertura', '--nologo'] + files)
+        console.debug(' '.join(cmd))
+        if subprocess.call(cmd, shell=False) != 0:
+            console.warning('Failed to generate the MSVC coverage report')
+
+
 class GoCoverageReporter:
     """Generate a Go coverage report from `go test` coverage profiles.
 

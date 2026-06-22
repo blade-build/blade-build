@@ -107,5 +107,60 @@ class CcCoverageReporterTest(unittest.TestCase):
             call.assert_not_called()
 
 
+class MsvcCoverageReporterTest(unittest.TestCase):
+    """Native cl.exe coverage: merge per-test Cobertura via the MS tool (#1369)."""
+
+    _TOOL = r'C:\VS\Microsoft.CodeCoverage.Console.exe'
+
+    def _reporter(self, collector=_TOOL):
+        return coverage.MsvcCoverageReporter('build64_release_coverage', collector)
+
+    def test_generate_noop_without_cobertura(self):
+        r = self._reporter()
+        with mock.patch.object(r, '_cobertura_files', return_value=[]), \
+                mock.patch.object(coverage.os.path, 'isfile', return_value=False), \
+                mock.patch.object(coverage.subprocess, 'call') as call:
+            r.generate()
+            call.assert_not_called()
+
+    def test_generate_warns_when_collector_missing(self):
+        # Per-test data exists but the tool was not found: warn, don't merge.
+        r = self._reporter(collector='')
+        with mock.patch.object(r, '_cobertura_files', return_value=['a.cobertura.xml']), \
+                mock.patch.object(coverage.os.path, 'isfile', return_value=False), \
+                mock.patch.object(coverage.subprocess, 'call') as call:
+            r.generate()
+            call.assert_not_called()
+
+    def test_generate_merges_with_tool(self):
+        r = self._reporter()
+        files = ['x/a.cobertura.xml', 'y/b.cobertura.xml']
+        with mock.patch.object(r, '_cobertura_files', return_value=files), \
+                mock.patch.object(coverage.os.path, 'isfile', return_value=False), \
+                mock.patch.object(coverage.os.path, 'exists', return_value=True), \
+                mock.patch.object(coverage.subprocess, 'call', return_value=0) as call:
+            r.generate()
+        cmd = call.call_args[0][0]
+        self.assertEqual(cmd[0], self._TOOL)
+        self.assertIn('merge', cmd)
+        self.assertIn('cobertura', cmd)
+        # Output goes under cc_coverage_report; the inputs are appended.
+        out = cmd[cmd.index('-o') + 1]
+        self.assertTrue(out.endswith('coverage.cobertura.xml'))
+        self.assertIn('cc_coverage_report', out)
+        for f in files:
+            self.assertIn(f, cmd)
+
+    def test_generate_removes_stale_merged_first(self):
+        # A prior merged file must be deleted before the walk so it is not
+        # re-merged into itself.
+        r = self._reporter()
+        with mock.patch.object(r, '_cobertura_files', return_value=[]), \
+                mock.patch.object(coverage.os.path, 'isfile', return_value=True), \
+                mock.patch.object(coverage.os, 'remove') as rm:
+            r.generate()
+            rm.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

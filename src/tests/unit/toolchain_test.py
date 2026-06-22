@@ -112,6 +112,47 @@ class CcIsStrictEqualityTest(unittest.TestCase):
         self.assertFalse(tc.cc_is(''))
 
 
+class IsClangClTest(unittest.TestCase):
+    """is_clang_cl routes instrumentation (coverage/PGO) to the LLVM path while
+    cc_is('msvc') stays True for flag handling. Only ClangClToolChain is True."""
+
+    def test_base_toolchain_is_not_clang_cl(self):
+        tc = toolchain.ToolChain.__new__(toolchain.ToolChain)
+        self.assertFalse(tc.is_clang_cl())
+
+    def test_msvc_is_not_clang_cl(self):
+        tc = toolchain.MsvcToolChain.__new__(toolchain.MsvcToolChain)
+        self.assertFalse(tc.is_clang_cl())
+
+    def test_clang_cl_is_clang_cl(self):
+        tc = toolchain.ClangClToolChain.__new__(toolchain.ClangClToolChain)
+        self.assertTrue(tc.is_clang_cl())
+
+
+class CodeCoverageConsoleTest(unittest.TestCase):
+    """Locating Microsoft.CodeCoverage.Console.exe under the VS install (#1369)."""
+
+    def _tc(self, vs_path):
+        tc = toolchain.MsvcToolChain.__new__(toolchain.MsvcToolChain)
+        tc._vs_path = vs_path
+        return tc
+
+    def test_empty_without_vs_path(self):
+        self.assertEqual('', self._tc(None).code_coverage_console())
+
+    def test_found_when_present(self):
+        tc = self._tc(r'C:\VS')
+        with mock.patch.object(toolchain.os.path, 'isfile', return_value=True):
+            path = tc.code_coverage_console()
+        self.assertTrue(path.endswith('Microsoft.CodeCoverage.Console.exe'))
+        self.assertIn('CodeCoverage.Console', path)
+
+    def test_empty_when_absent(self):
+        tc = self._tc(r'C:\VS')
+        with mock.patch.object(toolchain.os.path, 'isfile', return_value=False):
+            self.assertEqual('', tc.code_coverage_console())
+
+
 class GccToolChainInitTest(unittest.TestCase):
     """Test GccToolChain constructor with explicit params."""
 

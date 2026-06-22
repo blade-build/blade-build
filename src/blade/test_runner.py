@@ -334,6 +334,12 @@ class TestRunner(binary_runner.BinaryRunner):
         toolchain = build_manager.instance.get_build_toolchain()
         coverage.CcCoverageReporter(self.build_dir, os.getcwd(),
                                     toolchain.cc_is('clang')).generate()
+        # Native cl.exe coverage is collected as per-test Cobertura by
+        # Microsoft.CodeCoverage.Console.exe (see run()); merge them into one
+        # report. clang-cl keeps the gcov path above. (#1369)
+        if toolchain.cc_is('msvc') and not toolchain.is_clang_cl():
+            coverage.MsvcCoverageReporter(
+                self.build_dir, toolchain.code_coverage_console()).generate()
         # Go coverage: go_test binaries drop `.coverprofile` files in the build
         # dir; merge them into one `go tool cover` HTML report.
         coverage.GoCoverageReporter(self.build_dir,
@@ -468,6 +474,26 @@ class TestRunner(binary_runner.BinaryRunner):
                 # GoCoverageReporter merges all of them into one HTML report.
                 cmd.append('-test.coverprofile=%s.coverprofile'
                            % os.path.abspath(self._executable(target)))
+            if self.options.coverage and target.type == 'cc_test':
+                # Native cl.exe builds emit no gcov data; collect coverage at
+                # run time with Microsoft.CodeCoverage.Console.exe, which
+                # instruments the test exe dynamically via its PDB (no compile
+                # flag) and writes Cobertura. One file per test, next to the exe
+                # like go's .coverprofile; MsvcCoverageReporter merges them.
+                # clang-cl keeps the gcov path, so it is excluded here. (#1369)
+                from blade import build_manager  # pylint: disable=import-outside-toplevel
+                tc = build_manager.instance.get_build_toolchain()
+                if tc.cc_is('msvc') and not tc.is_clang_cl():
+                    collector = tc.code_coverage_console()
+                    if collector:
+                        cobertura = (os.path.abspath(self._executable(target))
+                                     + '.cobertura.xml')
+                        cmd = [collector, 'collect', '-o', cobertura,
+                               '-f', 'cobertura', '--nologo', '--'] + cmd
+                    else:
+                        console.warning(
+                            'Microsoft.CodeCoverage.Console.exe not found; '
+                            'cannot collect coverage for %s' % target.fullname)
             if console.color_enabled():
                 test_env['GTEST_COLOR'] = 'yes'
             else:

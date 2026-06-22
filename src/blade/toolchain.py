@@ -289,6 +289,18 @@ class ToolChain:
         """
         return vendor == self._cc_vendor
 
+    def is_clang_cl(self):
+        """Whether the compiler is clang-cl (LLVM's cl-compatible driver).
+
+        clang-cl uses cl-style flags, so it reports ``cc_is('msvc')`` True like
+        cl.exe -- the flag-handling branches must keep matching it. But for
+        *instrumentation* (coverage, PGO) it takes the LLVM mechanism, not
+        cl.exe's; this predicate is what those gates consult to route it to the
+        clang path. Always False here; only ``ClangClToolChain`` overrides it.
+        See issue #1369.
+        """
+        return False
+
     def object_file_of(self, src):
         """Return the object file path for a given source file."""
         return src + self.obj_suffix
@@ -807,6 +819,21 @@ class MsvcToolChain(ToolChain):
             if os.path.isdir(msvc_path):
                 return msvc_path, ver
         return None, None
+
+    def code_coverage_console(self):
+        """Path to ``Microsoft.CodeCoverage.Console.exe``, or '' if not found.
+
+        This is the runner-time native coverage collector (it instruments the
+        test exe dynamically via its PDB -- no special compile flag). It ships
+        with VS / the Build Tools under the VS install. cl.exe coverage routes
+        through it; clang-cl uses the LLVM (gcov) path instead. See issue #1369.
+        """
+        if not self._vs_path:
+            return ''
+        tool = os.path.join(
+            self._vs_path, 'Common7', 'IDE', 'Extensions', 'Microsoft',
+            'CodeCoverage.Console', 'Microsoft.CodeCoverage.Console.exe')
+        return tool if os.path.isfile(tool) else ''
 
     @staticmethod
     def _find_windows_sdk():
@@ -1496,6 +1523,11 @@ class ClangClToolChain(MsvcToolChain):
         self.ld = self._llvm_tool(bindir, 'lld-link') or self.ld
         self.ar = self._llvm_tool(bindir, 'llvm-lib') or self.ar
         self.cc_version = self._get_clang_cl_version()
+
+    def is_clang_cl(self):
+        """clang-cl uses LLVM instrumentation (coverage / PGO), not cl.exe's --
+        even though it keeps cl-style flags (cc_is('msvc')). See issue #1369."""
+        return True
 
     def _find_llvm_bindir(self, prefix):
         """Locate the LLVM bin dir: an explicit prefix, else VS's bundled LLVM
