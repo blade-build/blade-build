@@ -156,6 +156,8 @@ Blade owns the build flags and the clang merge step; producing a *representative
 
 ### Sample-based PGO (AutoFDO)
 
+The instrumentation-based PGO above needs two builds — instrument, then optimize — which is cumbersome, and the instrumented run carries real overhead.
+
 AutoFDO is the **no-instrumentation** flavor of PGO: instead of an instrumented build, you sample a *normal optimized* binary with `perf` and rebuild with the result. The collection runs at ~1% overhead (vs ~2× for instrumentation), so the profile can come from real production traffic. gcc/clang only; effectively **Linux** (needs `perf` + hardware LBR). Uses a dedicated `build_*_autofdo` dir.
 
 ```bash
