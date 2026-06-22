@@ -180,6 +180,8 @@ blade build //foo:server --autofdo-use=foo.prof
 - **`--autofdo-use` 接受的是*已转换*的 profile**，不是原始 `perf.data`——转换工具（`llvm-profgen`/`create_gcov`）需要被采集的二进制，而 Blade 在构建时拿不到。传入原始 `perf.data` 会被识别并拒绝，并提示转换命令。
 - **MSVC / Windows** 上没有可用的采样式 PGO：Windows 没有 `perf`，而把 Windows（ETW）采样转成 LLVM sample profile 的工具链尚不完善、暂时用不起来——所以 clang-cl 上也不行。`--autofdo-*` 在所有 Windows 工具链上都会被跳过并警告；请改用插桩式 PGO（`--profile-generate`/`--profile-use`）。
 
+**平台可用性（采集 vs 使用）。** AutoFDO 的**采集**需要 `perf` + 硬件 **LBR**，实际上意味着一台**裸机 / 有 PMU 直通的 x86_64 Linux**——ARM Linux 虚拟机通常不暴露 PMU/LBR，`perf record -b` 在里面也会失败。**macOS 与 Windows 根本无法采集**（没有 `perf`；其原生采样器 Instruments/`sample`/`dtrace`、ETW 都喂不进 `llvm-profgen`）。`--autofdo-use` 的标志是可移植的，所以在 Linux 上采到的 profile **可以**拿到任意平台去用——但跨 OS/架构复用并不精确、也不受支持。在 macOS/Windows 上 `--autofdo-generate` 能编但没意义（本地没法采样）；**请改用插桩式 PGO**——它在所有平台上都完全可用、不需要任何特殊硬件。
+
 ## 使用示例
 
 ```bash

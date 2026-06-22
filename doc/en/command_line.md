@@ -180,6 +180,8 @@ blade build //foo:server --autofdo-use=foo.prof
 - **`--autofdo-use` takes an *already-converted* profile**, not a raw `perf.data` — the converter (`llvm-profgen`/`create_gcov`) needs the collected binary, which Blade doesn't have at build time. A raw `perf.data` is detected and rejected with the conversion command.
 - **MSVC / Windows** has no usable sample-based PGO: there is no `perf`, and the tooling to turn Windows (ETW) samples into an LLVM sample profile isn't mature yet — so this doesn't work even for clang-cl. `--autofdo-*` is skipped with a warning on every Windows toolchain; use instrumentation PGO (`--profile-generate`/`--profile-use`) instead.
 
+**Platform availability (collection vs use).** AutoFDO *collection* needs `perf` + hardware **LBR**, which in practice means a **bare-metal / PMU-passthrough x86_64 Linux** host — ARM Linux VMs typically expose no PMU/LBR, so `perf record -b` fails there too. **macOS and Windows cannot collect at all** (no `perf`; their native samplers — Instruments/`sample`/`dtrace`, ETW — don't feed `llvm-profgen`). The `--autofdo-use` flag is portable, so a profile collected on a Linux host *can* be applied on any platform — but cross-OS/arch reuse is imperfect and unsupported. On macOS/Windows, `--autofdo-generate` builds but is pointless (you can't sample it locally); **use instrumentation PGO instead** — it is fully functional on every platform with no special hardware.
+
 ## Usage Examples
 
 ```bash
