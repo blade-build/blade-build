@@ -326,6 +326,25 @@ class CommandLineParser:
                  'same build_*_pgo dir as --profile-generate so gcc finds its '
                  '.gcda (keyed by object path).')
 
+        # AutoFDO (sample-based PGO) -- no instrumentation; profile comes from
+        # perf sampling a normal optimized build (#1372). gcc/clang only.
+        parser.add_argument(
+            '--autofdo-generate', dest='autofdo-generate',
+            action='store_true', default=False,
+            help='AutoFDO phase 1: build normally + AutoFDO-friendly debug info '
+                 '(gcc/clang) so a perf run maps back to source. Run the binary '
+                 'under `perf record -b`, then convert. Uses build_*_autofdo.')
+
+        parser.add_argument(
+            '--autofdo-use', dest='autofdo-use', metavar='profile',
+            action='store', type=str, default=None,
+            help='AutoFDO phase 2: rebuild using a sample profile already '
+                 'converted from perf data (clang sample profile -> '
+                 '-fprofile-sample-use; gcc .afdo -> -fauto-profile). Convert '
+                 'perf.data yourself first (clang: llvm-profgen --perfdata=... '
+                 '--binary=... ; gcc: create_gcov ...), since that needs the '
+                 'collected binary. Uses the same build_*_autofdo dir.')
+
     def __add_fission_arguments(self, parser):
         """Add fission support to cc_binary."""
         parser.add_argument(

@@ -154,6 +154,28 @@ Toolchain differences blade handles for you:
 
 Blade owns the build flags and the clang merge step; producing a *representative* workload (and deciding when a profile is stale) is your job. Profiles are **not** portable across compilers — instrument, run, and optimize all on one toolchain.
 
+### Sample-based PGO (AutoFDO)
+
+AutoFDO is the **no-instrumentation** flavor of PGO: instead of an instrumented build, you sample a *normal optimized* binary with `perf` and rebuild with the result. The collection runs at ~1% overhead (vs ~2× for instrumentation), so the profile can come from real production traffic. gcc/clang only; effectively **Linux** (needs `perf` + hardware LBR). Uses a dedicated `build_*_autofdo` dir.
+
+```bash
+# Phase 1 — build with AutoFDO-friendly debug info, then sample under perf
+blade build //foo:server --autofdo-generate
+perf record -b -- ./build_release_autofdo/foo/server     # -b = LBR branch records
+
+# Convert perf.data -> a sample profile yourself (it needs the collected binary):
+#   clang: llvm-profgen --perfdata=perf.data --binary=build_release_autofdo/foo/server --output=foo.prof
+#   gcc:   create_gcov  --binary=build_release_autofdo/foo/server --profile=perf.data --gcov=foo.afdo
+
+# Phase 2 — rebuild using the converted profile
+blade build //foo:server --autofdo-use=foo.prof
+```
+
+- **clang** → `-fprofile-sample-use=<profile>`; the collection build adds `-fdebug-info-for-profiling` + `-funique-internal-linkage-names` (better sample-to-source mapping).
+- **gcc** → `-fauto-profile=<profile>`; the collection build needs only the `-g` Blade already emits (the clang debug flags are clang-only).
+- **`--autofdo-use` takes an *already-converted* profile**, not a raw `perf.data` — the converter (`llvm-profgen`/`create_gcov`) needs the collected binary, which Blade doesn't have at build time. A raw `perf.data` is detected and rejected with the conversion command.
+- **MSVC** has no sample-based PGO — `--autofdo-*` is skipped with a warning; use clang-cl, or instrumentation PGO (`--profile-generate`/`--profile-use`).
+
 ## Usage Examples
 
 ```bash

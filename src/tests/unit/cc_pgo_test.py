@@ -40,6 +40,8 @@ def _make_generator(cc_vendor='gcc', target_os='linux',
     gen.options.gprof = False
     gen.options.coverage = False
     gen.options.sanitizers = []
+    setattr(gen.options, 'autofdo-generate', False)
+    setattr(gen.options, 'autofdo-use', None)
     # PGO options use dashed dests; set/delete so getattr/hasattr behave like
     # argparse (absent attr => option not given).
     for attr, val in (('profile-generate', profile_generate),

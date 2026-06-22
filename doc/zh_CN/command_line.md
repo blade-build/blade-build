@@ -154,6 +154,28 @@ blade 替你处理的工具链差异：
 
 blade 负责构建标志和 clang 的合并步骤；而产出**代表性**负载（以及判断 profile 是否过期）是你的职责。profile **不能**跨编译器复用——插桩、运行、优化都要在同一套工具链上完成。
 
+### 采样式 PGO（AutoFDO）
+
+AutoFDO 是 PGO 的**免插桩**形态：不做插桩构建，而是用 `perf` 对一个**普通优化**二进制采样，再用结果重建。采集开销约 1%（插桩约 2×），因此 profile 可以直接取自线上真实流量。仅 gcc/clang；实际只在 **Linux** 上（需要 `perf` + 硬件 LBR）。使用独立的 `build_*_autofdo` 目录。
+
+```bash
+# 第一阶段——带 AutoFDO 友好的调试信息构建，再用 perf 采样
+blade build //foo:server --autofdo-generate
+perf record -b -- ./build_release_autofdo/foo/server     # -b 开启 LBR 分支记录
+
+# 自己把 perf.data 转成 sample profile（转换需要被采集的二进制）：
+#   clang: llvm-profgen --perfdata=perf.data --binary=build_release_autofdo/foo/server --output=foo.prof
+#   gcc:   create_gcov  --binary=build_release_autofdo/foo/server --profile=perf.data --gcov=foo.afdo
+
+# 第二阶段——用转换后的 profile 重建
+blade build //foo:server --autofdo-use=foo.prof
+```
+
+- **clang** → `-fprofile-sample-use=<profile>`；采集构建额外加 `-fdebug-info-for-profiling` + `-funique-internal-linkage-names`（采样到源码的映射更准）。
+- **gcc** → `-fauto-profile=<profile>`；采集构建只需 Blade 已发出的 `-g`（那两个调试标志是 clang 专有的）。
+- **`--autofdo-use` 接受的是*已转换*的 profile**，不是原始 `perf.data`——转换工具（`llvm-profgen`/`create_gcov`）需要被采集的二进制，而 Blade 在构建时拿不到。传入原始 `perf.data` 会被识别并拒绝，并提示转换命令。
+- **MSVC** 没有采样式 PGO——`--autofdo-*` 会被跳过并警告；请用 clang-cl，或插桩式 PGO（`--profile-generate`/`--profile-use`）。
+
 ## 使用示例
 
 ```bash

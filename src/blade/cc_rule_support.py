@@ -379,6 +379,68 @@ def _pgo_msvc_link_flags(options):
     return []
 
 
+# --- AutoFDO (sample-based PGO, #1372) ---------------------------------------
+#
+# AutoFDO needs NO instrumentation: you build a normal optimized binary (with
+# debug info so samples map to source), run it under `perf record -b` (LBR), and
+# rebuild with the resulting sample profile. gcc/clang only:
+#   * clang -> `-fprofile-sample-use=<profile>`; collection adds
+#     `-fdebug-info-for-profiling -funique-internal-linkage-names`.
+#   * gcc   -> `-fauto-profile=<profile>`; collection needs only the `-g` blade
+#     already emits (the clang debug flags are clang-only).
+# blade applies the flags; converting `perf.data` -> a sample profile is the
+# user's step because the converter (llvm-profgen / create_gcov) needs the
+# *collected binary*, which blade doesn't have at flag-computation time. So
+# `--autofdo-use` takes an already-converted profile; a raw perf.data is
+# detected and rejected with the exact conversion command.
+
+_PERF_DATA_MAGIC = b'PERFILE2'
+
+
+def _autofdo_active(options):
+    return (getattr(options, 'autofdo-generate', False)
+            or bool(getattr(options, 'autofdo-use', None)))
+
+
+def _resolve_autofdo_profile(path):
+    """Return a sample-profile path for `-fprofile-sample-use`/`-fauto-profile`.
+
+    `path` must be an already-converted profile. If it is a raw `perf.data`
+    (detected by the ``PERFILE2`` magic), warn with the conversion command and
+    return ``None`` so the build proceeds without AutoFDO rather than handing
+    the compiler a file it can't read.
+    """
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(8)
+    except OSError:
+        head = b''
+    if head == _PERF_DATA_MAGIC:
+        console.warning(
+            '--autofdo-use was given a raw perf.data ("%s"); convert it to a '
+            'sample profile first (it needs the collected binary, which blade '
+            "doesn't have): clang -> `llvm-profgen --perfdata=%s --binary=<exe> "
+            '--output=out.prof`; gcc -> `create_gcov --binary=<exe> '
+            '--profile=%s --gcov=out.afdo`. Skipping AutoFDO.'
+            % (path, path, path))
+        return None
+    return path
+
+
+_autofdo_msvc_warned = False
+
+
+def _warn_autofdo_msvc():
+    global _autofdo_msvc_warned
+    if _autofdo_msvc_warned:
+        return
+    _autofdo_msvc_warned = True
+    console.warning(
+        'AutoFDO (--autofdo-generate/--autofdo-use) is not supported on MSVC '
+        '(no sample-based PGO in cl.exe); the flag is ignored. Use clang-cl, or '
+        'native MSVC instrumentation PGO (--profile-generate/--profile-use).')
+
+
 # --- clang-cl instrumentation (coverage / PGO) -------------------------------
 #
 # clang-cl keeps cl-style flags for normal compilation (so it reports
@@ -618,6 +680,29 @@ class CcRuleGenerator:
                 cppflags.append('-Wno-error=coverage-mismatch')
                 cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
 
+        # AutoFDO (sample-based PGO) -- see the module-level "AutoFDO" note.
+        # gcc/clang path; MSVC never reaches here (it has no sample PGO; warned
+        # separately). Linux-only in practice (perf+LBR), but the flags are
+        # portable, so collection-vs-use platform is the user's concern.
+        if getattr(self.options, 'autofdo-generate', False):
+            # Collection build: a normal optimized build plus the debug info
+            # that lets perf samples map back to source. clang has dedicated
+            # flags; gcc just needs the `-g` it already emits.
+            if self.build_toolchain.cc_is('clang'):
+                cppflags.append('-fdebug-info-for-profiling')
+                cppflags.append('-funique-internal-linkage-names')
+            cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+
+        autofdo_use = getattr(self.options, 'autofdo-use', None)
+        if autofdo_use:
+            profile = _resolve_autofdo_profile(autofdo_use)
+            if profile:
+                if self.build_toolchain.cc_is('clang'):
+                    cppflags.append('-fprofile-sample-use=' + profile)
+                else:  # gcc
+                    cppflags.append('-fauto-profile=' + profile)
+                cppflags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+
         # Recover -fPIE-level optimization under -fPIC: tell the compiler the
         # current TU's symbol definitions aren't interposable, so it can
         # reference/inline its own globals directly instead of going through
@@ -771,6 +856,11 @@ class CcRuleGenerator:
             # PGO (#1366): `/GL` on every compile when a profile mode is active,
             # so the link can do LTCG instrumentation / optimization.
             cppflags = cppflags + _pgo_msvc_compile_flags(self.options)
+
+        # AutoFDO has no MSVC mechanism (cl.exe) and isn't wired for clang-cl
+        # yet; warn once so the flags don't silently no-op (#1372).
+        if _autofdo_active(self.options):
+            _warn_autofdo_msvc()
 
         # The Python stderr-tee wrapper captures /showIncludes output and tees
         # it to both stderr (for Ninja's deps=msvc) and the inclusion stack

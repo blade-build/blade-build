@@ -41,6 +41,12 @@ def _build_variant_suffix(options):
     if (getattr(options, 'profile-generate', None) is not None or
             getattr(options, 'profile-use', None) is not None):
         variants.append('pgo')
+    # AutoFDO (sample PGO): the collection build adds debug-info flags and the
+    # optimize build adds -fprofile-sample-use / -fauto-profile -- both differ
+    # from a normal build, so they share their own `_autofdo` dir.
+    if (getattr(options, 'autofdo-generate', False) or
+            getattr(options, 'autofdo-use', None)):
+        variants.append('autofdo')
     return ''.join('_' + v for v in variants)
 
 

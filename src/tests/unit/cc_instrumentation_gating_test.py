@@ -46,6 +46,8 @@ def _make_generator(target_os, cc_vendor='gcc', gprof=False, coverage=False):
     gen.options.gprof = gprof
     gen.options.coverage = coverage
     gen.options.sanitizers = []
+    setattr(gen.options, 'autofdo-generate', False)
+    setattr(gen.options, 'autofdo-use', None)
     for attr in ('profile-generate', 'profile-use'):
         try:
             delattr(gen.options, attr)
