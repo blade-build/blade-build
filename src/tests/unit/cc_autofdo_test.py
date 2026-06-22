@@ -90,8 +90,13 @@ class AutofdoGenerateTest(unittest.TestCase):
     def test_autofdo_defines_no_pgo_macro(self):
         # AutoFDO samples a *normal* binary -- no instrumentation runtime to
         # flush -- so neither phase defines a PGO macro (keep it == production).
-        for opts in (dict(autofdo_generate=True), dict(autofdo_use=None)):
-            gen, fake = _make_generator(cc_vendor='clang', **opts)
+        prof = tempfile.NamedTemporaryFile(suffix='.prof', delete=False)
+        prof.write(b'x')
+        prof.close()
+        self.addCleanup(os.unlink, prof.name)
+        cases = [_make_generator(cc_vendor='clang', autofdo_generate=True),
+                 _make_generator(cc_vendor='clang', autofdo_use=prof.name)]
+        for gen, fake in cases:
             cppflags, _ = _flags(gen, fake)
             self.assertFalse([f for f in cppflags
                               if 'PGO_GENERATE' in f or 'PROFILE_GUIDED' in f])
