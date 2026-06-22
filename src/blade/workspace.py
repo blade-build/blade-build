@@ -70,7 +70,11 @@ def _build_dir_name(build_path_format, options, toolchain):
 
 def _generate_scm_svn():
     url = revision = 'unknown'
-    returncode, stdout, stderr = util.run_command(['svn', 'info'])
+    try:
+        returncode, stdout, stderr = util.run_command(['svn', 'info'])
+    except OSError as e:  # svn not installed / not on PATH
+        console.debug('Failed to run svn for scm info: %s' % e)
+        return url, revision
     if returncode != 0:
         console.debug('Failed to generate svn scm: %s' % stderr)
     else:
@@ -88,7 +92,11 @@ def _generate_scm_git():
     url = revision = 'unknown'
 
     def git(cmd):
-        returncode, stdout, stderr = util.run_command(cmd)
+        try:
+            returncode, stdout, stderr = util.run_command(cmd)
+        except OSError as e:  # git not installed / not on PATH
+            console.debug('Failed to run git for scm info: %s' % e)
+            return ''
         if returncode != 0:
             console.debug('Failed to generate git scm: %s' % stderr)
             return ''
