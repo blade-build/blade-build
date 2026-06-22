@@ -176,7 +176,7 @@ blade build //foo:server --autofdo-use=foo.prof
 - **clang** → `-fprofile-sample-use=<profile>`；采集构建额外加 `-fdebug-info-for-profiling` + `-funique-internal-linkage-names`（采样到源码的映射更准）。
 - **gcc** → `-fauto-profile=<profile>`；采集构建只需 Blade 已发出的 `-g`（那两个调试标志是 clang 专有的）。
 - **`--autofdo-use` 接受的是*已转换*的 profile**，不是原始 `perf.data`——转换工具（`llvm-profgen`/`create_gcov`）需要被采集的二进制，而 Blade 在构建时拿不到。传入原始 `perf.data` 会被识别并拒绝，并提示转换命令。
-- **MSVC** 没有采样式 PGO——`--autofdo-*` 会被跳过并警告；请用 clang-cl，或插桩式 PGO（`--profile-generate`/`--profile-use`）。
+- **MSVC / Windows** 上没有可用的采样式 PGO：Windows 没有 `perf`，而把 Windows（ETW）采样转成 LLVM sample profile 的工具链尚不完善、暂时用不起来——所以 clang-cl 上也不行。`--autofdo-*` 在所有 Windows 工具链上都会被跳过并警告；请改用插桩式 PGO（`--profile-generate`/`--profile-use`）。
 
 ## 使用示例
 

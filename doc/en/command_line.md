@@ -176,7 +176,7 @@ blade build //foo:server --autofdo-use=foo.prof
 - **clang** → `-fprofile-sample-use=<profile>`; the collection build adds `-fdebug-info-for-profiling` + `-funique-internal-linkage-names` (better sample-to-source mapping).
 - **gcc** → `-fauto-profile=<profile>`; the collection build needs only the `-g` Blade already emits (the clang debug flags are clang-only).
 - **`--autofdo-use` takes an *already-converted* profile**, not a raw `perf.data` — the converter (`llvm-profgen`/`create_gcov`) needs the collected binary, which Blade doesn't have at build time. A raw `perf.data` is detected and rejected with the conversion command.
-- **MSVC** has no sample-based PGO — `--autofdo-*` is skipped with a warning; use clang-cl, or instrumentation PGO (`--profile-generate`/`--profile-use`).
+- **MSVC / Windows** has no usable sample-based PGO: there is no `perf`, and the tooling to turn Windows (ETW) samples into an LLVM sample profile isn't mature yet — so this doesn't work even for clang-cl. `--autofdo-*` is skipped with a warning on every Windows toolchain; use instrumentation PGO (`--profile-generate`/`--profile-use`) instead.
 
 ## Usage Examples
 
