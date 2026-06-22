@@ -160,7 +160,7 @@ Blade owns the build flags and the clang merge step; producing a *representative
 
 The instrumentation-based PGO above needs two builds — instrument, then optimize — which is cumbersome, and the instrumented run carries real overhead.
 
-AutoFDO is the **no-instrumentation** flavor of PGO: instead of an instrumented build, you sample a *normal optimized* binary with `perf` and rebuild with the result. The collection runs at ~1% overhead (vs ~2× for instrumentation), so the profile can come from real production traffic. gcc/clang only; effectively **Linux** (needs `perf` + hardware LBR). Uses a dedicated `build_*_autofdo` dir.
+AutoFDO is the **no-instrumentation** flavor of PGO: instead of an instrumented build, you sample a *normal optimized* binary and rebuild with the result. The collection runs at ~1% overhead (vs ~2× for instrumentation), so the profile can come from real production traffic. Works on **gcc/clang** (sample with `perf`) and **native MSVC** (sample with `xperf` — see SPGO below). Uses a dedicated `build_*_autofdo` dir.
 
 ```bash
 # Phase 1 — build with AutoFDO-friendly debug info, then sample under perf
@@ -174,6 +174,16 @@ perf record -b -- ./build_release_autofdo/foo/server     # -b = LBR branch recor
 # Phase 2 — rebuild using the converted profile
 blade build //foo:server --autofdo-use=foo.prof
 ```
+
+**Typical usage — one build per release (steady state).** Unlike instrumentation PGO (which always needs a separate *slow instrumented* build), AutoFDO's collection binary is a *normal* binary, so once you have a profile you combine both phases into **a single build that is both optimized and collectable**:
+
+```bash
+# Each release: optimize with last cycle's profile AND stay sample-able for the next.
+blade build //foo:server --autofdo-generate --autofdo-use=foo.prof
+# ship it -> sample it in production -> convert -> feeds the *next* release's --autofdo-use
+```
+
+`--autofdo-generate` + `--autofdo-use` compose on all three toolchains (gcc/clang add the debug info alongside `-fprofile-sample-use`/`-fauto-profile`; MSVC links `/spgo` alongside `/spdin:` — verified legal on MSVC 14.51, x64 + ARM64). So in steady state every build is simultaneously "optimize with last profile" and "collect for next" — no dedicated extra build. (The very first time, run `--autofdo-generate` alone to bootstrap a profile.) The AutoFDO debug flags are cheap, so you can also bake them into your release config and pass just `--autofdo-use` daily.
 
 - **clang** → `-fprofile-sample-use=<profile>`; the collection build adds `-fdebug-info-for-profiling` + `-funique-internal-linkage-names` (better sample-to-source mapping).
 - **gcc** → `-fauto-profile=<profile>`; the collection build needs only the `-g` Blade already emits (the clang debug flags are clang-only).

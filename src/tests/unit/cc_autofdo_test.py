@@ -13,7 +13,8 @@ AutoFDO is sample-based PGO (no instrumentation):
   * use: clang -> `-fprofile-sample-use=<profile>`, gcc -> `-fauto-profile=`.
     The profile must already be converted from perf.data (blade can't run the
     converter -- it needs the collected binary); a raw perf.data is rejected.
-  * MSVC: no sample PGO -- warned, flags skipped.
+  * native MSVC -> SPGO (/GL + /spgo collect, /LTCG /spdin: optimize, the two
+    compose for a steady-state build); clang-cl can't do either -> warned.
 """
 
 import os
@@ -174,7 +175,7 @@ class AutofdoBuildDirTest(unittest.TestCase):
 
 class AutofdoMsvcTest(unittest.TestCase):
     def setUp(self):
-        cc_rule_support._autofdo_msvc_warned = False
+        cc_rule_support._autofdo_clang_cl_warned = False
 
     def test_active_predicate(self):
         self.assertTrue(cc_rule_support._autofdo_active(
@@ -221,6 +222,13 @@ class SpgoMsvcTest(unittest.TestCase):
                          cc_rule_support._spgo_msvc_link_flags(
                              self._opts(use='/tmp/app.spd')))
         self.assertEqual([], cc_rule_support._spgo_msvc_link_flags(self._opts()))
+
+    def test_link_flags_combined_steady_state(self):
+        # generate + use together -> one build that optimizes AND emits a fresh
+        # .spd (verified legal on MSVC; /LTCG /spdin: + /spgo).
+        self.assertEqual(['/LTCG', '/spdin:/tmp/app.spd', '/spgo'],
+                         cc_rule_support._spgo_msvc_link_flags(
+                             self._opts(generate=True, use='/tmp/app.spd')))
 
     def test_no_pgo_define(self):
         # SPGO samples a normal binary -- no flush define (like AutoFDO).

@@ -434,16 +434,16 @@ def _resolve_autofdo_profile(path):
     return path
 
 
-_autofdo_msvc_warned = False
+_autofdo_clang_cl_warned = False
 
 
 def _warn_autofdo_clang_cl():
     """clang-cl can't do sample PGO on Windows: SPGO is a cl.exe/link feature,
     and LLVM AutoFDO needs `perf`, which Windows lacks."""
-    global _autofdo_msvc_warned
-    if _autofdo_msvc_warned:
+    global _autofdo_clang_cl_warned
+    if _autofdo_clang_cl_warned:
         return
-    _autofdo_msvc_warned = True
+    _autofdo_clang_cl_warned = True
     console.warning(
         'AutoFDO is not available for clang-cl: MSVC SPGO is a cl.exe feature '
         '(blade drives it on native cl.exe), and LLVM AutoFDO needs perf, which '
@@ -478,14 +478,18 @@ def _spgo_msvc_lib_flags(options):
 
 
 def _spgo_msvc_link_flags(options):
-    """SPGO link flags: `/spgo` preps the collection build (emits the `.spd`);
-    `/LTCG /spdin:<spd>` consumes the sampled profile on the optimize build."""
-    if getattr(options, 'autofdo-generate', False):
-        return ['/spgo']
+    """SPGO link flags: `/spdin:<spd>` consumes the sampled profile (optimize),
+    `/spgo` emits a fresh `.spd` for the next round (collect). The two compose
+    -- passing both --autofdo-generate and --autofdo-use gives a single
+    steady-state build that optimizes with last cycle's profile *and* is
+    collectable for the next (verified legal on MSVC 14.51, x64 + ARM64), the
+    same one-build cadence gcc/clang get. /LTCG is needed whenever a profile is
+    consumed."""
     use = getattr(options, 'autofdo-use', None)
-    if use:
-        return ['/LTCG', '/spdin:' + use]
-    return []
+    flags = ['/LTCG', '/spdin:' + use] if use else []
+    if getattr(options, 'autofdo-generate', False):
+        flags.append('/spgo')
+    return flags
 
 
 # --- clang-cl instrumentation (coverage / PGO) -------------------------------
