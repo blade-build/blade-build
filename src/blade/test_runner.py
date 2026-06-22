@@ -332,8 +332,11 @@ class TestRunner(binary_runner.BinaryRunner):
         # --coverage; gcovr turns it into an HTML report.
         from blade import build_manager  # pylint: disable=import-outside-toplevel
         toolchain = build_manager.instance.get_build_toolchain()
-        coverage.CcCoverageReporter(self.build_dir, os.getcwd(),
-                                    toolchain.cc_is('clang')).generate()
+        # clang-cl emits gcov data (.gcda) under --coverage like clang, so it
+        # uses the gcov reporter with `llvm-cov gcov`, not GNU gcov. (#1369)
+        coverage.CcCoverageReporter(
+            self.build_dir, os.getcwd(),
+            toolchain.cc_is('clang') or toolchain.is_clang_cl()).generate()
         # Native cl.exe coverage is collected as per-test Cobertura by
         # Microsoft.CodeCoverage.Console.exe (see run()); merge them into one
         # report. clang-cl keeps the gcov path above. (#1369)

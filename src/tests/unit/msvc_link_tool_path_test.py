@@ -39,6 +39,7 @@ class MsvcLinkToolPathTest(unittest.TestCase):
             'rc': os.path.join(_SDK_BIN, 'rc.exe'),
         }
         gen.build_toolchain = mock.Mock()
+        gen.build_toolchain.is_clang_cl.return_value = False
         gen.build_toolchain.tool = tools.get
         gen.build_toolchain.filter_cc_flags = lambda f, *a: list(f)
         gen.build_toolchain.get_system_lib_paths.return_value = []

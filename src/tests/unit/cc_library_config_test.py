@@ -112,6 +112,7 @@ class CcArchiveRulesTest(unittest.TestCase):
         # (profile-generate / profile-use) read as "not given" (PGO off).
         gen.options = mock.Mock(spec=[])
         gen.build_toolchain = mock.Mock()
+        gen.build_toolchain.is_clang_cl.return_value = False
         gen.build_toolchain.target_os = target_os
         gen.build_accelerator = mock.Mock()
         gen.build_accelerator.get_ar_command.return_value = 'ar'

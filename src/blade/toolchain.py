@@ -1529,6 +1529,26 @@ class ClangClToolChain(MsvcToolChain):
         even though it keeps cl-style flags (cc_is('msvc')). See issue #1369."""
         return True
 
+    def profile_runtime_libdir(self):
+        """Directory of clang's Windows compiler-rt libs (clang_rt.profile-*).
+
+        Instrumented objects (coverage / PGO-generate) autolink the profile
+        runtime via a ``/DEFAULTLIB:clang_rt.profile-*`` directive, so lld-link
+        only needs this directory on ``/LIBPATH``. It lives at
+        ``<clang>/lib/clang/<ver>/lib/windows``. Best-effort: '' if not found.
+        See issue #1369.
+        """
+        import glob
+        bindir = os.path.dirname(self.cc)
+        if not bindir:
+            return ''
+        clang_root = os.path.dirname(bindir)
+        pattern = os.path.join(clang_root, 'lib', 'clang', '*', 'lib', 'windows')
+        for d in sorted(glob.glob(pattern), reverse=True):
+            if os.path.isdir(d):
+                return d
+        return ''
+
     def _find_llvm_bindir(self, prefix):
         """Locate the LLVM bin dir: an explicit prefix, else VS's bundled LLVM
         (``<vs>/VC/Tools/Llvm/<host>/bin``), else PATH."""

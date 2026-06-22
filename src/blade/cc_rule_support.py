@@ -246,21 +246,6 @@ def _warn_gprof_unsupported(target_os):
         '(Instruments/sample on macOS).' % target_os)
 
 
-# `--coverage` runs the cc flag computation per target; only complain once.
-_coverage_unsupported_warned = False
-
-
-def _warn_coverage_unsupported():
-    global _coverage_unsupported_warned
-    if _coverage_unsupported_warned:
-        return
-    _coverage_unsupported_warned = True
-    console.warning(
-        '--coverage is not supported on MSVC (cl.exe has no gcov-style '
-        'instrumentation); the flag is ignored. Use clang-cl for LLVM source '
-        'coverage, or OpenCppCoverage (PDB-based, no rebuild).')
-
-
 # --- PGO (profile-guided optimization) ---------------------------------------
 #
 # PGO is invocation-driven (a global build mode), per the design in #1366:
@@ -394,6 +379,76 @@ def _pgo_msvc_link_flags(options):
     return []
 
 
+# --- clang-cl instrumentation (coverage / PGO) -------------------------------
+#
+# clang-cl keeps cl-style flags for normal compilation (so it reports
+# cc_is('msvc') True and rides the Windows rules), but for *instrumentation* it
+# takes the LLVM mechanism, not cl.exe's /GL+/LTCG family. The toolchain's
+# is_clang_cl() predicate routes it here. See issue #1369. clang-cl is not on
+# the CI box, so this path is unit-test-validated + best-effort (the link side
+# in particular -- blade links via lld-link directly, not the clang-cl driver).
+
+_clang_cl_profile_runtime_warned = False
+
+
+def _warn_clang_cl_profile_runtime_missing():
+    global _clang_cl_profile_runtime_warned
+    if _clang_cl_profile_runtime_warned:
+        return
+    _clang_cl_profile_runtime_warned = True
+    console.warning(
+        "clang-cl's profile runtime (clang_rt.profile-*) was not found; "
+        'coverage / --profile-generate links may fail to resolve __llvm_profile* '
+        'symbols. It ships under <clang>/lib/clang/<ver>/lib/windows.')
+
+
+def _instrument_clang_cl_compile_flags(toolchain, options):
+    """LLVM instrumentation *compile* flags for clang-cl (coverage + PGO).
+
+    Mirrors the gcc/clang path in _get_intrinsic_cc_flags, but emitted into the
+    Windows compile rules because clang-cl is cc_is('msvc'). Coverage uses
+    gcov-style `--coverage` (so the existing gcovr/llvm-cov flow applies); PGO
+    uses `-fprofile-generate` / `-fprofile-use=<merged.profdata>`. See #1369.
+    """
+    flags = []
+    if getattr(options, 'coverage', False):
+        flags.append('--coverage')
+    gen = _pgo_option(options, 'profile-generate')
+    if gen is not None:
+        flags.append('-fprofile-generate' + ('=' + gen if gen else ''))
+        flags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+    use = _pgo_option(options, 'profile-use')
+    if use is not None:
+        profdata = _resolve_clang_profdata(toolchain, use)
+        flags.append('-fprofile-use=' + profdata if profdata else '-fprofile-use')
+        # Tolerate stale/partial profiles as warnings, not errors.
+        flags.append('-Wno-error=profile-instr-out-of-date')
+        flags.append('-Wno-error=profile-instr-unprofiled')
+        flags.append('-DPROFILE_GUIDED_OPTIMIZATION')
+    return flags
+
+
+def _instrument_clang_cl_link_flags(toolchain, options):
+    """LLVM instrumentation *link* flags for clang-cl (coverage / PGO-generate).
+
+    Driver flags (`--coverage`, `-fprofile-generate`) don't reach lld-link --
+    blade links directly, not through the clang-cl driver. But instrumented
+    objects autolink the profile runtime via a `/DEFAULTLIB:clang_rt.profile-*`
+    directive, so all lld-link needs is that runtime directory on `/LIBPATH`.
+    `--profile-use` reads the profile at compile time and needs nothing here.
+    Best-effort: warns once if the runtime dir can't be located. See #1369.
+    """
+    active = (getattr(options, 'coverage', False)
+              or _pgo_option(options, 'profile-generate') is not None)
+    if not active:
+        return []
+    libdir = toolchain.profile_runtime_libdir()
+    if not libdir:
+        _warn_clang_cl_profile_runtime_missing()
+        return []
+    return ['/LIBPATH:"%s"' % libdir if ' ' in libdir else '/LIBPATH:%s' % libdir]
+
+
 class CcRuleGenerator:
     """Generate cc/cuda ninja rules from a RuleContext (see module docstring)."""
 
@@ -511,15 +566,14 @@ class CcRuleGenerator:
 
         if getattr(self.options, 'coverage', False):
             # `--coverage` is the gcc/clang driver flag (-fprofile-arcs
-            # -ftest-coverage / instr-profile). Native MSVC cl.exe has no
-            # gcov-style instrumentation, so the flag is meaningless there --
-            # skip it and warn once instead of feeding cl.exe a flag it can't
-            # parse. (clang-cl reports as 'clang' and keeps the gcc-style path.)
-            if self.build_toolchain.cc_is('msvc'):
-                _warn_coverage_unsupported()
-            else:
-                cppflags.append('--coverage')
-                linkflags.append('--coverage')
+            # -ftest-coverage). This is the gcc/clang path only -- MSVC
+            # toolchains (cl.exe *and* clang-cl) are cc_is('msvc') and never
+            # reach here; they take the Windows rules instead. There cl.exe
+            # collects coverage at run time (Microsoft.CodeCoverage.Console.exe,
+            # see TestRunner), and clang-cl emits `--coverage` from the Windows
+            # compile/link rules (is_clang_cl gate). See issue #1369.
+            cppflags.append('--coverage')
+            linkflags.append('--coverage')
 
         sanitizers = getattr(self.options, 'sanitizers', None)
         if sanitizers:
@@ -707,9 +761,16 @@ class CcRuleGenerator:
         global_config = config.get_section('global_config')
         cppflags = cppflags + windows_config['debug_info_levels'][global_config['debug_info_level']]
 
-        # PGO (#1366): `/GL` on every compile when a profile mode is active, so
-        # the link can do LTCG instrumentation / optimization.
-        cppflags = cppflags + _pgo_msvc_compile_flags(self.options)
+        # Instrumentation (#1369): clang-cl takes the LLVM mechanism (gcov-style
+        # --coverage, -fprofile-* PGO); native cl.exe uses /GL + LTCG PGO (and
+        # collects coverage at run time, not via a compile flag).
+        if self.build_toolchain.is_clang_cl():
+            cppflags = cppflags + _instrument_clang_cl_compile_flags(
+                self.build_toolchain, self.options)
+        else:
+            # PGO (#1366): `/GL` on every compile when a profile mode is active,
+            # so the link can do LTCG instrumentation / optimization.
+            cppflags = cppflags + _pgo_msvc_compile_flags(self.options)
 
         # The Python stderr-tee wrapper captures /showIncludes output and tees
         # it to both stderr (for Ninja's deps=msvc) and the inclusion stack
@@ -777,9 +838,13 @@ class CcRuleGenerator:
                             'does not support thin archives)')
         ar = self.build_accelerator.get_ar_command()
         brepro = ' /Brepro' if deterministic else ''
-        # PGO (#1366): lib.exe needs /LTCG to archive the /GL objects a PGO
-        # build emits.
-        pgo = ''.join(' ' + f for f in _pgo_msvc_lib_flags(self.options))
+        # PGO (#1366): lib.exe needs /LTCG to archive the /GL objects a native
+        # MSVC PGO build emits. clang-cl PGO objects are ordinary objects (LLVM
+        # instrumentation, not /GL), so llvm-lib needs nothing extra. (#1369)
+        if self.build_toolchain.is_clang_cl():
+            pgo = ''
+        else:
+            pgo = ''.join(' ' + f for f in _pgo_msvc_lib_flags(self.options))
         self.generate_rule(name='ar',
                            command=f'{ar} /nologo{brepro}{pgo} /out:${{out}} ${{in}}',
                            description='LIB ${out}')
@@ -812,15 +877,22 @@ class CcRuleGenerator:
                 if flag not in linkflags:
                     linkflags = linkflags + [flag]
 
-        # PGO (#1366): LTCG instrument (/GENPROFILE) or optimize (/USEPROFILE).
-        # LTCG is incompatible with incremental linking, so force it off (a
+        # Instrumentation (#1369): clang-cl pulls in the LLVM profile runtime via
+        # /LIBPATH (objects autolink clang_rt.profile); native cl.exe uses LTCG
+        # PGO. LTCG is incompatible with incremental linking, so force it off (a
         # release build already did). The .pgd is auto-named from /out, so each
         # binary gets its own profile in the shared build_*_pgo dir.
-        pgo_link = _pgo_msvc_link_flags(self.options)
-        if pgo_link:
-            for flag in pgo_link + ['/INCREMENTAL:NO']:
+        if self.build_toolchain.is_clang_cl():
+            for flag in _instrument_clang_cl_link_flags(self.build_toolchain,
+                                                        self.options):
                 if flag not in linkflags:
                     linkflags = linkflags + [flag]
+        else:
+            pgo_link = _pgo_msvc_link_flags(self.options)
+            if pgo_link:
+                for flag in pgo_link + ['/INCREMENTAL:NO']:
+                    if flag not in linkflags:
+                        linkflags = linkflags + [flag]
 
         # System library paths (MSVC + Windows SDK) discovered by the toolchain
         lib_paths = self.build_toolchain.get_system_lib_paths()

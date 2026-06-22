@@ -39,6 +39,8 @@ def _compile_rules(profile='release', debug_info='mid', cppflags=None, cxxflags=
                    profile_generate=None, profile_use=None):
     gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
     gen.build_toolchain = mock.Mock()
+    # Native cl.exe path (a plain Mock's is_clang_cl() would be truthy).
+    gen.build_toolchain.is_clang_cl.return_value = False
     gen.build_toolchain.filter_cc_flags = lambda flags, *a: list(flags)
     gen.build_toolchain.get_system_include_paths.return_value = []
     gen.build_accelerator = mock.Mock()
@@ -88,6 +90,7 @@ def _link_flags(profile='release', debug_info='mid', sanitizers=None,
     gen.build_accelerator = mock.Mock()
     gen.build_accelerator.get_cc_commands.return_value = ('cl', 'cl', 'link.exe')
     gen.build_toolchain = mock.Mock()
+    gen.build_toolchain.is_clang_cl.return_value = False
     gen.build_toolchain.tool = lambda k: None
     gen.build_toolchain.filter_cc_flags = lambda f, *a: list(f)
     gen.build_toolchain.get_system_lib_paths.return_value = []

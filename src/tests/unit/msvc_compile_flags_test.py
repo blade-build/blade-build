@@ -27,6 +27,8 @@ class MsvcCompileFlagsTest(unittest.TestCase):
     def _make_gen(self):
         gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
         gen.build_toolchain = mock.Mock()
+        # Native cl.exe path (a plain Mock's is_clang_cl() would be truthy).
+        gen.build_toolchain.is_clang_cl.return_value = False
         gen.build_toolchain.filter_cc_flags = lambda flags, *a: list(flags)
         gen.build_toolchain.get_system_include_paths.return_value = []
         gen.build_accelerator = mock.Mock()

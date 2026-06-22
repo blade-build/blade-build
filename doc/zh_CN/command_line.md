@@ -128,7 +128,7 @@ $ blade dump --all-tags ...
 - `--generate-php` —— 为 `proto_library` 和 `swig_library` 生成 PHP 文件
 - `--generate-go` —— 为 `proto_library` 生成 Go 文件
 - `--gprof` —— 启用 GNU gprof 性能分析。**仅限 Linux**（gcc 与 clang）：`-pg`/gprof 插桩只在 Linux 上有效。macOS 上该标志被静默忽略（Darwin clang 接受 `-pg` 但当作空操作，且没有 gprof 工具 / `gmon.out`），Windows 上 MSVC 根本不认。在这些平台 blade 会跳过该标志并仅警告一次——请改用 `--coverage`，或原生采样分析器（macOS 用 Instruments/`sample`，Linux 用 `perf`）。
-- `--coverage` —— 生成代码覆盖率报告（支持 GNU gcov 与 Java jacoco）。C/C++ 走的是 gcc/clang 的 `--coverage` 插桩，**在所有平台的 gcc 与 clang 上均可用，含 Windows 上的 clang-cl**。原生 MSVC `cl.exe` 没有 gcov 风格插桩，因此 blade 在该工具链下跳过该标志并仅警告一次——Windows 上请使用 **clang-cl**（LLVM 源码级覆盖率）或 **OpenCppCoverage**（基于 PDB，无需重新编译）。
+- `--coverage` —— 生成代码覆盖率报告（支持 GNU gcov 与 Java jacoco）。C/C++ 在 **gcc 与 clang**（所有平台，含 Windows 上的 **clang-cl**）上走 `--coverage` 的 gcov 插桩，由 gcovr 生成报告。在 Windows 上使用**原生 MSVC `cl.exe`**（没有 gcov 风格插桩）时，blade 改为在运行期用 `Microsoft.CodeCoverage.Console.exe` 采集覆盖率（它通过 PDB 对测试可执行文件做动态插桩——无需编译标志——并输出 Cobertura），再把各测试的报告合并为 `cc_coverage_report/coverage.cobertura.xml`。该工具随 Visual Studio / Build Tools 一起分发；它不支持 ARM64 目标。
 - `--profile-generate[=path]` / `--profile-use[=path]` —— [按性能剖析引导优化（PGO）](#按性能剖析引导优化pgo)（gcc、clang 与原生 MSVC）。第一阶段插桩，第二阶段用采集到的 profile 重新构建。
 
 ## 按性能剖析引导优化（PGO）

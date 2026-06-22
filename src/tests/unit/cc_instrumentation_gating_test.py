@@ -12,12 +12,15 @@
     ``-Wunused-command-line-argument`` per compile, no ``gmon.out``); MSVC does
     not understand it. Non-Linux targets skip the dead flag and warn once.
 
-  * ``--coverage`` is the gcc/clang driver flag. Native MSVC cl.exe has no
-    gcov-style instrumentation, so it is skipped (warn once) there; clang-cl
-    reports as 'clang' and keeps the gcc-style path.
+  * ``--coverage`` is the gcc/clang driver flag, emitted here for gcc and
+    clang. MSVC toolchains (cl.exe *and* clang-cl) are cc_is('msvc') and never
+    reach _get_intrinsic_cc_flags -- they take the Windows rules. There cl.exe
+    collects coverage at run time (Microsoft.CodeCoverage.Console.exe) and
+    clang-cl emits LLVM instrumentation from the Windows rules; that routing is
+    covered by cc_clang_cl_instrument_test. See issue #1369.
 
-In both cases the warning fires once per build (the guard is module-level),
-not once per target, so a many-target build does not get spammed.
+The gprof warning fires once per build (the guard is module-level), not once
+per target, so a many-target build does not get spammed.
 """
 
 import os
@@ -131,51 +134,29 @@ class CcGprofGatingTest(unittest.TestCase):
 
 
 class CcCoverageGatingTest(unittest.TestCase):
-    """`--coverage` rides gcc/clang; skipped + warned once on MSVC."""
-
-    def setUp(self):
-        cc_rule_support._coverage_unsupported_warned = False
+    """`--coverage` rides the gcc/clang path. MSVC toolchains never reach here
+    (cc_is('msvc') -> Windows rules); their routing is tested elsewhere."""
 
     def test_gcc_adds_coverage_to_compile_and_link(self):
-        """gcc gets the driver flag on both sides, no warning."""
+        """gcc gets the driver flag on both sides."""
         gen, fake = _make_generator('linux', cc_vendor='gcc', coverage=True)
-        with mock.patch.object(cc_rule_support.console, 'warning') as warn:
-            cppflags, linkflags = _flags(gen, fake)
+        cppflags, linkflags = _flags(gen, fake)
         self.assertIn('--coverage', cppflags)
         self.assertIn('--coverage', linkflags)
-        warn.assert_not_called()
 
-    def test_clang_cl_keeps_coverage_path(self):
-        """clang-cl reports as 'clang', so it keeps the gcc-style flag (no
-        MSVC gate) -- it is the recommended Windows coverage path."""
-        gen, fake = _make_generator('windows', cc_vendor='clang', coverage=True)
-        with mock.patch.object(cc_rule_support.console, 'warning') as warn:
-            cppflags, linkflags = _flags(gen, fake)
+    def test_clang_adds_coverage_to_compile_and_link(self):
+        """clang shares the gcc-style --coverage spelling."""
+        gen, fake = _make_generator('linux', cc_vendor='clang', coverage=True)
+        cppflags, linkflags = _flags(gen, fake)
         self.assertIn('--coverage', cppflags)
         self.assertIn('--coverage', linkflags)
-        warn.assert_not_called()
 
-    def test_msvc_skips_coverage_and_warns_once(self):
-        """Native MSVC cl.exe has no gcov; skip the flag and warn (once)."""
-        gen, fake = _make_generator('windows', cc_vendor='msvc', coverage=True)
-        with mock.patch.object(cc_rule_support.console, 'warning') as warn:
-            cppflags, linkflags = _flags(gen, fake)
-            gen2, fake2 = _make_generator('windows', cc_vendor='msvc', coverage=True)
-            _flags(gen2, fake2)
+    def test_coverage_off_is_silent(self):
+        """No coverage => no flag."""
+        gen, fake = _make_generator('linux', cc_vendor='gcc', coverage=False)
+        cppflags, linkflags = _flags(gen, fake)
         self.assertNotIn('--coverage', cppflags)
         self.assertNotIn('--coverage', linkflags)
-        warn.assert_called_once()
-        self.assertIn('coverage', warn.call_args[0][0])
-        self.assertIn('MSVC', warn.call_args[0][0])
-
-    def test_coverage_off_is_silent_on_msvc(self):
-        """No coverage => no flag and no warning on MSVC."""
-        gen, fake = _make_generator('windows', cc_vendor='msvc', coverage=False)
-        with mock.patch.object(cc_rule_support.console, 'warning') as warn:
-            cppflags, linkflags = _flags(gen, fake)
-        self.assertNotIn('--coverage', cppflags)
-        self.assertNotIn('--coverage', linkflags)
-        warn.assert_not_called()
 
 
 if __name__ == '__main__':
