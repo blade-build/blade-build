@@ -440,9 +440,11 @@ def _warn_autofdo_msvc():
         return
     _autofdo_msvc_warned = True
     console.warning(
-        'AutoFDO (--autofdo-generate/--autofdo-use) is not supported on MSVC '
-        '(no sample-based PGO in cl.exe); the flag is ignored. Use clang-cl, or '
-        'native MSVC instrumentation PGO (--profile-generate/--profile-use).')
+        'AutoFDO (--autofdo-generate/--autofdo-use) emits the gcc/clang LLVM '
+        'sample-profile flags, which MSVC does not take; the flag is ignored. '
+        'MSVC has its own sample PGO (SPGO: cl /link /debug /spgo + xperf + '
+        'SPDConvert + /spdin:app.spd) that blade does not drive yet -- run it '
+        'manually, or use instrumentation PGO (--profile-generate/--profile-use).')
 
 
 # --- clang-cl instrumentation (coverage / PGO) -------------------------------
@@ -686,8 +688,9 @@ class CcRuleGenerator:
                 cppflags.append('-Wno-error=coverage-mismatch')
 
         # AutoFDO (sample-based PGO) -- see the module-level "AutoFDO" note.
-        # gcc/clang path; MSVC never reaches here (it has no sample PGO; warned
-        # separately). Linux-only in practice (perf+LBR), but the flags are
+        # gcc/clang path; MSVC never reaches here (it has its own SPGO, a
+        # different mechanism not driven by blade; warned separately).
+        # Linux-only in practice (perf+LBR), but the flags are
         # portable, so collection-vs-use platform is the user's concern.
         if getattr(self.options, 'autofdo-generate', False):
             # Collection build: a normal optimized build plus the debug info
@@ -864,8 +867,9 @@ class CcRuleGenerator:
             # so the link can do LTCG instrumentation / optimization.
             cppflags = cppflags + _pgo_msvc_compile_flags(self.options)
 
-        # AutoFDO has no MSVC mechanism (cl.exe) and isn't wired for clang-cl
-        # yet; warn once so the flags don't silently no-op (#1372).
+        # blade's --autofdo-* emits the LLVM (gcc/clang) sample flags, which
+        # MSVC doesn't take. MSVC has its own SPGO (/spgo + /spdin) that blade
+        # doesn't drive yet; warn once so the flags don't silently no-op (#1372).
         if _autofdo_active(self.options):
             _warn_autofdo_msvc()
 

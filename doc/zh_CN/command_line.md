@@ -178,9 +178,11 @@ blade build //foo:server --autofdo-use=foo.prof
 - **clang** → `-fprofile-sample-use=<profile>`；采集构建额外加 `-fdebug-info-for-profiling` + `-funique-internal-linkage-names`（采样到源码的映射更准）。
 - **gcc** → `-fauto-profile=<profile>`；采集构建只需 Blade 已发出的 `-g`（那两个调试标志是 clang 专有的）。
 - **`--autofdo-use` 接受的是*已转换*的 profile**，不是原始 `perf.data`——转换工具（`llvm-profgen`/`create_gcov`）需要被采集的二进制，而 Blade 在构建时拿不到。传入原始 `perf.data` 会被识别并拒绝，并提示转换命令。
-- **MSVC / Windows** 上没有可用的采样式 PGO：Windows 没有 `perf`，而把 Windows（ETW）采样转成 LLVM sample profile 的工具链尚不完善、暂时用不起来——所以 clang-cl 上也不行。`--autofdo-*` 在所有 Windows 工具链上都会被跳过并警告；请改用插桩式 PGO（`--profile-generate`/`--profile-use`）。
+- **MSVC** 有它*自己的*采样式 PGO —— **SPGO**（[Sample Profile Guided Optimization](https://devblogs.microsoft.com/cppblog/introducing-sample-profile-guided-optimization-in-msvc/)，VS 2022 / 2026，MSVC 14.51+）：用 `xperf` 采集（任意 CPU 都支持 IP 采样，LBR 需 Intel Haswell+/AMD Zen 4+/ARM64 ARMv9.2-A+），`SPDConvert` 转换，然后 `cl /GL /O2 /Zi … /link /debug /spgo`（采集构建）→ `… /link /LTCG /spdin:app.spd`（优化构建）。它和 LLVM AutoFDO 是*两套*机制,所以 Blade 的 `--autofdo-*`（发的是 gcc/clang 的 `-fprofile-sample-use` / `-fauto-profile`）在 MSVC 上**会被跳过并警告、不会驱动 SPGO**——目前请手动跑 SPGO,或改用插桩式 PGO（`--profile-generate`/`--profile-use`）。
 
-**平台可用性（采集 vs 使用）。** AutoFDO 的**采集**需要 `perf` + 硬件 **LBR**，实际上意味着一台**裸机 / 有 PMU 直通的 x86_64 Linux**——ARM Linux 虚拟机通常不暴露 PMU/LBR，`perf record -b` 在里面也会失败。**macOS 与 Windows 根本无法采集**（没有 `perf`；其原生采样器 Instruments/`sample`/`dtrace`、ETW 都喂不进 `llvm-profgen`）。`--autofdo-use` 的标志是可移植的，所以在 Linux 上采到的 profile **可以**拿到任意平台去用——但跨 OS/架构复用并不精确、也不受支持。在 macOS/Windows 上 `--autofdo-generate` 能编但没意义（本地没法采样）；**请改用插桩式 PGO**——它在所有平台上都完全可用、不需要任何特殊硬件。
+**平台可用性（采集 vs 使用）。** LLVM AutoFDO 的**采集**（gcc/clang 路径）需要 `perf` + 硬件 **LBR**,即一台**裸机 / 有 PMU 直通的 x86_64 Linux**——ARM Linux 虚拟机通常不暴露 PMU/LBR,`perf record -b` 会失败。**Windows** 有另一套采样式 PGO（上面的 MSVC SPGO,经 `xperf`）——只是尚未接入 Blade。**macOS 则完全没有采样式 PGO 的采集途径**（没有 `perf`,也没有 SPGO;Instruments/`sample`/`dtrace` 都喂不进 `llvm-profgen`）。`--autofdo-use` 的标志是可移植的,所以 Linux 上采到的 profile **可以**拿到别处用,但跨 OS/架构复用并不精确、也不受支持。在采集不了的平台上 `--autofdo-generate` 能编但没意义——**请改用插桩式 PGO**:它在所有平台上都完全可用、不需要任何特殊硬件。
+
+> **参考：** [GCC AutoFDO 教程](https://gcc.gnu.org/wiki/AutoFDO/Tutorial) · [MSVC SPGO](https://devblogs.microsoft.com/cppblog/introducing-sample-profile-guided-optimization-in-msvc/)
 
 ## 使用示例
 
