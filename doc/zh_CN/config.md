@@ -487,6 +487,20 @@ cc_test_config(
 - gtest 库还依赖 pthread，因此 `gtest_libs` 可以写成 `['#gtest', '#pthread']`。
 - 也可以将源码纳入自己的源码树（如 `thirdparty` 目录），然后写作 `gtest_libs='//thirdparty/gtest:gtest'`。
 
+### coverage_config
+
+代码覆盖率报告配置（`blade test --coverage`）：
+
+```python
+coverage_config(
+    # 要从覆盖率报告中剔除的 C/C++ 源文件 glob 模式。
+    # `**` 跨目录匹配（blade glob 语义），`*`/`?` 不跨 `/`。
+    exclude=['thirdparty/**', '**/*_test.cc'],
+)
+```
+
+对所有 C/C++ 工具链生效：gcc/clang/clang-cl 转给 gcovr 的 `--exclude`（同时影响 HTML 与 XML）；原生 MSVC `cl.exe` 按源文件路径过滤合并后的 Cobertura 并重算汇总。构建目录下的源文件（生成代码、第三方依赖）无论此项如何设置都始终被排除。
+
 ### msvc_config
 
 MSVC 专有配置，仅在 Windows 下生效：

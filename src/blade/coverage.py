@@ -21,6 +21,50 @@ from blade import config  # lgtm[py/cyclic-import]
 from blade import console
 
 
+def _glob_to_regex(pattern):
+    r"""Translate a POSIX-globstar coverage-exclude glob into a regex.
+
+    Mirrors blade's BUILD-file glob semantics (see load_build_files): ``**``
+    matches across path separators, ``*`` / ``?`` do not. The result is meant
+    for ``re.search`` (matches anywhere in the path) and treats ``/`` and ``\``
+    interchangeably so it works on both gcovr's `/`-paths and the Windows
+    `\`-paths in MSVC Cobertura. Used for both the gcovr ``--exclude`` filter
+    and the native-MSVC Cobertura post-filter (#1369 follow-up).
+    """
+    sep = r'[/\\]'
+    out = []
+    i, n = 0, len(pattern)
+    while i < n:
+        c = pattern[i]
+        if c == '*':
+            if pattern[i:i + 2] == '**':
+                i += 2
+                if pattern[i:i + 1] == '/':  # `**/` -> zero or more dirs
+                    out.append('(?:.*' + sep + ')?')
+                    i += 1
+                else:
+                    out.append('.*')
+            else:
+                out.append('[^/\\\\]*')
+                i += 1
+        elif c == '?':
+            out.append('[^/\\\\]')
+            i += 1
+        elif c == '/':
+            out.append(sep)
+            i += 1
+        else:
+            out.append(re.escape(c))
+            i += 1
+    return ''.join(out)
+
+
+def _cobertura_rate(covered, valid):
+    """Cobertura ``line-rate`` string. An empty unit is vacuously 1 (the same
+    convention Microsoft.CodeCoverage.Console emits for empty packages)."""
+    return str(covered / valid) if valid else '1'
+
+
 class JacocoReporter:
     """
     Jacoco Coverage Report Generator
@@ -227,10 +271,11 @@ class CcCoverageReporter:
     missing or errors.
     """
 
-    def __init__(self, build_dir, root_dir, cc_is_clang):
+    def __init__(self, build_dir, root_dir, cc_is_clang, excludes=None):
         self.__build_dir = build_dir
         self.__root_dir = root_dir
         self.__cc_is_clang = cc_is_clang
+        self.__excludes = excludes or []
 
     def _has_coverage_data(self):
         for _dirpath, _dirnames, filenames in os.walk(self.__build_dir):
@@ -274,6 +319,10 @@ class CcCoverageReporter:
             '--html-nested', '-o', os.path.join(report_dir, 'index.html'),
             '--xml', os.path.join(report_dir, 'coverage.xml'),
         ]
+        # User-configured coverage_config.exclude globs (translated to regex).
+        # gcovr drops any source whose path matches, from both HTML and XML.
+        for glob in self.__excludes:
+            cmd += ['--exclude', '.*' + _glob_to_regex(glob)]
         if gcov_executable:
             cmd += ['--gcov-executable', gcov_executable]
         return cmd
@@ -317,9 +366,10 @@ class MsvcCoverageReporter:
     merge errors. See issue #1369.
     """
 
-    def __init__(self, build_dir, collector):
+    def __init__(self, build_dir, collector, excludes=None):
         self.__build_dir = build_dir
         self.__collector = collector
+        self.__excludes = excludes or []
 
     def _cobertura_files(self):
         files = []
@@ -356,6 +406,57 @@ class MsvcCoverageReporter:
         console.debug(' '.join(cmd))
         if subprocess.call(cmd, shell=False) != 0:
             console.warning('Failed to generate the MSVC coverage report')
+        elif self.__excludes:
+            self._apply_excludes(merged)
+
+    def _apply_excludes(self, merged):
+        """Drop excluded sources from the merged Cobertura and recompute totals.
+
+        The collector's ``merge`` has no source filter, so apply
+        coverage_config.exclude here: remove every ``<class>`` whose filename
+        matches an exclude glob, then recompute each package's and the
+        top-level line counts / line-rate so the summary stays consistent.
+        """
+        import xml.etree.ElementTree as ET  # pylint: disable=import-outside-toplevel
+        regexes = [re.compile(_glob_to_regex(g)) for g in self.__excludes]
+        try:
+            tree = ET.parse(merged)
+        except (ET.ParseError, OSError):
+            return
+        root = tree.getroot()
+
+        def _class_lines(cls):
+            covered = valid = 0
+            lines = cls.find('lines')
+            if lines is not None:
+                for ln in lines.findall('line'):
+                    valid += 1
+                    if int(ln.get('hits', '0')) > 0:
+                        covered += 1
+            return covered, valid
+
+        total_cov = total_val = 0
+        for package in root.iter('package'):
+            classes_el = package.find('classes')
+            if classes_el is None:
+                continue
+            for cls in list(classes_el):
+                fn = cls.get('filename', '')
+                if any(r.search(fn) for r in regexes):
+                    classes_el.remove(cls)
+            pcov = pval = 0
+            for cls in classes_el:
+                c, v = _class_lines(cls)
+                pcov += c
+                pval += v
+            package.set('line-rate', _cobertura_rate(pcov, pval))
+            total_cov += pcov
+            total_val += pval
+
+        root.set('lines-covered', str(total_cov))
+        root.set('lines-valid', str(total_val))
+        root.set('line-rate', _cobertura_rate(total_cov, total_val))
+        tree.write(merged, encoding='utf-8', xml_declaration=True)
 
 
 class GoCoverageReporter:

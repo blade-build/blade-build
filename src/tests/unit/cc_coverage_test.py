@@ -162,5 +162,107 @@ class MsvcCoverageReporterTest(unittest.TestCase):
             rm.assert_called_once()
 
 
+class GlobToRegexTest(unittest.TestCase):
+    """coverage exclude globs -> regex with globstar semantics (#1369 follow-up)."""
+
+    def _m(self, glob, path):
+        import re
+        return re.search(coverage._glob_to_regex(glob), path) is not None
+
+    def test_dir_globstar_matches_subtree(self):
+        self.assertTrue(self._m('thirdparty/**', 'a/thirdparty/x/y.cc'))
+        self.assertTrue(self._m('thirdparty/**', r'C:\proj\thirdparty\x.h'))
+
+    def test_leading_globstar_suffix(self):
+        self.assertTrue(self._m('**/*_test.cc', 'a/b/foo_test.cc'))
+        self.assertTrue(self._m('**/*_test.cc', 'foo_test.cc'))
+        self.assertFalse(self._m('**/*_test.cc', 'a/foo_test.cpp'))
+
+    def test_single_star_does_not_cross_separator(self):
+        self.assertFalse(self._m('a/*.h', 'a/b/c.h'))
+        self.assertTrue(self._m('a/*.h', 'a/c.h'))
+
+    def test_dot_is_literal(self):
+        # '.' must be escaped: '*.cc' should not match '_xcc'.
+        self.assertFalse(self._m('*.cc', 'foo_xcc'))
+
+
+class CoberturaRateTest(unittest.TestCase):
+    def test_ratio(self):
+        self.assertEqual('0.5', coverage._cobertura_rate(1, 2))
+
+    def test_empty_is_one(self):
+        self.assertEqual('1', coverage._cobertura_rate(0, 0))
+
+
+class CcCoverageExcludeTest(unittest.TestCase):
+    """gcovr gets a --exclude per configured glob, on top of the build-dir one."""
+
+    def test_excludes_become_gcovr_filters(self):
+        r = coverage.CcCoverageReporter('build64_release_coverage', '.', False,
+                                        excludes=['thirdparty/**', '**/*_test.cc'])
+        cmd = r.build_gcovr_command('gcovr', 'report')
+        # Two user excludes plus the always-on build-dir exclude.
+        self.assertEqual(3, cmd.count('--exclude'))
+        joined = ' '.join(cmd)
+        self.assertIn('thirdparty', joined)
+
+
+_COBERTURA = '''<?xml version="1.0"?>
+<coverage line-rate="0" lines-covered="0" lines-valid="0">
+  <packages>
+    <package name="p" line-rate="0">
+      <classes>
+        <class name="keep" filename="src/keep.cc">
+          <lines>
+            <line number="1" hits="1"/>
+            <line number="2" hits="0"/>
+          </lines>
+        </class>
+        <class name="drop" filename="thirdparty/dep.cc">
+          <lines>
+            <line number="1" hits="0"/>
+            <line number="2" hits="0"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>'''
+
+
+class MsvcCoverageExcludeTest(unittest.TestCase):
+    """_apply_excludes drops matching classes and recomputes the Cobertura totals."""
+
+    def _filtered_root(self, excludes):
+        import tempfile
+        import xml.etree.ElementTree as ET
+        fd, path = tempfile.mkstemp(suffix='.cobertura.xml')
+        os.close(fd)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(_COBERTURA)
+        try:
+            r = coverage.MsvcCoverageReporter('b', 'tool', excludes=excludes)
+            r._apply_excludes(path)
+            return ET.parse(path).getroot()
+        finally:
+            os.remove(path)
+
+    def test_excluded_class_removed_and_totals_recomputed(self):
+        root = self._filtered_root(['thirdparty/**'])
+        names = [c.get('name') for c in root.iter('class')]
+        self.assertEqual(['keep'], names)
+        # Only keep.cc remains: 1 covered / 2 valid.
+        self.assertEqual('1', root.get('lines-covered'))
+        self.assertEqual('2', root.get('lines-valid'))
+        self.assertEqual('0.5', root.get('line-rate'))
+
+    def test_no_match_keeps_everything(self):
+        root = self._filtered_root(['nomatch/**'])
+        self.assertEqual(2, len(list(root.iter('class'))))
+        # Both classes kept: 2 + 2 = 4 valid lines.
+        self.assertEqual('4', root.get('lines-valid'))
+
+
 if __name__ == '__main__':
     unittest.main()

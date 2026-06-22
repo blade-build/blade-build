@@ -483,6 +483,24 @@ Note:
 - Or include the source code in your source tree, such as thirdparty, you can write
   `gtest_libs='//thirdparty/gtest:gtest'`.
 
+### coverage_config
+
+Code coverage report configuration (`blade test --coverage`):
+
+```python
+coverage_config(
+    # Glob patterns of C/C++ sources to drop from the coverage report.
+    # `**` matches across directories (blade glob semantics); `*`/`?` do not.
+    exclude=['thirdparty/**', '**/*_test.cc'],
+)
+```
+
+Applies to every C/C++ toolchain: gcc/clang/clang-cl pass these to gcovr
+`--exclude` (affecting both the HTML and the XML); native MSVC `cl.exe`
+filters the merged Cobertura by source path and recomputes the totals.
+Sources under the build directory (generated code, vendored deps) are always
+excluded regardless of this setting.
+
 ### msvc_config
 
 MSVC-specific configuration, only effective on Windows:

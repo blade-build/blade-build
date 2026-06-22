@@ -215,6 +215,15 @@ _CONFIG_TEMPLATE = {
         'pprof_path': '',
     },
 
+    'coverage_config': {
+        '__help__': 'Code Coverage Configuration',
+        # Glob patterns (POSIX-globstar `**`) of source files/dirs to drop from
+        # the C/C++ coverage report, e.g. ['thirdparty/**', '**/*_test.cc'].
+        # gcc/clang feed these to gcovr --exclude; native MSVC filters the
+        # merged Cobertura. Matched against the file path with `/` or `\`.
+        'exclude': [],
+    },
+
     'link_config': {
         '__help__': 'Linking Configuration',
         'link_jobs': 0,
@@ -971,6 +980,12 @@ def cc_test_config(append=None, **kwargs):
     """cc_test_config section."""
     _check_kwarg_enum_value(kwargs, 'heap_check', constants.HEAP_CHECK_VALUES)
     _blade_config.update_config('cc_test_config', append, kwargs)
+
+
+@config_rule
+def coverage_config(append=None, **kwargs):
+    """coverage_config section."""
+    _blade_config.update_config('coverage_config', append, kwargs)
 
 
 @config_rule

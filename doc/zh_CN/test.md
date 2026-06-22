@@ -97,6 +97,7 @@ blade test //foo/... --coverage
 - 自动加入覆盖率相关的编译/链接选项；测试运行时产生 `.gcno`/`.gcda` 数据。
 - 测试结束后，Blade 调用 [gcovr](https://gcovr.com/) 在 `<build_dir>/cc_coverage_report/index.html` 生成可逐级目录下钻（目录 → 文件 → 逐行）的 HTML 报告（并附带 Cobertura 格式的 `coverage.xml`）。请先 `pip install gcovr`；若未安装，Blade 只会告警并跳过报告生成。
 - 构建目录下的源文件会被排除，报告只反映你自己的代码，而非生成代码（如 `*.pb.cc`）或第三方依赖（vcpkg 安装在构建目录下）。
+- **排除更多文件。** 用 `coverage_config(exclude=[...])` 可从 C/C++ 报告中再剔除一些源文件。模式是 blade 的 `**` 通配 glob（如 `coverage_config(exclude=['thirdparty/**', '**/*_test.cc'])`），对所有 C/C++ 工具链生效：gcc/clang/clang-cl 转成 gcovr 的 `--exclude`（同时影响 HTML 与 XML），原生 MSVC 则按源文件路径过滤合并后的 Cobertura（并重算汇总）。
 - **平台/工具链：** 上面的 gcov 路径覆盖所有平台的 gcc 与 clang，含 Windows 上的 **clang-cl**（它和 clang 一样产生 `.gcda`，通过 `llvm-cov gcov` 生成报告）。**原生 MSVC `cl.exe`** 没有 gcov 风格插桩，因此在 Windows 上 Blade 改为在运行期用 [`Microsoft.CodeCoverage.Console.exe`](https://learn.microsoft.com/visualstudio/test/microsoft-code-coverage-console-tool) 采集：每个 `cc_test` 在 `… collect` 下运行，它通过 PDB 对测试可执行文件做动态插桩（无需编译标志——默认的 `debug_info_level` 为 `mid` 已会生成 PDB），并写出每个测试的 `<exe>.cobertura.xml`。随后 Blade 用该工具的 `merge` 合并为 `<build_dir>/cc_coverage_report/coverage.cobertura.xml`。该工具随 Visual Studio / Build Tools 一起分发；若缺失，Blade 只会告警并跳过报告生成。其 Dynamic Code Coverage 引擎不支持 ARM64 目标（请使用 x64 目标）。
 
 ### Go 覆盖率（go test -cover）
