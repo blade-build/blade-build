@@ -133,6 +133,8 @@ $ blade dump --all-tags ...
 
 ## 按性能剖析引导优化（PGO）
 
+PGO(Profile-guided optimization)又称 FDO(feedback-directed optimization) 是指利用程序真实运行过程中采集到的 profile 数据，来指导编译器优化的技术。
+
 PGO 是一个**全局构建模式**（不是 per-target 属性）：先对整个构建插桩，跑一遍代表性负载，再用采集到的 profile 重新构建。目前接入了 **gcc、clang 与原生 MSVC**；两个阶段都使用独立的 `build_*_pgo` 目录，绝不污染普通的 `build_*` 对象。
 
 ```bash

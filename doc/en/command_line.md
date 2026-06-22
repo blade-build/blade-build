@@ -133,6 +133,8 @@ Different subcommands support different options. Run `blade <subcommand> --help`
 
 ## Profile-Guided Optimization (PGO)
 
+Profile-Guided Optimization (PGO), also known as Feedback-Directed Optimization (FDO), is a technique that uses profile data collected from a program's real execution to guide the compiler's optimizations.
+
 PGO is a **global build mode** (not a per-target attribute): you instrument the whole build, run a representative workload, then rebuild using the collected profile. It is wired for **gcc, clang, and native MSVC**; both phases use a dedicated `build_*_pgo` directory so they never clobber your normal `build_*` objects.
 
 ```bash
