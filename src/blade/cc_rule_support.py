@@ -386,17 +386,20 @@ def _pgo_msvc_link_flags(options):
 # --- AutoFDO (sample-based PGO, #1372) ---------------------------------------
 #
 # AutoFDO needs NO instrumentation: you build a normal optimized binary (with
-# debug info so samples map to source), run it under `perf record -b` (LBR), and
-# rebuild with the resulting sample profile. gcc/clang only:
+# debug info so samples map to source), sample it, and rebuild with the profile.
+# The --autofdo-* flags drive all three toolchains (sample PGO is cross-platform):
 #   * clang -> `-fprofile-sample-use=<profile>`; collection adds
-#     `-fdebug-info-for-profiling -funique-internal-linkage-names`.
+#     `-fdebug-info-for-profiling -funique-internal-linkage-names`. (perf+LBR)
 #   * gcc   -> `-fauto-profile=<profile>`; collection needs only the `-g` blade
-#     already emits (the clang debug flags are clang-only).
-# blade applies the flags; converting `perf.data` -> a sample profile is the
-# user's step because the converter (llvm-profgen / create_gcov) needs the
-# *collected binary*, which blade doesn't have at flag-computation time. So
-# `--autofdo-use` takes an already-converted profile; a raw perf.data is
-# detected and rejected with the exact conversion command.
+#     already emits (the clang debug flags are clang-only). (perf+LBR)
+#   * native MSVC -> SPGO (`/spgo` collect, `/LTCG /spdin:` use); see the "MSVC
+#     SPGO" section below. (xperf, no perf needed)
+# For gcc/clang, blade applies the flags; converting `perf.data` -> a sample
+# profile is the user's step because the converter (llvm-profgen / create_gcov)
+# needs the *collected binary*, which blade doesn't have at flag-computation
+# time. So `--autofdo-use` takes an already-converted profile; a raw perf.data
+# is detected and rejected with the exact conversion command. (MSVC likewise
+# takes an already-sampled `.spd` via /spdin.)
 
 _PERF_DATA_MAGIC = b'PERFILE2'
 
@@ -434,17 +437,55 @@ def _resolve_autofdo_profile(path):
 _autofdo_msvc_warned = False
 
 
-def _warn_autofdo_msvc():
+def _warn_autofdo_clang_cl():
+    """clang-cl can't do sample PGO on Windows: SPGO is a cl.exe/link feature,
+    and LLVM AutoFDO needs `perf`, which Windows lacks."""
     global _autofdo_msvc_warned
     if _autofdo_msvc_warned:
         return
     _autofdo_msvc_warned = True
     console.warning(
-        'AutoFDO (--autofdo-generate/--autofdo-use) emits the gcc/clang LLVM '
-        'sample-profile flags, which MSVC does not take; the flag is ignored. '
-        'MSVC has its own sample PGO (SPGO: cl /link /debug /spgo + xperf + '
-        'SPDConvert + /spdin:app.spd) that blade does not drive yet -- run it '
-        'manually, or use instrumentation PGO (--profile-generate/--profile-use).')
+        'AutoFDO is not available for clang-cl: MSVC SPGO is a cl.exe feature '
+        '(blade drives it on native cl.exe), and LLVM AutoFDO needs perf, which '
+        'Windows lacks. Build with native cl.exe for SPGO, or use instrumentation '
+        'PGO (--profile-generate/--profile-use). Skipping.')
+
+
+# --- MSVC SPGO (Sample Profile Guided Optimization, #1372) --------------------
+#
+# MSVC's sample PGO, driven by blade's --autofdo-* on native cl.exe (VS 2022 /
+# 2026, MSVC 14.51+). It's the cl.exe counterpart of LLVM AutoFDO:
+#   collect: compile `/GL`, link `/spgo` -> the binary + a `.spd` static
+#            description. Sample it with `xperf` (IP or LBR), then `SPDConvert`
+#            correlates the samples into the `.spd` profile (the user's step).
+#   use:     compile `/GL`, link `/LTCG /spdin:<app.spd>`.
+# Same /GL whole-program requirement as the instrumentation /GENPROFILE path,
+# and the same shared `build_*_autofdo` dir for both phases.
+
+def _spgo_msvc_active(options):
+    return _autofdo_active(options)
+
+
+def _spgo_msvc_compile_flags(options):
+    """`/GL` on compile for an active SPGO mode (whole-program info SPGO needs);
+    no profile-flush define -- SPGO samples a normal binary (like AutoFDO)."""
+    return ['/GL'] if _spgo_msvc_active(options) else []
+
+
+def _spgo_msvc_lib_flags(options):
+    """`lib.exe` needs `/LTCG` to archive the `/GL` objects an SPGO build emits."""
+    return ['/LTCG'] if _spgo_msvc_active(options) else []
+
+
+def _spgo_msvc_link_flags(options):
+    """SPGO link flags: `/spgo` preps the collection build (emits the `.spd`);
+    `/LTCG /spdin:<spd>` consumes the sampled profile on the optimize build."""
+    if getattr(options, 'autofdo-generate', False):
+        return ['/spgo']
+    use = getattr(options, 'autofdo-use', None)
+    if use:
+        return ['/LTCG', '/spdin:' + use]
+    return []
 
 
 # --- clang-cl instrumentation (coverage / PGO) -------------------------------
@@ -688,10 +729,10 @@ class CcRuleGenerator:
                 cppflags.append('-Wno-error=coverage-mismatch')
 
         # AutoFDO (sample-based PGO) -- see the module-level "AutoFDO" note.
-        # gcc/clang path; MSVC never reaches here (it has its own SPGO, a
-        # different mechanism not driven by blade; warned separately).
-        # Linux-only in practice (perf+LBR), but the flags are
-        # portable, so collection-vs-use platform is the user's concern.
+        # gcc/clang path; native MSVC never reaches here -- it drives SPGO in the
+        # Windows rules (_spgo_msvc_* flags); clang-cl warns there. Linux-only in
+        # practice for gcc/clang (perf+LBR), but the flags are portable, so
+        # collection-vs-use platform is the user's concern.
         if getattr(self.options, 'autofdo-generate', False):
             # Collection build: a normal optimized build plus the debug info
             # that lets perf samples map back to source. clang has dedicated
@@ -862,16 +903,17 @@ class CcRuleGenerator:
         if self.build_toolchain.is_clang_cl():
             cppflags = cppflags + _instrument_clang_cl_compile_flags(
                 self.build_toolchain, self.options)
+            # clang-cl can't do sample PGO on Windows (SPGO is cl-only, AutoFDO
+            # needs perf); warn and skip if --autofdo-* was passed (#1372).
+            if _autofdo_active(self.options):
+                _warn_autofdo_clang_cl()
         else:
             # PGO (#1366): `/GL` on every compile when a profile mode is active,
             # so the link can do LTCG instrumentation / optimization.
             cppflags = cppflags + _pgo_msvc_compile_flags(self.options)
-
-        # blade's --autofdo-* emits the LLVM (gcc/clang) sample flags, which
-        # MSVC doesn't take. MSVC has its own SPGO (/spgo + /spdin) that blade
-        # doesn't drive yet; warn once so the flags don't silently no-op (#1372).
-        if _autofdo_active(self.options):
-            _warn_autofdo_msvc()
+            # SPGO (#1372): native cl.exe sample PGO also needs /GL (modes are
+            # mutually exclusive, so at most one of these adds it).
+            cppflags = cppflags + _spgo_msvc_compile_flags(self.options)
 
         # The Python stderr-tee wrapper captures /showIncludes output and tees
         # it to both stderr (for Ninja's deps=msvc) and the inclusion stack
@@ -945,7 +987,10 @@ class CcRuleGenerator:
         if self.build_toolchain.is_clang_cl():
             pgo = ''
         else:
-            pgo = ''.join(' ' + f for f in _pgo_msvc_lib_flags(self.options))
+            # /LTCG to archive /GL objects from either native PGO or SPGO
+            # (mutually exclusive modes, so at most one contributes).
+            pgo = ''.join(' ' + f for f in (_pgo_msvc_lib_flags(self.options) +
+                                            _spgo_msvc_lib_flags(self.options)))
         self.generate_rule(name='ar',
                            command=f'{ar} /nologo{brepro}{pgo} /out:${{out}} ${{in}}',
                            description='LIB ${out}')
@@ -989,7 +1034,11 @@ class CcRuleGenerator:
                 if flag not in linkflags:
                     linkflags = linkflags + [flag]
         else:
-            pgo_link = _pgo_msvc_link_flags(self.options)
+            # Native cl.exe: instrumentation PGO (/GENPROFILE|/USEPROFILE) or
+            # SPGO sample PGO (/spgo | /LTCG /spdin:). Mutually exclusive, so at
+            # most one is non-empty. Both need LTCG -> incremental linking off.
+            pgo_link = (_pgo_msvc_link_flags(self.options) or
+                        _spgo_msvc_link_flags(self.options))
             if pgo_link:
                 for flag in pgo_link + ['/INCREMENTAL:NO']:
                     if flag not in linkflags:

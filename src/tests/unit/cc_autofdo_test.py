@@ -179,12 +179,48 @@ class AutofdoMsvcTest(unittest.TestCase):
         self.assertFalse(cc_rule_support._autofdo_active(
             mock.Mock(**{'autofdo-generate': False, 'autofdo-use': None})))
 
-    def test_warn_msvc_fires_once(self):
+    def test_warn_clang_cl_fires_once(self):
         with mock.patch.object(cc_rule_support.console, 'warning') as warn:
-            cc_rule_support._warn_autofdo_msvc()
-            cc_rule_support._warn_autofdo_msvc()
+            cc_rule_support._warn_autofdo_clang_cl()
+            cc_rule_support._warn_autofdo_clang_cl()
         warn.assert_called_once()
-        self.assertIn('MSVC', warn.call_args[0][0])
+        self.assertIn('clang-cl', warn.call_args[0][0])
+
+
+class SpgoMsvcTest(unittest.TestCase):
+    """Native MSVC SPGO driven by --autofdo-* : /GL compile, /spgo collect,
+    /LTCG /spdin: optimize, /LTCG lib."""
+
+    def _opts(self, generate=False, use=None):
+        opts = mock.Mock()
+        setattr(opts, 'autofdo-generate', generate)
+        setattr(opts, 'autofdo-use', use)
+        return opts
+
+    def test_compile_flags_gl_when_active(self):
+        self.assertEqual(['/GL'], cc_rule_support._spgo_msvc_compile_flags(
+            self._opts(generate=True)))
+        self.assertEqual(['/GL'], cc_rule_support._spgo_msvc_compile_flags(
+            self._opts(use='/tmp/app.spd')))
+        self.assertEqual([], cc_rule_support._spgo_msvc_compile_flags(self._opts()))
+
+    def test_lib_flags(self):
+        self.assertEqual(['/LTCG'], cc_rule_support._spgo_msvc_lib_flags(
+            self._opts(generate=True)))
+        self.assertEqual([], cc_rule_support._spgo_msvc_lib_flags(self._opts()))
+
+    def test_link_flags_collect_vs_optimize(self):
+        self.assertEqual(['/spgo'], cc_rule_support._spgo_msvc_link_flags(
+            self._opts(generate=True)))
+        self.assertEqual(['/LTCG', '/spdin:/tmp/app.spd'],
+                         cc_rule_support._spgo_msvc_link_flags(
+                             self._opts(use='/tmp/app.spd')))
+        self.assertEqual([], cc_rule_support._spgo_msvc_link_flags(self._opts()))
+
+    def test_no_pgo_define(self):
+        # SPGO samples a normal binary -- no flush define (like AutoFDO).
+        self.assertFalse([f for f in cc_rule_support._spgo_msvc_compile_flags(
+            self._opts(generate=True)) if 'PGO_GENERATE' in f or 'PROFILE_GUIDED' in f])
 
 
 if __name__ == '__main__':

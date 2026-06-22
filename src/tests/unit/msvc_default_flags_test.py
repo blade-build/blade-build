@@ -21,11 +21,13 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 from blade import cc_rule_support  # noqa: E402
 
 
-def _set_pgo(options, profile_generate, profile_use):
-    """Set/clear the dashed PGO option attrs so the probes read them like
-    argparse (absent => not given). Default (both None) keeps PGO off."""
+def _set_pgo(options, profile_generate, profile_use,
+             autofdo_generate=False, autofdo_use=None):
+    """Set/clear the dashed PGO/AutoFDO option attrs so the probes read them
+    like argparse (absent/falsey => not given). Defaults keep both modes off."""
     for attr, val in (('profile-generate', profile_generate),
-                      ('profile-use', profile_use)):
+                      ('profile-use', profile_use),
+                      ('autofdo-use', autofdo_use)):
         if val is None:
             try:
                 delattr(options, attr)
@@ -33,6 +35,7 @@ def _set_pgo(options, profile_generate, profile_use):
                 pass
         else:
             setattr(options, attr, val)
+    setattr(options, 'autofdo-generate', autofdo_generate)
 
 
 def _compile_rules(profile='release', debug_info='mid', cppflags=None, cxxflags=None,
