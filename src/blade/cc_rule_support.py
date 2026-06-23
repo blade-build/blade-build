@@ -409,6 +409,38 @@ def _autofdo_active(options):
             or bool(getattr(options, 'autofdo-use', None)))
 
 
+def _has_line_table_debug(debug_info_options):
+    """Whether the configured debug-info flags carry source line tables -- any
+    `-g<level>` except the off level / the split-dwarf modifier."""
+    for f in debug_info_options:
+        if f in ('-g0', '-gsplit-dwarf'):
+            continue
+        if f.startswith('-g'):
+            return True
+    return False
+
+
+def _has_msvc_debug_info(debug_info_options):
+    """Whether the MSVC debug-info flags emit symbols (CodeView/PDB)."""
+    return any(f in ('/Z7', '/Zi', '/ZI') for f in debug_info_options)
+
+
+# Notify once when blade bumps debug info for collection (it overrides an
+# explicit debug_info_level=no); benign, so notice not warning.
+_autofdo_debug_noticed = False
+
+
+def _notice_autofdo_debug_added(flag):
+    global _autofdo_debug_noticed
+    if _autofdo_debug_noticed:
+        return
+    _autofdo_debug_noticed = True
+    console.notice(
+        'AutoFDO/SPGO collection needs line-table debug info to map samples '
+        'back to source, but debug_info_level emits none; blade added %s for '
+        'this collection build (small size cost).' % flag)
+
+
 def _resolve_autofdo_profile(path):
     """Return a sample-profile path for `-fprofile-sample-use`/`-fauto-profile`.
 
@@ -739,11 +771,20 @@ class CcRuleGenerator:
         # collection-vs-use platform is the user's concern.
         if getattr(self.options, 'autofdo-generate', False):
             # Collection build: a normal optimized build plus the debug info
-            # that lets perf samples map back to source. clang has dedicated
-            # flags; gcc just needs the `-g` it already emits.
+            # that lets samples map back to source. clang adds function/inlining
+            # attribution (-fdebug-info-for-profiling, which augments line
+            # tables); gcc relies on its debug line tables.
             if self.build_toolchain.cc_is('clang'):
                 cppflags.append('-fdebug-info-for-profiling')
                 cppflags.append('-funique-internal-linkage-names')
+            # AutoFDO is useless without line tables to map samples to. If the
+            # configured debug level emits none (e.g. debug_info_level=no), add
+            # minimal line tables (clang -gmlt / gcc -g1) so collection works;
+            # never touch an existing -g -- a later -gmlt would *downgrade* it.
+            if not _has_line_table_debug(debug_info_options):
+                flag = '-gmlt' if self.build_toolchain.cc_is('clang') else '-g1'
+                cppflags.append(flag)
+                _notice_autofdo_debug_added(flag)
             # No define: AutoFDO samples a *normal* binary (no instrumentation
             # runtime to flush), and the collection build should stay identical
             # to what ships -- that's the whole point of "profile what you ship".
@@ -899,7 +940,8 @@ class CcRuleGenerator:
         # /Z7 embeds CodeView in each .obj -- parallel-safe under ninja, unlike
         # the PDB-server /Zi; the matching linker /DEBUG is added in the link rule.
         global_config = config.get_section('global_config')
-        cppflags = cppflags + windows_config['debug_info_levels'][global_config['debug_info_level']]
+        msvc_debug = windows_config['debug_info_levels'][global_config['debug_info_level']]
+        cppflags = cppflags + msvc_debug
 
         # Instrumentation (#1369): clang-cl takes the LLVM mechanism (gcov-style
         # --coverage, -fprofile-* PGO); native cl.exe uses /GL + LTCG PGO (and
@@ -918,6 +960,13 @@ class CcRuleGenerator:
             # SPGO (#1372): native cl.exe sample PGO also needs /GL (modes are
             # mutually exclusive, so at most one of these adds it).
             cppflags = cppflags + _spgo_msvc_compile_flags(self.options)
+            # SPGO correlates samples via PDB symbols; like AutoFDO's line
+            # tables, guarantee /Z7 for the collection build if debug_info_level
+            # emits none (don't override an existing /Z7//Zi). Notify once.
+            if getattr(self.options, 'autofdo-generate', False) \
+                    and not _has_msvc_debug_info(msvc_debug):
+                cppflags = cppflags + ['/Z7']
+                _notice_autofdo_debug_added('/Z7')
 
         # The Python stderr-tee wrapper captures /showIncludes output and tees
         # it to both stderr (for Ninja's deps=msvc) and the inclusion stack
@@ -1013,7 +1062,12 @@ class CcRuleGenerator:
         # (/OPT:REF,/OPT:ICF) and disable incremental linking that /DEBUG would
         # otherwise turn on, keeping release binaries lean and deterministic.
         global_config = config.get_section('global_config')
-        if global_config['debug_info_level'] != 'no':
+        # SPGO needs a PDB to correlate samples; force /DEBUG for the collection
+        # build even when debug_info_level=no (paired with the /Z7 added on the
+        # compile side). #1372.
+        spgo_collect = (not self.build_toolchain.is_clang_cl()
+                        and getattr(self.options, 'autofdo-generate', False))
+        if global_config['debug_info_level'] != 'no' or spgo_collect:
             linkflags = linkflags + ['/DEBUG']
         if self.options.profile == 'release':
             linkflags = linkflags + ['/OPT:REF', '/OPT:ICF', '/INCREMENTAL:NO']

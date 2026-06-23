@@ -186,7 +186,8 @@ blade build //foo:server --autofdo-generate --autofdo-use=foo.prof
 `--autofdo-generate` 与 `--autofdo-use` 在三套工具链上都能**叠加**（gcc/clang 在 `-fprofile-sample-use`/`-fauto-profile` 之外再加调试信息；MSVC 在 `/spdin:` 之外再链接 `/spgo`——已在 MSVC 14.51、x64 与 ARM64 上验证合法）。于是稳态下每次构建都同时是"用上轮 profile 优化"和"为下轮采集",**没有额外的专门构建**。（第一次先单独跑 `--autofdo-generate` 引导出首个 profile。）AutoFDO 的调试标志开销很小,你也可以把它们固化进 release 配置,日常只传 `--autofdo-use`。
 
 - **clang** → `-fprofile-sample-use=<profile>`；采集构建额外加 `-fdebug-info-for-profiling` + `-funique-internal-linkage-names`（采样到源码的映射更准）。
-- **gcc** → `-fauto-profile=<profile>`；采集构建只需 Blade 已发出的 `-g`（那两个调试标志是 clang 专有的）。
+- **gcc** → `-fauto-profile=<profile>`；采集构建依赖调试行表（上面那两个标志是 clang 专有的）。
+- **采集构建会确保有行表。** 采样式 PGO 靠调试行表把采样映射回源码,所以 `--autofdo-generate` 需要它。若 `debug_info_level` 不产生任何调试信息（如 `no`）,Blade 会**仅为本次构建**补上最小行表——`-gmlt`（clang）/ `-g1`（gcc）/ `/Z7`+`/DEBUG`（MSVC SPGO）——并打印一次提示。它**绝不降级**已有的 `-g`（后面的 `-gmlt` 会把完整 `-g` 降成最小行表）,所以普通的 `debug_info_level=mid` 构建仍保留完整调试信息。
 - **`--autofdo-use` 接受的是*已转换*的 profile**，不是原始 `perf.data`——转换工具（`llvm-profgen`/`create_gcov`）需要被采集的二进制，而 Blade 在构建时拿不到。传入原始 `perf.data` 会被识别并拒绝，并提示转换命令。
 - **原生 MSVC** 用它自己的采样式 PGO —— **SPGO**（[Sample Profile Guided Optimization](https://devblogs.microsoft.com/cppblog/introducing-sample-profile-guided-optimization-in-msvc/)，VS 2022 / 2026，MSVC 14.51+），Blade 用同一组 `--autofdo-*` 标志来驱动它：`--autofdo-generate` 链接 `/spgo`（采集构建），`--autofdo-use=app.spd` 链接 `/LTCG /spdin:app.spd`（两者都编译 `/GL`）。你用 **`xperf`** 采样（任意 CPU 都支持 IP 采样，LBR 需 Intel Haswell+/AMD Zen 4+/ARM64 ARMv9.2-A+）、用 **`SPDConvert`** 转出 `.spd`——这一步和 perf 一样是你的职责。**clang-cl** 在 Windows 上做不了采样式 PGO（SPGO 是 cl 专有，AutoFDO 又要 `perf`），所以 `--autofdo-*` 在 clang-cl 上会被跳过并警告。
 

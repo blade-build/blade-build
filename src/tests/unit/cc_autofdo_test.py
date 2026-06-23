@@ -31,7 +31,8 @@ from blade import cc_rule_support  # noqa: E402
 
 
 def _make_generator(cc_vendor='gcc', target_os='linux',
-                    autofdo_generate=False, autofdo_use=None):
+                    autofdo_generate=False, autofdo_use=None,
+                    debug_info_level='mid'):
     gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
     gen.options = mock.Mock()
     gen.options.m = None
@@ -52,9 +53,9 @@ def _make_generator(cc_vendor='gcc', target_os='linux',
     gen.build_toolchain.filter_cc_flags = lambda flags: list(flags)
     gen.build_toolchain.cc_is = lambda vendor: vendor == cc_vendor
 
-    section = {'fission': False, 'debug_info_levels': {'mid': ['-g']},
+    section = {'fission': False, 'debug_info_levels': {'mid': ['-g'], 'no': []},
                'no_semantic_interposition': False}
-    global_section = {'debug_info_level': 'mid'}
+    global_section = {'debug_info_level': debug_info_level}
 
     def fake_get_section(name):
         return {'cc_config': section, 'global_config': global_section}[name]
@@ -87,6 +88,44 @@ class AutofdoGenerateTest(unittest.TestCase):
         gen, fake = _make_generator(cc_vendor='clang', autofdo_generate=False)
         cppflags, _ = _flags(gen, fake)
         self.assertNotIn('-fdebug-info-for-profiling', cppflags)
+
+    def test_no_debug_adds_line_tables(self):
+        # debug_info_level=no emits no -g -> collection would be unsamplable;
+        # blade adds minimal line tables (clang -gmlt / gcc -g1).
+        cc_rule_support._autofdo_debug_noticed = False
+        for vendor, flag in (('clang', '-gmlt'), ('gcc', '-g1')):
+            gen, fake = _make_generator(cc_vendor=vendor, autofdo_generate=True,
+                                        debug_info_level='no')
+            with mock.patch.object(cc_rule_support.console, 'notice'):
+                cppflags, _ = _flags(gen, fake)
+            self.assertIn(flag, cppflags)
+
+    def test_existing_debug_not_downgraded(self):
+        # debug_info_level=mid already emits -g; do NOT add -gmlt (a later
+        # -gmlt would downgrade full -g to minimal line tables).
+        gen, fake = _make_generator(cc_vendor='clang', autofdo_generate=True,
+                                    debug_info_level='mid')
+        cppflags, _ = _flags(gen, fake)
+        self.assertNotIn('-gmlt', cppflags)
+        self.assertIn('-g', cppflags)
+
+    def test_no_debug_bump_notifies_once(self):
+        cc_rule_support._autofdo_debug_noticed = False
+        with mock.patch.object(cc_rule_support.console, 'notice') as notice:
+            for _ in range(2):
+                gen, fake = _make_generator(cc_vendor='clang', autofdo_generate=True,
+                                            debug_info_level='no')
+                _flags(gen, fake)
+        notice.assert_called_once()
+
+    def test_line_table_predicates(self):
+        self.assertTrue(cc_rule_support._has_line_table_debug(['-g']))
+        self.assertTrue(cc_rule_support._has_line_table_debug(['-g1']))
+        self.assertFalse(cc_rule_support._has_line_table_debug([]))
+        self.assertFalse(cc_rule_support._has_line_table_debug(['-g0']))
+        self.assertFalse(cc_rule_support._has_line_table_debug(['-gsplit-dwarf']))
+        self.assertTrue(cc_rule_support._has_msvc_debug_info(['/Z7']))
+        self.assertFalse(cc_rule_support._has_msvc_debug_info([]))
 
     def test_autofdo_defines_no_pgo_macro(self):
         # AutoFDO samples a *normal* binary -- no instrumentation runtime to
