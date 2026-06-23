@@ -108,6 +108,18 @@ class SanitizerHelperTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             sanitizer.check_compat(['memory', 'thread'])
 
+    def test_incompatible_combo_rejected_at_command_line(self):
+        # check_compat is toolchain-independent, so the command line must reject
+        # an invalid combination up front -- before the load/analyze pass and
+        # the build dir, not mid-build.
+        from blade import command_line
+        with self.assertRaises(SystemExit):
+            command_line.parse(['build', '--sanitizer=address,thread', '//foo:bar'])
+        # A valid combo parses fine and yields the canonical set.
+        _, options, _ = command_line.parse(
+            ['build', '--sanitizer=address,undefined', '//foo:bar'])
+        self.assertEqual(['address', 'undefined'], options.sanitizers)
+
     def test_runtime_env_defaults(self):
         env = sanitizer.runtime_env(['thread'])
         self.assertEqual('halt_on_error=1', env['TSAN_OPTIONS'])

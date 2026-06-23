@@ -71,8 +71,12 @@ class CommandLineParser:
         # Check the options with different sub command
         self._check_subcommand(command, options, targets)
 
-        # Canonicalize --sanitizer (off for subcommands without build args).
+        # Canonicalize --sanitizer (off for subcommands without build args) and
+        # reject an invalid combination *now* -- it's toolchain-independent, so
+        # fail at the command line instead of mid-build (after the build dir and
+        # the whole load/analyze pass are already done).
         options.sanitizers = sanitizer.parse(getattr(options, 'sanitizer', ''))
+        sanitizer.check_compat(options.sanitizers)
 
         return command, options, targets
 

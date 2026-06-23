@@ -721,7 +721,8 @@ class CcRuleGenerator:
 
         sanitizers = getattr(self.options, 'sanitizers', None)
         if sanitizers:
-            sanitizer.check_compat(sanitizers)
+            # check_compat ran at the command line (toolchain-independent); only
+            # the toolchain-support check needs the resolved toolchain here.
             sanitizer.check_toolchain(sanitizers, self.build_toolchain)
             # Compile-side instrumentation rides the overridable `${sanitize}`
             # ninja var (emitted by _generate_cc_vars) so a per-target
@@ -892,11 +893,10 @@ class CcRuleGenerator:
         # global default is the active set's compile flags (/fsanitize=address),
         # and a per-target `sanitize=False` blanks it on that target's edges --
         # cl has no `-fno-sanitize` to subtract per file. The compile rules below
-        # reference `${sanitize}`. Validate the set once here.
+        # reference `${sanitize}`. (check_compat ran at the command line.)
         sanitizers = getattr(self.options, 'sanitizers', None)
         sanitize = ''
         if sanitizers:
-            sanitizer.check_compat(sanitizers)
             sanitizer.check_toolchain(sanitizers, self.build_toolchain)
             sanitize = ' '.join(sanitizer.msvc_compile_flags(sanitizers))
         self._add_line('sanitize = %s\n' % sanitize)
