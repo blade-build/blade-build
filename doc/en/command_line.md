@@ -130,7 +130,7 @@ Different subcommands support different options. Run `blade <subcommand> --help`
 - `--gprof` - Enable GNU gprof profiling support. **Linux only** (gcc and clang): `-pg`/gprof instrumentation only works on Linux. On macOS the flag is silently ignored (Darwin clang accepts `-pg` but treats it as a no-op, and there is no gprof tool / `gmon.out`); on Windows MSVC does not understand it. Blade skips the flag and warns once on these platforms — use `--coverage`, or a native sampling profiler (Instruments/`sample` on macOS, `perf` on Linux).
 - `--coverage` - Generate code coverage reports (supports GNU gcov and Java jacoco). For C/C++ on **gcc and clang** (every platform, including **clang-cl** on Windows) this is the `--coverage` gcov instrumentation, reported with gcovr. On Windows with **native MSVC `cl.exe`** (which has no gcov-style instrumentation) blade instead collects coverage at run time with `Microsoft.CodeCoverage.Console.exe` (it instruments the test exe dynamically via its PDB — no compile flag — and emits Cobertura), then merges the per-test reports into `cc_coverage_report/coverage.cobertura.xml`. The tool ships with Visual Studio / the Build Tools; ARM64 targets are not supported by it.
 - `--profile-generate[=path]` / `--profile-use[=path]` - [Profile-Guided Optimization](#profile-guided-optimization-pgo) (gcc, clang, and native MSVC). Phase 1 instruments, phase 2 rebuilds with the collected profile.
-- `--lto[=thin|full]` / `--no-lto` - [Link-Time Optimization](#link-time-optimization-lto) (gcc/clang). Override the project's [`cc_config.lto`](config.md#cc_config) policy for this build: bare `--lto` = ThinLTO, `--lto=full` = monolithic, `--no-lto` = off. Honored even in debug (escape hatch).
+- `--lto[=thin|full|no]` - [Link-Time Optimization](#link-time-optimization-lto) (gcc/clang). Override the project's [`cc_config.lto`](config.md#cc_config) policy for this build: bare `--lto` = ThinLTO, `--lto=full` = monolithic, `--lto=no` = off. Honored even in debug (escape hatch).
 
 ## Link-Time Optimization (LTO)
 
@@ -139,7 +139,7 @@ LTO performs cross-module optimization (inlining, devirtualization, dead-code el
 ```bash
 blade build //foo:server -p release --lto          # ThinLTO for this build
 blade build //foo:server -p release --lto=full     # monolithic LTO
-blade build //foo:server -p release --no-lto       # off (skip LTO's link cost while iterating)
+blade build //foo:server -p release --lto=no       # off (skip LTO's link cost while iterating)
 ```
 
 - **thin** (default for `--lto`) maps to clang `-flto=thin` / gcc `-flto=auto`; clang additionally keeps a persistent ThinLTO cache under `<build_dir>/.cache/thinlto/` when the linker supports it (ld64 / lld / gold; GNU `bfd` is detected and the cache omitted). **full** is monolithic `-flto`.
@@ -147,7 +147,7 @@ blade build //foo:server -p release --no-lto       # off (skip LTO's link cost w
 - **Per-target opt-out:** `lto = False` on a `cc_library` keeps it native (linked as an ordinary object alongside the bitcode) — for a TU that miscompiles under LTO, or a library that should stay native.
 - **gcc/clang only** in v1; native MSVC (`/GL`+`/LTCG`, shared with the PGO path) comes later.
 
-**Toolchain notes / robustness.** clang's thin is true ThinLTO (incremental, cached, well-supported). gcc has no ThinLTO, so thin maps to gcc's parallel WHOPR (`-flto=auto`) — a different model with no persistent cache. gcc's whole-program LTO is also **less robust on large C++ binaries**: gcc 15.x has been observed to ICE (`internal compiler error: in odr_types_equivalent_p, at ipa-devirt.cc`) when linking heavy protobuf/RPC binaries. An ICE is a compiler bug, not a code error — if you hit one, drop LTO for that binary with `--no-lto` (a per-TU `lto=False` won't help, since the failure is in the whole-program link). In short: clang ThinLTO is the well-trodden path; treat **gcc full-program LTO as experimental**. Runtime gains are also workload- and toolchain-dependent — concentrated on genuinely cross-module hot paths, often negligible elsewhere — so measure on your own hot paths before committing a project to it.
+**Toolchain notes / robustness.** clang's thin is true ThinLTO (incremental, cached, well-supported). gcc has no ThinLTO, so thin maps to gcc's parallel WHOPR (`-flto=auto`) — a different model with no persistent cache. gcc's whole-program LTO is also **less robust on large C++ binaries**: gcc 15.x has been observed to ICE (`internal compiler error: in odr_types_equivalent_p, at ipa-devirt.cc`) when linking heavy protobuf/RPC binaries. An ICE is a compiler bug, not a code error — if you hit one, drop LTO for that binary with `--lto=no` (a per-TU `lto=False` won't help, since the failure is in the whole-program link). In short: clang ThinLTO is the well-trodden path; treat **gcc full-program LTO as experimental**. Runtime gains are also workload- and toolchain-dependent — concentrated on genuinely cross-module hot paths, often negligible elsewhere — so measure on your own hot paths before committing a project to it.
 
 ## Profile-Guided Optimization (PGO)
 

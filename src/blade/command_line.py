@@ -353,20 +353,18 @@ class CommandLineParser:
     def __add_lto_arguments(self, parser):
         """Add Link-Time Optimization arguments (#1378).
 
-        LTO is normally a project policy (`cc_config(lto='thin')`); these flags
-        override it per invocation. `--lto`/`--lto=full` is honored even in debug
-        (escape hatch); `--no-lto` forces it off. gcc/clang only in v1.
+        LTO is normally a project policy (`cc_config(lto='thin')`); this flag
+        overrides it per invocation and is honored even in debug (escape hatch).
+        gcc/clang only in v1.
         """
         parser.add_argument(
             '--lto', dest='lto', metavar='MODE',
             action='store', type=str, nargs='?', const='thin',
-            choices=['thin', 'full'],
-            help='Enable link-time optimization for this build, overriding '
+            choices=['thin', 'full', 'no'],
+            help='Link-time optimization for this build, overriding '
                  'cc_config.lto. Bare --lto = thin (ThinLTO); --lto=full = '
-                 'monolithic. Honored even in debug. gcc/clang only.')
-        parser.add_argument(
-            '--no-lto', dest='lto', action='store_const', const='off',
-            help='Disable LTO for this build, overriding cc_config.lto.')
+                 'monolithic; --lto=no = off. Honored even in debug. '
+                 'gcc/clang only.')
 
     def __add_fission_arguments(self, parser):
         """Add fission support to cc_binary."""

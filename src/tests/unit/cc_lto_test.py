@@ -64,8 +64,8 @@ class LtoModeTest(unittest.TestCase):
         self.assertIsNone(_mode(_opts(profile='debug'), _tc(), cfg='thin'))
 
     def test_cli_overrides_config(self):
-        # --no-lto turns the project policy off.
-        self.assertIsNone(_mode(_opts(lto='off'), _tc(), cfg='thin'))
+        # --lto=no turns the project policy off.
+        self.assertIsNone(_mode(_opts(lto='no'), _tc(), cfg='thin'))
         # --lto=full overrides a 'thin' policy.
         self.assertEqual('full', _mode(_opts(lto='full'), _tc(), cfg='thin'))
 
@@ -90,7 +90,8 @@ class LtoCompileFlagTest(unittest.TestCase):
         self.assertEqual('-flto', cc_rule_support._lto_compile_flag('full', _tc('gcc')))
 
     def test_none(self):
-        self.assertIsNone(cc_rule_support._lto_compile_flag(None, _tc('clang')))
+        # Returns '' (not None) when off, so callers need no `or ''`.
+        self.assertEqual('', cc_rule_support._lto_compile_flag(None, _tc('clang')))
 
 
 class LtoLinkFlagTest(unittest.TestCase):
@@ -174,7 +175,7 @@ class LtoIntrinsicFlagsTest(unittest.TestCase):
                 pass
         gen.build_dir = tempfile.mkdtemp()
         gen.build_toolchain = _tc(vendor, target_os)
-        gen.build_toolchain.filter_cc_flags = lambda flags: list(flags)
+        gen.build_toolchain.filter_cc_flags = list
         gen.build_toolchain.supports_link_flag = lambda f: False
         section = {'fission': False, 'debug_info_levels': {'mid': ['-g']},
                    'no_semantic_interposition': False}

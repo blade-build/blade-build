@@ -180,7 +180,7 @@ Whether release builds use cross-module link-time optimization. This is a **proj
 
 **Gating:** applies only to the **release** profile — debug builds never use LTO (cross-module inlining destroys the source↔binary mapping, and `-flto -O0` optimizes nothing). **No separate build directory:** unlike PGO/coverage, LTO ships and is stable, so it rides the existing `build_release` dir; toggling it triggers a normal full rebuild via the fingerprint.
 
-**Command-line override:** `--lto` / `--lto=full` / `--no-lto` (the CLI is honored even in debug, as an escape hatch). **Per-target opt-out:** set `lto = False` on a `cc_library` that should stay native (it links as an ordinary object alongside the bitcode). **gcc/clang only** in v1 (MSVC `/GL`+`/LTCG`, shared with the PGO path, comes later).
+**Command-line override:** `--lto` / `--lto=full` / `--lto=no` (the CLI is honored even in debug, as an escape hatch). **Per-target opt-out:** set `lto = False` on a `cc_library` that should stay native (it links as an ordinary object alongside the bitcode). **gcc/clang only** in v1 (MSVC `/GL`+`/LTCG`, shared with the PGO path, comes later).
 
 #### `fission`: bool = False
 **Debug Information Fission**

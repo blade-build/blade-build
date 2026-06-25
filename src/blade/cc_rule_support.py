@@ -16,12 +16,18 @@ everything here is cc/cuda-specific.
 import os
 import sys
 import textwrap
+from typing import TYPE_CHECKING
 
 from blade import config
 from blade import console
 from blade import sanitizer
 from blade import util
 from blade.ninja_rule import NinjaRule
+
+if TYPE_CHECKING:
+    import argparse
+
+    from blade.toolchain import ToolChain
 
 
 # To verify whether a header is included without depending on the library it
@@ -611,10 +617,10 @@ def _instrument_clang_cl_link_flags(toolchain, options):
 # symbols. macOS Apple cctools `ar`/`nm` read bitcode natively -- no routing.
 
 
-def _lto_mode(options, toolchain):
+def _lto_mode(options: 'argparse.Namespace', toolchain: 'ToolChain') -> str | None:
     """Resolve the effective LTO mode: ``'thin'`` | ``'full'`` | ``None``.
 
-    `--lto`/`--lto=full`/`--no-lto` (CLI) overrides and is honored even in debug
+    `--lto`/`--lto=full`/`--lto=no` (CLI) overrides and is honored even in debug
     (the escape hatch for reproducing an LTO-specific miscompile); otherwise the
     `cc_config.lto` project policy applies, but only in the optimized (release)
     profile. MSVC is excluded in v1.
@@ -622,7 +628,7 @@ def _lto_mode(options, toolchain):
     if toolchain.cc_is('msvc'):
         return None
     cli = getattr(options, 'lto', None)
-    if cli == 'off':
+    if cli == 'no':
         return None
     if cli in ('thin', 'full'):
         return cli
@@ -632,17 +638,19 @@ def _lto_mode(options, toolchain):
     return cfg if cfg in ('thin', 'full') else None
 
 
-def _lto_compile_flag(mode, toolchain):
-    """The `-flto*` compile flag for a mode, mapped per toolchain. gcc has no
-    ThinLTO; its parallel WHOPR (`-flto=auto`) is the closest to thin."""
+def _lto_compile_flag(mode: str | None, toolchain: 'ToolChain') -> str:
+    """The `-flto*` compile flag for a mode (``''`` when off), mapped per
+    toolchain. gcc has no ThinLTO; its parallel WHOPR (`-flto=auto`) is the
+    closest to thin."""
     if not mode:
-        return None
+        return ''
     if toolchain.cc_is('gcc'):
         return '-flto' if mode == 'full' else '-flto=auto'
     return '-flto' if mode == 'full' else '-flto=thin'  # clang / clang-cl-excluded
 
 
-def _lto_link_flags(mode, toolchain, build_dir):
+def _lto_link_flags(mode: str | None, toolchain: 'ToolChain',
+                    build_dir: str) -> list[str]:
     """LTO link flags: the `-flto*` flag plus, for thin on clang, a persistent
     ThinLTO cache so incremental relinks reuse backend codegen. gcc has no such
     cache (WHOPR re-partitions); skip it there.
@@ -667,12 +675,15 @@ def _lto_link_flags(mode, toolchain, build_dir):
             try:
                 os.makedirs(cache, exist_ok=True)
             except OSError:
+                # Best-effort: if the cache dir can't be created (permissions,
+                # read-only FS) the linker just runs without a persistent cache;
+                # not worth failing the build over.
                 pass
             flags.append(cache_flag)
     return flags
 
 
-def _lto_plugin_ar_nm(toolchain):
+def _lto_plugin_ar_nm(toolchain: 'ToolChain') -> tuple[str | None, str | None]:
     """Plugin-aware ``(ar, nm)`` for archiving / reading LTO bitcode on Linux,
     or ``(None, None)`` when the defaults already suffice (macOS cctools read
     bitcode natively) or no plugin tool is found (caller keeps the default and a
@@ -1292,7 +1303,7 @@ class CcRuleGenerator:
         # compiles native (see CcTarget._get_cc_vars). _lto_mode already gates
         # on the optimized profile (debug -> '').
         lto_mode = _lto_mode(self.options, self.build_toolchain)
-        lto = _lto_compile_flag(lto_mode, self.build_toolchain) or ''
+        lto = _lto_compile_flag(lto_mode, self.build_toolchain)
         self._add_line(textwrap.dedent('''\
                 c_warnings = %s
                 cxx_warnings = %s
