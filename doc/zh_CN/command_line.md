@@ -145,9 +145,9 @@ blade build //foo:server -p release --lto=no       # 关闭（开发迭代时跳
 - **thin**（`--lto` 的默认）映射到 clang `-flto=thin` / gcc `-flto=auto`；clang 在链接器支持时还会在 `<build_dir>/.cache/thinlto/` 下维护一个持久 ThinLTO 缓存（ld64 / lld / gold 支持；检测到 GNU `bfd` 时省略缓存）。**full** 是单体 `-flto`。
 - **仅 release：** debug 构建除非显式给 `--lto`，否则永不启用 LTO。**无独立构建目录**（与 PGO/coverage 不同）—— LTO 会发布且稳定，沿用 `build_release`；开关它会触发一次正常的全量重建。
 - **按 target 退出：** 在 `cc_library` 上设 `lto = False` 让它保持 native（作为普通对象与 bitcode 一起链接）——用于在 LTO 下被误编译的 TU，或应保持 native 的库。
-- **工具链：** gcc、clang 与**原生 MSVC `cl.exe`**。原生 cl 上 LTO 映射到 `/GL`+`/LTCG`（thin/full 都→`/LTCG`，因为 MSVC LTCG 本就是整程序）；PGO 激活时被吸收（PGO 已做 LTCG）。**`clang-cl` 不在此列**——它的 LLVM-LTO 路径（lld-link + bitcode）作为独立 follow-up。
+- **工具链：四种全支持**——gcc、clang、原生 MSVC `cl.exe`、clang-cl。原生 cl 映射到 `/GL`+`/LTCG`（thin/full 都→`/LTCG`，因为 MSVC LTCG 本就是整程序；PGO 激活时被吸收）。**clang-cl** 走 LLVM 路径：`-flto[=thin]`→bitcode，由 `lld-link` 做 LTO（thin 加 `/lldltocache`）。
 
-**工具链说明 / 健壮性。** clang 的 thin 是真正的 ThinLTO（增量、带缓存、支持完善）。gcc 没有 ThinLTO,所以 thin 映射到 gcc 的并行 WHOPR（`-flto=auto`）——另一套模型,没有持久缓存。原生 MSVC 的 `/GL`+`/LTCG` 很稳健,且对象仍是 COFF（故 `cc_check_undefined` 照常工作）。gcc 的整程序 LTO 在**大型 C++ 二进制上也不够健壮**:已观察到 gcc 15.x 在链接重度 protobuf/RPC 二进制时 ICE(`internal compiler error: in odr_types_equivalent_p, at ipa-devirt.cc`)。ICE 是编译器 bug,不是代码错误——遇到时用 `--lto=no` 对那个二进制关掉 LTO(按 TU 的 `lto=False` 救不了,因为失败发生在整程序链接)。一句话:clang ThinLTO 是成熟路径,**gcc 整程序 LTO 当作实验性对待**。运行时收益也依赖工作负载与工具链——集中在真正跨模块的热路径上,其它地方往往可忽略——所以把项目切到 LTO 前,先在你自己的热路径上实测。
+**工具链说明 / 健壮性。** clang 与 clang-cl 的 thin 是真正的 ThinLTO（增量、带缓存）。gcc 没有 ThinLTO,所以 thin 映射到 gcc 的并行 WHOPR（`-flto=auto`）——另一套模型,没有持久缓存。原生 MSVC 的 `/GL`+`/LTCG` 让对象保持 COFF（故 `cc_check_undefined` 用 `dumpbin` 读取）；clang-cl LTO 产出 bitcode,检查改走 `llvm-nm`——两者都照常工作。gcc 的整程序 LTO 在**大型 C++ 二进制上也不够健壮**:已观察到 gcc 15.x 在链接重度 protobuf/RPC 二进制时 ICE(`internal compiler error: in odr_types_equivalent_p, at ipa-devirt.cc`)。ICE 是编译器 bug,不是代码错误——遇到时用 `--lto=no` 对那个二进制关掉 LTO(按 TU 的 `lto=False` 救不了,因为失败发生在整程序链接)。一句话:clang ThinLTO 是成熟路径,**gcc 整程序 LTO 当作实验性对待**。运行时收益也依赖工作负载与工具链——集中在真正跨模块的热路径上,其它地方往往可忽略——所以把项目切到 LTO 前,先在你自己的热路径上实测。
 
 ## 按性能剖析引导优化（PGO）
 

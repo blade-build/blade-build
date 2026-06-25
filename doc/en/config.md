@@ -180,7 +180,7 @@ Whether release builds use cross-module link-time optimization. This is a **proj
 
 **Gating:** applies only to the **release** profile — debug builds never use LTO (cross-module inlining destroys the source↔binary mapping, and `-flto -O0` optimizes nothing). **No separate build directory:** unlike PGO/coverage, LTO ships and is stable, so it rides the existing `build_release` dir; toggling it triggers a normal full rebuild via the fingerprint.
 
-**Command-line override:** `--lto` / `--lto=full` / `--lto=no` (the CLI is honored even in debug, as an escape hatch). **Per-target opt-out:** set `lto = False` on a `cc_library` that should stay native (it links as an ordinary object alongside the bitcode). **Toolchains:** gcc, clang, and **native MSVC `cl.exe`** (`/GL`+`/LTCG`; thin/full both map to `/LTCG` since MSVC LTCG is whole-program, and it is subsumed when a PGO mode is active, which already does LTCG). `clang-cl` is the one exception — its LLVM-LTO path is not wired yet.
+**Command-line override:** `--lto` / `--lto=full` / `--lto=no` (the CLI is honored even in debug, as an escape hatch). **Per-target opt-out:** set `lto = False` on a `cc_library` that should stay native (it links as an ordinary object alongside the bitcode). **Toolchains:** gcc, clang, native MSVC `cl.exe` (`/GL`+`/LTCG`; thin/full both map to `/LTCG` since MSVC LTCG is whole-program, and it is subsumed when a PGO mode is active), and clang-cl (the LLVM path: `-flto[=thin]` + `lld-link`, with a `/lldltocache` for thin).
 
 #### `fission`: bool = False
 **Debug Information Fission**
