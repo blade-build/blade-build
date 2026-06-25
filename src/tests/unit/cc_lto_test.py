@@ -26,21 +26,37 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, 'src'))
 from blade import cc_rule_support  # noqa: E402
 
 
-def _tc(vendor='clang', target_os='linux', supports_cache=True):
+def _tc(vendor='clang', target_os='linux', supports_cache=True, clang_cl=False):
     tc = mock.Mock()
     tc.target_os = target_os
     tc.cc = '/usr/bin/' + ('clang' if vendor == 'clang' else vendor)
     tc.cc_is = lambda v: v == vendor
+    # clang-cl reports cc_is('msvc') True; its LLVM-LTO path is excluded in v1,
+    # so _lto_mode checks is_clang_cl() (False for cl.exe / gcc / clang).
+    tc.is_clang_cl = lambda: clang_cl
     # The ThinLTO cache flag is linker-specific; default the probe to True
     # (lld/gold/ld64) so cache-bearing assertions hold, override for bfd.
     tc.supports_link_flag = lambda f: supports_cache
     return tc
 
 
-def _opts(lto=None, profile='release'):
+def _opts(lto=None, profile='release', pgo_generate=None, pgo_use=None,
+          autofdo_generate=False):
+    """Options namespace. PGO/SPGO dests are dashed; absent => mode not given
+    (so the MSVC LTO subsumption check sees no PGO unless asked)."""
     o = mock.Mock()
     o.lto = lto
     o.profile = profile
+    setattr(o, 'autofdo-generate', autofdo_generate)
+    setattr(o, 'autofdo-use', None)
+    for attr, val in (('profile-generate', pgo_generate), ('profile-use', pgo_use)):
+        if val is None:
+            try:
+                delattr(o, attr)
+            except AttributeError:
+                pass
+        else:
+            setattr(o, attr, val)
     return o
 
 
@@ -73,8 +89,58 @@ class LtoModeTest(unittest.TestCase):
         # The escape hatch: --lto honored regardless of profile.
         self.assertEqual('thin', _mode(_opts(lto='thin', profile='debug'), _tc(), cfg=''))
 
-    def test_msvc_excluded(self):
-        self.assertIsNone(_mode(_opts(lto='thin'), _tc(vendor='msvc'), cfg='thin'))
+    def test_native_msvc_resolves(self):
+        # Native cl.exe now participates (maps to /GL+/LTCG); clang-cl does not.
+        self.assertEqual('thin', _mode(_opts(lto='thin'), _tc(vendor='msvc'), cfg='thin'))
+
+    def test_clang_cl_excluded(self):
+        self.assertIsNone(
+            _mode(_opts(lto='thin'), _tc(vendor='msvc', clang_cl=True), cfg='thin'))
+
+
+class LtoMsvcFlagTest(unittest.TestCase):
+    """Native cl.exe LTO: /GL compile, /LTCG lib+link; subsumed by PGO/SPGO;
+    clang-cl excluded."""
+
+    def _active(self, **kw):
+        # _lto_msvc_native_active resolves the mode via _lto_mode -> patch config.
+        opts = _opts(**{k: v for k, v in kw.items()
+                        if k in ('lto', 'profile', 'pgo_generate', 'pgo_use',
+                                 'autofdo_generate')})
+        tc = _tc(vendor='msvc', clang_cl=kw.get('clang_cl', False))
+        with mock.patch.object(cc_rule_support.config, 'get_item',
+                               return_value=kw.get('cfg', '')):
+            return cc_rule_support._lto_msvc_native_active(opts, tc), opts, tc
+
+    def test_gl_when_lto_on(self):
+        active, opts, tc = self._active(lto='thin')
+        self.assertTrue(active)
+        self.assertEqual('/GL', cc_rule_support._lto_msvc_compile_flag(opts, tc))
+        self.assertEqual(['/LTCG'], cc_rule_support._lto_msvc_lib_flags(opts, tc))
+        self.assertEqual(['/LTCG'], cc_rule_support._lto_msvc_link_flags(opts, tc))
+
+    def test_off_when_lto_off(self):
+        active, opts, tc = self._active(lto='no', cfg='thin')
+        self.assertFalse(active)
+        self.assertEqual('', cc_rule_support._lto_msvc_compile_flag(opts, tc))
+        self.assertEqual([], cc_rule_support._lto_msvc_link_flags(opts, tc))
+
+    def test_subsumed_by_pgo(self):
+        # PGO already does whole-program LTCG -> LTO adds nothing (no double /GL).
+        active, opts, tc = self._active(lto='thin', pgo_generate='')
+        self.assertFalse(active)
+        active2, _, _ = self._active(lto='thin', pgo_use='/tmp/p')
+        self.assertFalse(active2)
+
+    def test_subsumed_by_spgo(self):
+        active, _, _ = self._active(lto='full', autofdo_generate=True)
+        self.assertFalse(active)
+
+    def test_clang_cl_uses_llvm_path_not_gl(self):
+        # clang-cl is excluded from the native /GL+/LTCG path.
+        active, opts, tc = self._active(lto='thin', clang_cl=True, cfg='thin')
+        self.assertFalse(active)
+        self.assertEqual('', cc_rule_support._lto_msvc_compile_flag(opts, tc))
 
 
 class LtoCompileFlagTest(unittest.TestCase):

@@ -623,9 +623,11 @@ def _lto_mode(options: 'argparse.Namespace', toolchain: 'ToolChain') -> str | No
     `--lto`/`--lto=full`/`--lto=no` (CLI) overrides and is honored even in debug
     (the escape hatch for reproducing an LTO-specific miscompile); otherwise the
     `cc_config.lto` project policy applies, but only in the optimized (release)
-    profile. MSVC is excluded in v1.
+    profile. Applies to gcc/clang and native cl.exe (which maps to /GL+/LTCG via
+    the `_lto_msvc_*` helpers); clang-cl's LLVM-LTO path is a separate follow-up,
+    so it is excluded here.
     """
-    if toolchain.cc_is('msvc'):
+    if toolchain.is_clang_cl():
         return None
     cli = getattr(options, 'lto', None)
     if cli == 'no':
@@ -704,6 +706,52 @@ def _lto_plugin_ar_nm(toolchain: 'ToolChain') -> tuple[str | None, str | None]:
         resolved.append(cand if cand and os.path.isfile(cand) else shutil.which(name))
     ar, nm = resolved
     return (ar or None), (nm or None)
+
+
+# --- MSVC (native cl.exe) LTO (#1378) ----------------------------------------
+#
+# MSVC's LTO is Link-Time Code Generation: `/GL` on every compile, `/LTCG` on
+# the lib/link. This is the SAME flag family the MSVC PGO path emits
+# (`_pgo_msvc_*`), so when a PGO/SPGO mode is active it already does
+# whole-program LTCG and LTO is subsumed -- the helpers below return nothing
+# then, to avoid a duplicate `/GL` or a conflicting `/LTCG:INCREMENTAL`. The
+# objects stay COFF (with LTCG info), so `dumpbin` -- hence cc_check_undefined --
+# keeps working, unlike the bitcode gcc/clang path. clang-cl is excluded (it
+# would use the LLVM `-flto` path + lld-link; a separate follow-up).
+
+
+def _lto_msvc_native_active(options: 'argparse.Namespace',
+                            toolchain: 'ToolChain') -> bool:
+    """True when native-cl.exe LTO should add `/GL`+`/LTCG`: an LTO mode is in
+    effect, the toolchain is native cl (not clang-cl), and no PGO/SPGO mode is
+    active (those already do LTCG)."""
+    if toolchain.is_clang_cl() or not toolchain.cc_is('msvc'):
+        return False
+    if _lto_mode(options, toolchain) is None:
+        return False
+    return not (_pgo_msvc_active(options) or _spgo_msvc_active(options))
+
+
+def _lto_msvc_compile_flag(options: 'argparse.Namespace',
+                           toolchain: 'ToolChain') -> str:
+    """`/GL` (whole-program) for a native-cl LTO compile, else ``''``. Rides the
+    overridable `${lto}` ninja var so a per-target lto=False blanks it."""
+    return '/GL' if _lto_msvc_native_active(options, toolchain) else ''
+
+
+def _lto_msvc_lib_flags(options: 'argparse.Namespace',
+                        toolchain: 'ToolChain') -> list[str]:
+    """`/LTCG` so `lib.exe` can archive the `/GL` objects an LTO build emits."""
+    return ['/LTCG'] if _lto_msvc_native_active(options, toolchain) else []
+
+
+def _lto_msvc_link_flags(options: 'argparse.Namespace',
+                         toolchain: 'ToolChain') -> list[str]:
+    """Native-cl LTO link flag: `/LTCG`. MSVC LTCG is inherently whole-program,
+    so the thin/full distinction (a gcc/clang concept) does not apply here --
+    both modes map to `/LTCG`. (`/LTCG:INCREMENTAL` exists but interacts with the
+    release `/INCREMENTAL:NO`; not used in v1.)"""
+    return ['/LTCG'] if _lto_msvc_native_active(options, toolchain) else []
 
 
 class CcRuleGenerator:
@@ -1023,6 +1071,14 @@ class CcRuleGenerator:
             sanitize = ' '.join(sanitizer.msvc_compile_flags(sanitizers))
         self._add_line('sanitize = %s\n' % sanitize)
 
+        # LTO (#1378): native cl.exe whole-program flag `/GL`, as an overridable
+        # var (like ${sanitize}) so a per-target lto=False blanks it. Subsumed by
+        # PGO/SPGO (they already do LTCG) -- see _lto_msvc_native_active. clang-cl
+        # is excluded (LLVM -flto path, separate follow-up). The cc/cxx rules
+        # below reference `${lto}`.
+        self._add_line('lto = %s\n' % _lto_msvc_compile_flag(
+            self.options, self.build_toolchain))
+
     def _generate_windows_cc_compile_rules(self, cc, cxx):
         """Generate Windows CC compilation rules."""
         windows_config = config.get_section('msvc_config')
@@ -1097,7 +1153,7 @@ class CcRuleGenerator:
         wrapper = self._msvc_tee_wrapper_py()
         template = '"%s" -B %s ${inclusion_stack} -- ' % (py, wrapper)
 
-        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} /external:W0 ${cppflags} ${sanitize} ${includes} ${extra_compile_flags} ${in}' % (
+        cc_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${c_warnings} /external:W0 ${cppflags} ${sanitize} ${lto} ${includes} ${extra_compile_flags} ${in}' % (
             cc, optimize, ' '.join(cppflags), ' '.join(cflags), include_flags))
         self.generate_rule(name='cc',
                            command=cc_command,
@@ -1105,7 +1161,7 @@ class CcRuleGenerator:
                            deps='msvc',
                            restat=True)
 
-        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} /external:W0 ${cppflags} ${sanitize} ${includes} ${extra_compile_flags} ${in}' % (
+        cxx_command = template + ('"%s" /nologo /c /showIncludes %s %s %s %s /Fo${out} ${cxx_warnings} /external:W0 ${cppflags} ${sanitize} ${lto} ${includes} ${extra_compile_flags} ${in}' % (
             cxx, optimize, ' '.join(cppflags), ' '.join(cxxflags), include_flags))
         self.generate_rule(name='cxx',
                            command=cxx_command,
@@ -1162,10 +1218,13 @@ class CcRuleGenerator:
         if self.build_toolchain.is_clang_cl():
             pgo = ''
         else:
-            # /LTCG to archive /GL objects from either native PGO or SPGO
-            # (mutually exclusive modes, so at most one contributes).
-            pgo = ''.join(' ' + f for f in (_pgo_msvc_lib_flags(self.options) +
-                                            _spgo_msvc_lib_flags(self.options)))
+            # /LTCG to archive /GL objects from native PGO, SPGO, or LTO (#1378).
+            # PGO/SPGO and LTO are mutually exclusive on the lib side (LTO is
+            # subsumed when PGO/SPGO is active), but dedup keeps a single /LTCG.
+            ltcg = util.stable_unique(_pgo_msvc_lib_flags(self.options) +
+                                      _spgo_msvc_lib_flags(self.options) +
+                                      _lto_msvc_lib_flags(self.options, self.build_toolchain))
+            pgo = ''.join(' ' + f for f in ltcg)
         self.generate_rule(name='ar',
                            command=f'{ar} /nologo{brepro}{pgo} /out:${{out}} ${{in}}',
                            description='LIB ${out}')
@@ -1214,11 +1273,13 @@ class CcRuleGenerator:
                 if flag not in linkflags:
                     linkflags = linkflags + [flag]
         else:
-            # Native cl.exe: instrumentation PGO (/GENPROFILE|/USEPROFILE) or
-            # SPGO sample PGO (/spgo | /LTCG /spdin:). Mutually exclusive, so at
-            # most one is non-empty. Both need LTCG -> incremental linking off.
+            # Native cl.exe: instrumentation PGO (/GENPROFILE|/USEPROFILE), SPGO
+            # sample PGO (/spgo | /LTCG /spdin:), or LTO (/LTCG, #1378). Mutually
+            # exclusive (LTO is subsumed when PGO/SPGO is active). All need LTCG
+            # -> incremental linking off.
             pgo_link = (_pgo_msvc_link_flags(self.options) or
-                        _spgo_msvc_link_flags(self.options))
+                        _spgo_msvc_link_flags(self.options) or
+                        _lto_msvc_link_flags(self.options, self.build_toolchain))
             if pgo_link:
                 for flag in pgo_link + ['/INCREMENTAL:NO']:
                     if flag not in linkflags:
