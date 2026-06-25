@@ -147,6 +147,8 @@ blade build //foo:server -p release --no-lto       # 关闭（开发迭代时跳
 - **按 target 退出：** 在 `cc_library` 上设 `lto = False` 让它保持 native（作为普通对象与 bitcode 一起链接）——用于在 LTO 下被误编译的 TU，或应保持 native 的库。
 - v1 **仅 gcc/clang**；原生 MSVC（`/GL`+`/LTCG`，与 PGO 路径共用）留待以后。
 
+**工具链说明 / 健壮性。** clang 的 thin 是真正的 ThinLTO（增量、带缓存、支持完善）。gcc 没有 ThinLTO,所以 thin 映射到 gcc 的并行 WHOPR（`-flto=auto`）——另一套模型,没有持久缓存。gcc 的整程序 LTO 在**大型 C++ 二进制上也不够健壮**:已观察到 gcc 15.x 在链接重度 protobuf/RPC 二进制时 ICE(`internal compiler error: in odr_types_equivalent_p, at ipa-devirt.cc`)。ICE 是编译器 bug,不是代码错误——遇到时用 `--no-lto` 对那个二进制关掉 LTO(按 TU 的 `lto=False` 救不了,因为失败发生在整程序链接)。一句话:clang ThinLTO 是成熟路径,**gcc 整程序 LTO 当作实验性对待**。运行时收益也依赖工作负载与工具链——集中在真正跨模块的热路径上,其它地方往往可忽略——所以把项目切到 LTO 前,先在你自己的热路径上实测。
+
 ## 按性能剖析引导优化（PGO）
 
 PGO(Profile-guided optimization)又称 FDO(feedback-directed optimization) 是指利用程序真实运行过程中采集到的 profile 数据，来指导编译器优化的技术。

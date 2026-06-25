@@ -147,6 +147,8 @@ blade build //foo:server -p release --no-lto       # off (skip LTO's link cost w
 - **Per-target opt-out:** `lto = False` on a `cc_library` keeps it native (linked as an ordinary object alongside the bitcode) — for a TU that miscompiles under LTO, or a library that should stay native.
 - **gcc/clang only** in v1; native MSVC (`/GL`+`/LTCG`, shared with the PGO path) comes later.
 
+**Toolchain notes / robustness.** clang's thin is true ThinLTO (incremental, cached, well-supported). gcc has no ThinLTO, so thin maps to gcc's parallel WHOPR (`-flto=auto`) — a different model with no persistent cache. gcc's whole-program LTO is also **less robust on large C++ binaries**: gcc 15.x has been observed to ICE (`internal compiler error: in odr_types_equivalent_p, at ipa-devirt.cc`) when linking heavy protobuf/RPC binaries. An ICE is a compiler bug, not a code error — if you hit one, drop LTO for that binary with `--no-lto` (a per-TU `lto=False` won't help, since the failure is in the whole-program link). In short: clang ThinLTO is the well-trodden path; treat **gcc full-program LTO as experimental**. Runtime gains are also workload- and toolchain-dependent — concentrated on genuinely cross-module hot paths, often negligible elsewhere — so measure on your own hot paths before committing a project to it.
+
 ## Profile-Guided Optimization (PGO)
 
 Profile-Guided Optimization (PGO), also known as Feedback-Directed Optimization (FDO), is a technique that uses profile data collected from a program's real execution to guide the compiler's optimizations.
