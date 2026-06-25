@@ -170,17 +170,11 @@ the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
 **Special Behavior:** Optimization flags are disabled in debug mode to preserve debugging capability.
 
 #### `lto`: str = `''` | `'thin'` | `'full'`
-**Link-Time Optimization (LTO / ThinLTO)** — see [#1378](https://github.com/blade-build/blade-build/issues/1378).
+**Link-Time Optimization (LTO / ThinLTO)**
 
-Whether release builds use cross-module link-time optimization. This is a **project intrinsic** (a stable decision that ships, like the optimization level), so it lives in `cc_config` rather than as a per-invocation mode.
+The project's LTO policy for **release** builds: `''` (off, default), `'thin'` (ThinLTO — incremental, recommended), or `'full'` (monolithic). A **project intrinsic** (a stable decision that ships, like the optimization level), hence a config item rather than a per-invocation mode. Override per build with `--lto` / `--lto=full` / `--lto=no`, or opt a target out with `lto = False`.
 
-- `''` (default) — off.
-- `'thin'` — **ThinLTO** (recommended): incremental and cacheable. Maps to clang `-flto=thin`; gcc has no ThinLTO, so it maps to gcc's parallel `-flto=auto`. clang's ThinLTO additionally wires a persistent cache (`<build_dir>/.cache/thinlto/`) when the linker supports it (ld64 / lld / the gold plugin; GNU `bfd` is detected and the cache is simply omitted there).
-- `'full'` — monolithic LTO (`-flto`); maximal cross-module optimization, slower link.
-
-**Gating:** applies only to the **release** profile — debug builds never use LTO (cross-module inlining destroys the source↔binary mapping, and `-flto -O0` optimizes nothing). **No separate build directory:** unlike PGO/coverage, LTO ships and is stable, so it rides the existing `build_release` dir; toggling it triggers a normal full rebuild via the fingerprint.
-
-**Command-line override:** `--lto` / `--lto=full` / `--lto=no` (the CLI is honored even in debug, as an escape hatch). **Per-target opt-out:** set `lto = False` on a `cc_library` that should stay native (it links as an ordinary object alongside the bitcode). **Toolchains:** gcc, clang, native MSVC `cl.exe` (`/GL`+`/LTCG`; thin/full both map to `/LTCG` since MSVC LTCG is whole-program, and it is subsumed when a PGO mode is active), and clang-cl (the LLVM path: `-flto[=thin]` + `lld-link`, with a `/lldltocache` for thin).
+See **[C/C++ Optimization → LTO](optimization.md#link-time-optimization-lto)** for the full story — release-only gating, the per-toolchain mapping (gcc/clang/native-MSVC/clang-cl), the ThinLTO cache, and robustness notes.
 
 #### `fission`: bool = False
 **Debug Information Fission**

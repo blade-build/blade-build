@@ -210,7 +210,7 @@ cc_library(
 
 - `lto`: bool（默认：跟随本次构建）
 
-  设 `lto = False` 让本目标退出[链接期优化（LTO）](../command_line.md#链接期优化lto)：它的源文件编成 native（不带 `-flto`），作为普通对象与构建其余部分的 bitcode 一起链接。用于在 LTO 下被误编译的翻译单元，或必须保持 native 的库。只有 `False` 有意义——不存在按 target 选 full/thin，因为链接策略对整个构建只有一个选择。是否启用 LTO 由项目策略 [`cc_config.lto`](../config.md#cc_config) 决定（可用 `--lto` / `--lto=no` 覆盖）；LTO 关闭时本属性无效。
+  设 `lto = False` 让本目标退出[链接期优化（LTO）](../optimization.md#链接期优化lto)：它的源文件编成 native（不带 `-flto`），作为普通对象与构建其余部分的 bitcode 一起链接。用于在 LTO 下被误编译的翻译单元，或必须保持 native 的库。只有 `False` 有意义——不存在按 target 选 full/thin，因为链接策略对整个构建只有一个选择。是否启用 LTO 由项目策略 [`cc_config.lto`](../config.md#cc_config) 决定（可用 `--lto` / `--lto=no` 覆盖）；LTO 关闭时本属性无效。
 
 - `binary_link_only`: bool = False，本库只能作为可执行文件目标（比如 `cc_binary` 或者 `cc_test`）的依赖，而不是其他 `cc_library` 的依赖。
 

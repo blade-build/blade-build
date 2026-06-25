@@ -22,6 +22,8 @@
 
 [Incremental build and build cache](build_cache.md)
 
+[C/C++ Optimization (PGO / AutoFDO / LTO)](optimization.md)
+
 [Configuration file](config.md)
 
 [Auxiliary Command](misc.md)

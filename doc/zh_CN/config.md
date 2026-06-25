@@ -191,17 +191,11 @@ global_config(
 
 #### `lto`：str = `''` | `'thin'` | `'full'`
 
-**链接期优化（LTO / ThinLTO）**——见 [#1378](https://github.com/blade-build/blade-build/issues/1378)。
+**链接期优化（LTO / ThinLTO）**
 
-release 构建是否启用跨模块链接期优化。这是一个**项目内禀属性**（像优化级别一样，是会随产物发布的稳定决策），所以放在 `cc_config` 里，而非逐次调用的构建模式。
+项目对 **release** 构建的 LTO 策略：`''`（关闭，默认）、`'thin'`（ThinLTO——增量，推荐）或 `'full'`（单体）。这是一个**项目内禀属性**（像优化级别一样，是会随产物发布的稳定决策），故为配置项而非逐次调用的模式。可用 `--lto` / `--lto=full` / `--lto=no` 逐次覆盖，或在目标上设 `lto = False` 退出。
 
-- `''`（默认）—— 关闭。
-- `'thin'` —— **ThinLTO**（推荐）：增量、可缓存。映射到 clang `-flto=thin`；gcc 无 ThinLTO，映射到 gcc 的并行 `-flto=auto`。clang 的 ThinLTO 在链接器支持时还会接一个持久缓存（`<build_dir>/.cache/thinlto/`，ld64 / lld / gold 插件支持；检测到 GNU `bfd` 时直接省略缓存）。
-- `'full'` —— 单体 LTO（`-flto`）：跨模块优化最充分，链接更慢。
-
-**门控：** 仅作用于 **release** profile——debug 构建永不启用 LTO（跨模块内联会破坏源码↔二进制对应关系，且 `-flto -O0` 不优化任何东西）。**无独立构建目录：** 与 PGO/coverage 不同，LTO 会发布且稳定，所以沿用既有的 `build_release` 目录；开关它会经由指纹触发一次正常的全量重建。
-
-**命令行覆盖：** `--lto` / `--lto=full` / `--lto=no`（CLI 即使在 debug 下也生效，作为逃生口）。**按 target 退出：** 在应保持 native 的 `cc_library` 上设 `lto = False`（它会作为普通对象与 bitcode 一起链接）。**工具链：** gcc、clang、原生 MSVC `cl.exe`（映射到 `/GL`+`/LTCG`；MSVC LTCG 本就是整程序，故 thin/full 都→`/LTCG`，且 PGO 激活时被吸收），以及 clang-cl（LLVM 路径：`-flto[=thin]` + `lld-link`，thin 加 `/lldltocache`）。
+完整说明（仅 release 的门控、各工具链映射 gcc/clang/原生 MSVC/clang-cl、ThinLTO 缓存、健壮性提示）见 **[C/C++ 优化 → LTO](optimization.md#链接期优化lto)**。
 
 #### `fission`：bool = False
 

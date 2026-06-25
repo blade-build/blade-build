@@ -23,6 +23,8 @@ Blade 用户手册
 
 [增量构建与构建缓存](build_cache.md)
 
+[C/C++ 优化（PGO / AutoFDO / LTO）](optimization.md)
+
 [配置文件](config.md)
 
 [辅助命令](misc.md)

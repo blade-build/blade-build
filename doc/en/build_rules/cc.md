@@ -226,7 +226,7 @@ Attributes:
 
 - `lto`: bool (default: follow the build)
 
-  Opt this target out of [Link-Time Optimization](../command_line.md#link-time-optimization-lto) by setting `lto = False`: its sources compile native (no `-flto`) and link as ordinary objects alongside the bitcode of the rest of the build. Use it for a translation unit that miscompiles under LTO, or a library that must stay native. Only `False` is meaningful — there is no per-target full/thin selection, because the link strategy is one choice for the whole build. Whether LTO is on at all is the project policy [`cc_config.lto`](../config.md#cc_config) (overridable with `--lto` / `--lto=no`); when LTO is off, this attribute has no effect.
+  Opt this target out of [Link-Time Optimization](../optimization.md#link-time-optimization-lto) by setting `lto = False`: its sources compile native (no `-flto`) and link as ordinary objects alongside the bitcode of the rest of the build. Use it for a translation unit that miscompiles under LTO, or a library that must stay native. Only `False` is meaningful — there is no per-target full/thin selection, because the link strategy is one choice for the whole build. Whether LTO is on at all is the project policy [`cc_config.lto`](../config.md#cc_config) (overridable with `--lto` / `--lto=no`); when LTO is off, this attribute has no effect.
 
 - `binary_link_only`: bool = False
 
