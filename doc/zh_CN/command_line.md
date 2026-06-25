@@ -130,6 +130,22 @@ $ blade dump --all-tags ...
 - `--gprof` —— 启用 GNU gprof 性能分析。**仅限 Linux**（gcc 与 clang）：`-pg`/gprof 插桩只在 Linux 上有效。macOS 上该标志被静默忽略（Darwin clang 接受 `-pg` 但当作空操作，且没有 gprof 工具 / `gmon.out`），Windows 上 MSVC 根本不认。在这些平台 blade 会跳过该标志并仅警告一次——请改用 `--coverage`，或原生采样分析器（macOS 用 Instruments/`sample`，Linux 用 `perf`）。
 - `--coverage` —— 生成代码覆盖率报告（支持 GNU gcov 与 Java jacoco）。C/C++ 在 **gcc 与 clang**（所有平台，含 Windows 上的 **clang-cl**）上走 `--coverage` 的 gcov 插桩，由 gcovr 生成报告。在 Windows 上使用**原生 MSVC `cl.exe`**（没有 gcov 风格插桩）时，blade 改为在运行期用 `Microsoft.CodeCoverage.Console.exe` 采集覆盖率（它通过 PDB 对测试可执行文件做动态插桩——无需编译标志——并输出 Cobertura），再把各测试的报告合并为 `cc_coverage_report/coverage.cobertura.xml`。该工具随 Visual Studio / Build Tools 一起分发；它不支持 ARM64 目标。
 - `--profile-generate[=path]` / `--profile-use[=path]` —— [按性能剖析引导优化（PGO）](#按性能剖析引导优化pgo)（gcc、clang 与原生 MSVC）。第一阶段插桩，第二阶段用采集到的 profile 重新构建。
+- `--lto[=thin|full]` / `--no-lto` —— [链接期优化（LTO）](#链接期优化lto)（gcc/clang）。为本次构建覆盖项目的 [`cc_config.lto`](config.md#cc_config) 策略：裸 `--lto` = ThinLTO，`--lto=full` = 单体，`--no-lto` = 关闭。即使在 debug 下也生效（逃生口）。
+
+## 链接期优化（LTO）
+
+LTO 在链接期做跨模块优化（内联、去虚化、死代码消除）。一个项目是否带 LTO 发布是一个**稳定决策**，所以主控是项目内禀属性 [`cc_config(lto='thin')`](config.md#cc_config)，这些标志只是逐次覆盖它。
+
+```bash
+blade build //foo:server -p release --lto          # 本次构建用 ThinLTO
+blade build //foo:server -p release --lto=full     # 单体 LTO
+blade build //foo:server -p release --no-lto       # 关闭（开发迭代时跳过 LTO 的链接耗时）
+```
+
+- **thin**（`--lto` 的默认）映射到 clang `-flto=thin` / gcc `-flto=auto`；clang 在链接器支持时还会在 `<build_dir>/.cache/thinlto/` 下维护一个持久 ThinLTO 缓存（ld64 / lld / gold 支持；检测到 GNU `bfd` 时省略缓存）。**full** 是单体 `-flto`。
+- **仅 release：** debug 构建除非显式给 `--lto`，否则永不启用 LTO。**无独立构建目录**（与 PGO/coverage 不同）—— LTO 会发布且稳定，沿用 `build_release`；开关它会触发一次正常的全量重建。
+- **按 target 退出：** 在 `cc_library` 上设 `lto = False` 让它保持 native（作为普通对象与 bitcode 一起链接）——用于在 LTO 下被误编译的 TU，或应保持 native 的库。
+- v1 **仅 gcc/clang**；原生 MSVC（`/GL`+`/LTCG`，与 PGO 路径共用）留待以后。
 
 ## 按性能剖析引导优化（PGO）
 

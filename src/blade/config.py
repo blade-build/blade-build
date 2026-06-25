@@ -94,6 +94,16 @@ _CONFIG_TEMPLATE = {
             "Path keywords under which \"warning='no'\" may be used without a "
             'misuse warning (substring match against the target path and srcs)',
         'optimize': [],
+        # LTO / ThinLTO (#1378). A project intrinsic: whether this project ships
+        # link-time optimization is a stable decision, like the optimization
+        # level, so it lives here rather than as a per-invocation mode. Applies
+        # only to the optimized (release) profile; debug never gets LTO. The CLI
+        # `--lto` / `--no-lto` overrides it. gcc/clang only in v1 (MSVC later).
+        'lto': '',
+        'lto__help__': "Link-time optimization for release builds: 'thin' "
+            "(ThinLTO -- incremental, recommended), 'full' (monolithic), or '' "
+            '(off, default). Debug builds never use LTO. Override per invocation '
+            'with --lto / --lto=full / --no-lto. gcc/clang only (no MSVC yet).',
         'benchmark_libs': [],
         'benchmark_main_libs': [],
         'secretcc': '',

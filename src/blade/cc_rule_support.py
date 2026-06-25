@@ -593,6 +593,108 @@ def _instrument_clang_cl_link_flags(toolchain, options):
     return ['/LIBPATH:"%s"' % libdir if ' ' in libdir else '/LIBPATH:%s' % libdir]
 
 
+# --- LTO / ThinLTO (#1378) ---------------------------------------------------
+#
+# LTO is an *optimization that ships* (unlike PGO/coverage instrumentation), so
+# its primary control is a project intrinsic -- `cc_config(lto='thin')` -- and
+# the CLI `--lto`/`--no-lto` only overrides per invocation. It is gated on the
+# optimized profile: debug never gets LTO (cross-module inlining destroys the
+# source<->binary mapping and `-flto -O0` optimizes nothing), unless `--lto` is
+# given explicitly. v1 covers gcc/clang only; MSVC (`/GL`+`/LTCG`, shared with
+# the PGO path) comes later.
+#
+# `.o` becomes bitcode under LTO, so the toolchain bits that read objects change
+# too: the cc/cxx compile rules carry the flag via the overridable `${lto}` var
+# (a per-target `lto=False` blanks it -> that library stays native, linked as an
+# ordinary object alongside the bitcode), and on Linux the archive/`nm` steps
+# route to the plugin-aware tools so `cc_check_undefined` still sees real
+# symbols. macOS Apple cctools `ar`/`nm` read bitcode natively -- no routing.
+
+
+def _lto_mode(options, toolchain):
+    """Resolve the effective LTO mode: ``'thin'`` | ``'full'`` | ``None``.
+
+    `--lto`/`--lto=full`/`--no-lto` (CLI) overrides and is honored even in debug
+    (the escape hatch for reproducing an LTO-specific miscompile); otherwise the
+    `cc_config.lto` project policy applies, but only in the optimized (release)
+    profile. MSVC is excluded in v1.
+    """
+    if toolchain.cc_is('msvc'):
+        return None
+    cli = getattr(options, 'lto', None)
+    if cli == 'off':
+        return None
+    if cli in ('thin', 'full'):
+        return cli
+    if getattr(options, 'profile', None) != 'release':
+        return None
+    cfg = (config.get_item('cc_config', 'lto') or '').lower()
+    return cfg if cfg in ('thin', 'full') else None
+
+
+def _lto_compile_flag(mode, toolchain):
+    """The `-flto*` compile flag for a mode, mapped per toolchain. gcc has no
+    ThinLTO; its parallel WHOPR (`-flto=auto`) is the closest to thin."""
+    if not mode:
+        return None
+    if toolchain.cc_is('gcc'):
+        return '-flto' if mode == 'full' else '-flto=auto'
+    return '-flto' if mode == 'full' else '-flto=thin'  # clang / clang-cl-excluded
+
+
+def _lto_link_flags(mode, toolchain, build_dir):
+    """LTO link flags: the `-flto*` flag plus, for thin on clang, a persistent
+    ThinLTO cache so incremental relinks reuse backend codegen. gcc has no such
+    cache (WHOPR re-partitions); skip it there.
+
+    The cache option is linker-specific and not universal: ld64 (`-cache_path_lto`)
+    and lld / the LLVMgold gold plugin (`--thinlto-cache-dir`) accept it, but GNU
+    `bfd` -- a common default clang linker on Linux -- rejects it. So the flag is
+    probed via `supports_link_flag` and simply omitted when unsupported; ThinLTO
+    still works there, just without the persistent cache. (#1378)
+    """
+    flag = _lto_compile_flag(mode, toolchain)
+    if not flag:
+        return []
+    flags = [flag]
+    if mode == 'thin' and not toolchain.cc_is('gcc'):
+        cache = os.path.join(build_dir, '.cache', 'thinlto')
+        if toolchain.target_os == 'darwin':
+            cache_flag = '-Wl,-cache_path_lto,' + cache  # Apple ld64
+        else:
+            cache_flag = '-Wl,--thinlto-cache-dir=' + cache  # lld / gold plugin
+        if toolchain.supports_link_flag(cache_flag):
+            try:
+                os.makedirs(cache, exist_ok=True)
+            except OSError:
+                pass
+            flags.append(cache_flag)
+    return flags
+
+
+def _lto_plugin_ar_nm(toolchain):
+    """Plugin-aware ``(ar, nm)`` for archiving / reading LTO bitcode on Linux,
+    or ``(None, None)`` when the defaults already suffice (macOS cctools read
+    bitcode natively) or no plugin tool is found (caller keeps the default and a
+    modern binutils with `bfd-plugins` may still auto-load the plugin).
+
+    gcc ships ``gcc-ar``/``gcc-nm`` wrappers (they pass `--plugin
+    liblto_plugin.so`); LLVM ships ``llvm-ar``/``llvm-nm``. Prefer the one next
+    to the compiler, then PATH.
+    """
+    if toolchain.target_os != 'linux':
+        return None, None
+    import shutil
+    bindir = os.path.dirname(getattr(toolchain, 'cc', '') or '')
+    names = ('gcc-ar', 'gcc-nm') if toolchain.cc_is('gcc') else ('llvm-ar', 'llvm-nm')
+    resolved = []
+    for name in names:
+        cand = os.path.join(bindir, name) if bindir else ''
+        resolved.append(cand if cand and os.path.isfile(cand) else shutil.which(name))
+    ar, nm = resolved
+    return (ar or None), (nm or None)
+
+
 class CcRuleGenerator:
     """Generate cc/cuda ninja rules from a RuleContext (see module docstring)."""
 
@@ -799,6 +901,15 @@ class CcRuleGenerator:
                 else:  # gcc
                     cppflags.append('-fauto-profile=' + profile)
                 # No define: the AutoFDO use build is a normal optimized binary.
+
+        # LTO / ThinLTO (#1378). The compile-side `-flto*` rides the overridable
+        # `${lto}` var (emitted by _generate_cc_vars) so a per-target lto=False
+        # can blank it; only the link flags (the same `-flto*` plus the ThinLTO
+        # cache) are global and added here. gcc/clang path -- MSVC is excluded in
+        # v1 by _lto_mode.
+        lto_mode = _lto_mode(self.options, self.build_toolchain)
+        if lto_mode:
+            linkflags += _lto_link_flags(lto_mode, self.build_toolchain, self.build_dir)
 
         # Recover -fPIE-level optimization under -fPIC: tell the compiler the
         # current TU's symbol definitions aren't interposable, so it can
@@ -1175,6 +1286,13 @@ class CcRuleGenerator:
         # _get_intrinsic_cc_flags, which runs first.
         sanitizers = getattr(self.options, 'sanitizers', None)
         sanitize = ' '.join(sanitizer.compile_flags(sanitizers)) if sanitizers else ''
+        # LTO compile flag (#1378) as an overridable variable, mirroring
+        # ${sanitize}: the global default is the active mode's `-flto*`, and a
+        # per-target lto=False blanks `${lto}` on that target's edges so it
+        # compiles native (see CcTarget._get_cc_vars). _lto_mode already gates
+        # on the optimized profile (debug -> '').
+        lto_mode = _lto_mode(self.options, self.build_toolchain)
+        lto = _lto_compile_flag(lto_mode, self.build_toolchain) or ''
         self._add_line(textwrap.dedent('''\
                 c_warnings = %s
                 cxx_warnings = %s
@@ -1182,9 +1300,10 @@ class CcRuleGenerator:
                 optimize_flags = %s
                 optimize = %s
                 sanitize = %s
+                lto = %s
                 ''') % (' '.join(c_warnings), ' '.join(cxx_warnings),
                         ' '.join(cu_warnings),
-                        ' '.join(optimize_flags), optimize, sanitize))
+                        ' '.join(optimize_flags), optimize, sanitize, lto))
 
     def _generate_cc_compile_rules(self, cc, cxx, cppflags):
         self._generate_cc_vars()
@@ -1198,7 +1317,7 @@ class CcRuleGenerator:
 
         template = self._cc_compile_command_wrapper_template('${inclusion_stack}')
 
-        cc_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
+        cc_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} ${lto} '
                       '${c_warnings} ${cppflags} ${sanitize} ${extra_compile_flags} %s ${includes} ${in}') % (
                               cc, ' '.join(cflags), ' '.join(cppflags), includes)
         self.generate_rule(name='cc',
@@ -1211,7 +1330,7 @@ class CcRuleGenerator:
                            # unchanged (written write-if-changed). See issue #1161.
                            restat=True)
 
-        cxx_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} '
+        cxx_command = ('%s -o ${out} -MMD -MF ${out}.d -c -fPIC %s %s ${optimize} ${lto} '
                        '${cxx_warnings} ${cppflags} ${sanitize} ${extra_compile_flags} %s ${includes} ${in}') % (
                                cxx, ' '.join(cxxflags), ' '.join(cppflags), includes)
         self.generate_rule(name='cxx',
@@ -1286,6 +1405,13 @@ class CcRuleGenerator:
         syms_args = '${out} ${in}'
         if self.build_toolchain.cc_is('msvc'):
             syms_args += ' --dumpbin="%s"' % self.build_toolchain.dumpbin
+        elif _lto_mode(self.options, self.build_toolchain):
+            # Bitcode archives need the plugin-aware nm on Linux so the check
+            # sees real symbols rather than an empty set (#1378). macOS cctools
+            # nm reads bitcode natively, so _lto_plugin_ar_nm returns None there.
+            _, plugin_nm = _lto_plugin_ar_nm(self.build_toolchain)
+            if plugin_nm:
+                syms_args += ' --nm="%s"' % plugin_nm
         self.generate_rule(name='ccsyms',
                            command=self._builtin_command('cc_emit_syms', syms_args),
                            description='CC SYMS ${in}')
@@ -1329,6 +1455,13 @@ class CcRuleGenerator:
                 command = f'rm -f $out; {wrap} {ar} rcs $out $in'
         elif target_os == 'linux':
             ar = self.build_accelerator.get_ar_command()
+            # Under LTO the objects are bitcode; a plain binutils `ar` without the
+            # LTO plugin writes an archive whose symbol index the linker can't use.
+            # Route to the plugin-aware `gcc-ar`/`llvm-ar` when available (#1378).
+            if _lto_mode(self.options, self.build_toolchain):
+                plugin_ar, _ = _lto_plugin_ar_nm(self.build_toolchain)
+                if plugin_ar:
+                    ar = plugin_ar
             extra = ''
             if deterministic:
                 extra += 'D'

@@ -258,7 +258,7 @@ def _dumpbin_extract_externals(dumpbin, archive):
     return undefined, defined
 
 
-def _nm_extract_externals(archive, dumpbin=None):
+def _nm_extract_externals(archive, dumpbin=None, nm=None):
     """Return (undefined_external, defined_external) sets for an archive.
 
     With ``dumpbin`` set (MSVC), defer to :func:`_dumpbin_extract_externals`
@@ -283,12 +283,16 @@ def _nm_extract_externals(archive, dumpbin=None):
     """
     if dumpbin:
         return _dumpbin_extract_externals(dumpbin, archive)
+    # Under LTO the archive holds bitcode; on Linux the plugin-aware nm
+    # (gcc-nm/llvm-nm, passed as --nm=) is needed to list its symbols. macOS
+    # cctools nm reads bitcode natively, so nm stays the default there (#1378).
+    nm_cmd = nm or 'nm'
     base = os.path.basename(archive)
     nm_flags = ['-P', '-g']
     if base.endswith('.so') or '.so.' in base:
         nm_flags = ['-D'] + nm_flags
     try:
-        out = subprocess.check_output(['nm'] + nm_flags + [archive], stderr=subprocess.STDOUT)
+        out = subprocess.check_output([nm_cmd] + nm_flags + [archive], stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         # nm exits non-zero when a static archive has no symbol table (e.g.
         # foreign_cc archives) — treat as empty. Same for missing files.
@@ -396,7 +400,7 @@ def _read_archive_syms(path):
     return undefined, defined
 
 
-def generate_cc_emit_syms(args, dumpbin=None, **_opts):
+def generate_cc_emit_syms(args, dumpbin=None, nm=None, **_opts):
     """Run ``nm`` on a static archive once and emit its symbol-set cache.
 
     Args:
@@ -404,6 +408,8 @@ def generate_cc_emit_syms(args, dumpbin=None, **_opts):
         dumpbin: path to ``dumpbin.exe`` (passed as ``--dumpbin=<path>`` by the
             ``ccsyms`` rule on MSVC); when set, symbols are read with dumpbin
             instead of ``nm`` (the archives are COFF ``.lib`` files).
+        nm: path to a plugin-aware ``nm`` (``--nm=<path>``) used under LTO on
+            Linux so bitcode archives list their symbols (#1378).
 
     Writes ``output.syms`` with two sections: ``#U`` (undefined externals)
     and ``#D`` (defined externals). This collapses what the check tool used
@@ -414,7 +420,7 @@ def generate_cc_emit_syms(args, dumpbin=None, **_opts):
     out_path = args[0]
     archive = args[1]
     _declare_outputs(out_path)
-    undef, defd = _nm_extract_externals(archive, dumpbin=dumpbin)
+    undef, defd = _nm_extract_externals(archive, dumpbin=dumpbin, nm=nm)
     tmp = out_path + '.tmp'
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
     with open(tmp, 'w', encoding='utf-8') as f:

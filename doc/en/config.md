@@ -169,6 +169,19 @@ the ``name`` of a ``cc_toolchain_config()`` entry, or a toolchain kind
 **Default:** `['-O2']`
 **Special Behavior:** Optimization flags are disabled in debug mode to preserve debugging capability.
 
+#### `lto`: str = `''` | `'thin'` | `'full'`
+**Link-Time Optimization (LTO / ThinLTO)** — see [#1378](https://github.com/blade-build/blade-build/issues/1378).
+
+Whether release builds use cross-module link-time optimization. This is a **project intrinsic** (a stable decision that ships, like the optimization level), so it lives in `cc_config` rather than as a per-invocation mode.
+
+- `''` (default) — off.
+- `'thin'` — **ThinLTO** (recommended): incremental and cacheable. Maps to clang `-flto=thin`; gcc has no ThinLTO, so it maps to gcc's parallel `-flto=auto`. clang's ThinLTO additionally wires a persistent cache (`<build_dir>/.cache/thinlto/`) when the linker supports it (ld64 / lld / the gold plugin; GNU `bfd` is detected and the cache is simply omitted there).
+- `'full'` — monolithic LTO (`-flto`); maximal cross-module optimization, slower link.
+
+**Gating:** applies only to the **release** profile — debug builds never use LTO (cross-module inlining destroys the source↔binary mapping, and `-flto -O0` optimizes nothing). **No separate build directory:** unlike PGO/coverage, LTO ships and is stable, so it rides the existing `build_release` dir; toggling it triggers a normal full rebuild via the fingerprint.
+
+**Command-line override:** `--lto` / `--lto=full` / `--no-lto` (the CLI is honored even in debug, as an escape hatch). **Per-target opt-out:** set `lto = False` on a `cc_library` that should stay native (it links as an ordinary object alongside the bitcode). **gcc/clang only** in v1 (MSVC `/GL`+`/LTCG`, shared with the PGO path, comes later).
+
 #### `fission`: bool = False
 **Debug Information Fission**
 

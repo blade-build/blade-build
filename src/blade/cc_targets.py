@@ -367,6 +367,13 @@ class CcTarget(Target):
         # unknown-kwargs check) so it's accepted only on cc targets.
         sanitize = kwargs.pop('sanitize', True)
 
+        # 'lto' (cc-only, default None = follow the build). Set lto=False on a
+        # target that miscompiles under LTO (or that should stay native); its
+        # objects compile without -flto and link as ordinary objects alongside
+        # the bitcode (#1378). There is no per-target full/thin -- the link
+        # strategy is one choice for the whole build -- so only False is acted on.
+        lto = kwargs.pop('lto', None)
+
         super().__init__(
                 name=name,
                 type=type,
@@ -378,6 +385,8 @@ class CcTarget(Target):
                 kwargs=kwargs)
 
         self.attr['sanitize'] = bool(sanitize)
+        if lto is not None:
+            self.attr['lto'] = bool(lto)
         self._check_defs(defs)
         self._check_incorrect_no_warning(warning)
 
@@ -765,6 +774,16 @@ class CcTarget(Target):
         if (not self.attr.get('sanitize', True)
                 and getattr(self.blade.get_options(), 'sanitizers', None)):
             vars['sanitize'] = ''
+
+        # Per-target LTO opt-out (#1378): blank the overridable `${lto}` var so
+        # this target's objects compile native. The link still uses -flto
+        # globally and mixes the native objects with the bitcode ones. Only
+        # blank when LTO is actually active, to keep the var off the edge
+        # otherwise (avoids needless per-target ninja vars in a non-LTO build).
+        if (self.attr.get('lto') is False
+                and cc_rule_support._lto_mode(self.blade.get_options(),
+                                              self.blade.get_build_toolchain())):
+            vars['lto'] = ''
 
         return vars
 

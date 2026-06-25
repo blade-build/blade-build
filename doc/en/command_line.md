@@ -130,6 +130,22 @@ Different subcommands support different options. Run `blade <subcommand> --help`
 - `--gprof` - Enable GNU gprof profiling support. **Linux only** (gcc and clang): `-pg`/gprof instrumentation only works on Linux. On macOS the flag is silently ignored (Darwin clang accepts `-pg` but treats it as a no-op, and there is no gprof tool / `gmon.out`); on Windows MSVC does not understand it. Blade skips the flag and warns once on these platforms — use `--coverage`, or a native sampling profiler (Instruments/`sample` on macOS, `perf` on Linux).
 - `--coverage` - Generate code coverage reports (supports GNU gcov and Java jacoco). For C/C++ on **gcc and clang** (every platform, including **clang-cl** on Windows) this is the `--coverage` gcov instrumentation, reported with gcovr. On Windows with **native MSVC `cl.exe`** (which has no gcov-style instrumentation) blade instead collects coverage at run time with `Microsoft.CodeCoverage.Console.exe` (it instruments the test exe dynamically via its PDB — no compile flag — and emits Cobertura), then merges the per-test reports into `cc_coverage_report/coverage.cobertura.xml`. The tool ships with Visual Studio / the Build Tools; ARM64 targets are not supported by it.
 - `--profile-generate[=path]` / `--profile-use[=path]` - [Profile-Guided Optimization](#profile-guided-optimization-pgo) (gcc, clang, and native MSVC). Phase 1 instruments, phase 2 rebuilds with the collected profile.
+- `--lto[=thin|full]` / `--no-lto` - [Link-Time Optimization](#link-time-optimization-lto) (gcc/clang). Override the project's [`cc_config.lto`](config.md#cc_config) policy for this build: bare `--lto` = ThinLTO, `--lto=full` = monolithic, `--no-lto` = off. Honored even in debug (escape hatch).
+
+## Link-Time Optimization (LTO)
+
+LTO performs cross-module optimization (inlining, devirtualization, dead-code elimination) at link time. Whether a project ships with LTO is a **stable decision**, so the primary control is the project intrinsic [`cc_config(lto='thin')`](config.md#cc_config); these flags only override it per invocation.
+
+```bash
+blade build //foo:server -p release --lto          # ThinLTO for this build
+blade build //foo:server -p release --lto=full     # monolithic LTO
+blade build //foo:server -p release --no-lto       # off (skip LTO's link cost while iterating)
+```
+
+- **thin** (default for `--lto`) maps to clang `-flto=thin` / gcc `-flto=auto`; clang additionally keeps a persistent ThinLTO cache under `<build_dir>/.cache/thinlto/` when the linker supports it (ld64 / lld / gold; GNU `bfd` is detected and the cache omitted). **full** is monolithic `-flto`.
+- **Release only:** debug builds never use LTO unless `--lto` is given explicitly. **No separate build dir** (unlike PGO/coverage) — LTO ships and is stable, so it rides `build_release`; toggling triggers a normal full rebuild.
+- **Per-target opt-out:** `lto = False` on a `cc_library` keeps it native (linked as an ordinary object alongside the bitcode) — for a TU that miscompiles under LTO, or a library that should stay native.
+- **gcc/clang only** in v1; native MSVC (`/GL`+`/LTCG`, shared with the PGO path) comes later.
 
 ## Profile-Guided Optimization (PGO)
 
