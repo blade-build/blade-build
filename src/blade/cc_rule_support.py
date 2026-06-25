@@ -623,12 +623,10 @@ def _lto_mode(options: 'argparse.Namespace', toolchain: 'ToolChain') -> str | No
     `--lto`/`--lto=full`/`--lto=no` (CLI) overrides and is honored even in debug
     (the escape hatch for reproducing an LTO-specific miscompile); otherwise the
     `cc_config.lto` project policy applies, but only in the optimized (release)
-    profile. Applies to gcc/clang and native cl.exe (which maps to /GL+/LTCG via
-    the `_lto_msvc_*` helpers); clang-cl's LLVM-LTO path is a separate follow-up,
-    so it is excluded here.
+    profile. Applies to gcc/clang, native cl.exe (maps to /GL+/LTCG via the
+    `_lto_msvc_*` helpers), and clang-cl (LLVM `-flto`, via the
+    `_lto_clang_cl_*` helpers).
     """
-    if toolchain.is_clang_cl():
-        return None
     cli = getattr(options, 'lto', None)
     if cli == 'no':
         return None
@@ -752,6 +750,53 @@ def _lto_msvc_link_flags(options: 'argparse.Namespace',
     both modes map to `/LTCG`. (`/LTCG:INCREMENTAL` exists but interacts with the
     release `/INCREMENTAL:NO`; not used in v1.)"""
     return ['/LTCG'] if _lto_msvc_native_active(options, toolchain) else []
+
+
+# --- clang-cl LTO (#1378) ----------------------------------------------------
+#
+# clang-cl is cc_is('msvc') but uses LLVM tools (clang-cl / lld-link / llvm-lib),
+# so its LTO is the LLVM path, NOT /GL+/LTCG: `-flto[=thin]` on compile (emits
+# bitcode .obj), llvm-lib archives the bitcode as-is, and lld-link performs the
+# LTO automatically -- the only extra link flag is a persistent ThinLTO cache
+# (`/lldltocache:`) for thin. Because the objects are bitcode, `dumpbin` can't
+# read them, so cc_check_undefined routes to `llvm-nm` (verified: `llvm-nm -P -g`
+# lists MSVC-mangled bitcode symbols incl. undefined U entries).
+
+
+def _lto_clang_cl_active(options: 'argparse.Namespace',
+                         toolchain: 'ToolChain') -> bool:
+    """True when clang-cl LTO is in effect (clang-cl toolchain + an LTO mode)."""
+    return toolchain.is_clang_cl() and _lto_mode(options, toolchain) is not None
+
+
+def _lto_clang_cl_link_flags(options: 'argparse.Namespace', toolchain: 'ToolChain',
+                             build_dir: str) -> list[str]:
+    """clang-cl LTO link flags for lld-link. lld-link does the LTO from the
+    bitcode objects automatically; thin mode additionally gets a persistent
+    ThinLTO cache (`/lldltocache:<dir>`). full mode needs nothing extra."""
+    if not _lto_clang_cl_active(options, toolchain):
+        return []
+    if _lto_mode(options, toolchain) == 'thin':
+        cache = os.path.join(build_dir, '.cache', 'thinlto')
+        try:
+            os.makedirs(cache, exist_ok=True)
+        except OSError:
+            # Best-effort: without the dir lld-link just doesn't cache.
+            pass
+        return ['/lldltocache:' + cache]
+    return []
+
+
+def _lto_clang_cl_nm(toolchain: 'ToolChain') -> str | None:
+    """Path to `llvm-nm` (next to clang-cl, then PATH) for reading symbols from
+    clang-cl LTO bitcode `.obj` -- `dumpbin` cannot. ``None`` if not found
+    (caller keeps dumpbin, which then degrades to an empty symbol set)."""
+    import shutil
+    bindir = os.path.dirname(getattr(toolchain, 'cc', '') or '')
+    cand = os.path.join(bindir, 'llvm-nm.exe') if bindir else ''
+    if cand and os.path.isfile(cand):
+        return cand
+    return shutil.which('llvm-nm')
 
 
 class CcRuleGenerator:
@@ -1071,13 +1116,18 @@ class CcRuleGenerator:
             sanitize = ' '.join(sanitizer.msvc_compile_flags(sanitizers))
         self._add_line('sanitize = %s\n' % sanitize)
 
-        # LTO (#1378): native cl.exe whole-program flag `/GL`, as an overridable
-        # var (like ${sanitize}) so a per-target lto=False blanks it. Subsumed by
-        # PGO/SPGO (they already do LTCG) -- see _lto_msvc_native_active. clang-cl
-        # is excluded (LLVM -flto path, separate follow-up). The cc/cxx rules
-        # below reference `${lto}`.
-        self._add_line('lto = %s\n' % _lto_msvc_compile_flag(
-            self.options, self.build_toolchain))
+        # LTO (#1378) as an overridable var (like ${sanitize}) so a per-target
+        # lto=False blanks it; the cc/cxx rules below reference `${lto}`.
+        #   * native cl.exe -> `/GL` (with /LTCG on lib+link); subsumed by
+        #     PGO/SPGO (they already do LTCG). See _lto_msvc_native_active.
+        #   * clang-cl -> LLVM `-flto[=thin]` (emits bitcode; lld-link does the
+        #     LTO, +/lldltocache for thin). See _lto_clang_cl_*.
+        if self.build_toolchain.is_clang_cl():
+            lto = _lto_compile_flag(
+                _lto_mode(self.options, self.build_toolchain), self.build_toolchain)
+        else:
+            lto = _lto_msvc_compile_flag(self.options, self.build_toolchain)
+        self._add_line('lto = %s\n' % lto)
 
     def _generate_windows_cc_compile_rules(self, cc, cxx):
         """Generate Windows CC compilation rules."""
@@ -1270,6 +1320,12 @@ class CcRuleGenerator:
         if self.build_toolchain.is_clang_cl():
             for flag in _instrument_clang_cl_link_flags(self.build_toolchain,
                                                         self.options):
+                if flag not in linkflags:
+                    linkflags = linkflags + [flag]
+            # LTO (#1378): lld-link does the LTO from the bitcode objects; thin
+            # mode adds a persistent ThinLTO cache (/lldltocache).
+            for flag in _lto_clang_cl_link_flags(self.options, self.build_toolchain,
+                                                 self.build_dir):
                 if flag not in linkflags:
                     linkflags = linkflags + [flag]
         else:
@@ -1474,9 +1530,18 @@ class CcRuleGenerator:
         # on diamond-shaped dep graphs.
         # On MSVC the archives are COFF .lib files and nm is unavailable, so the
         # emit-syms tool reads symbols with dumpbin instead; pass its path.
+        # Exception: clang-cl LTO emits *bitcode* .obj that dumpbin can't read,
+        # so route to llvm-nm there (verified `llvm-nm -P -g` lists the mangled
+        # bitcode symbols + undefined U entries). #1378.
         syms_args = '${out} ${in}'
         if self.build_toolchain.cc_is('msvc'):
-            syms_args += ' --dumpbin="%s"' % self.build_toolchain.dumpbin
+            clang_cl_nm = (_lto_clang_cl_nm(self.build_toolchain)
+                           if _lto_clang_cl_active(self.options, self.build_toolchain)
+                           else None)
+            if clang_cl_nm:
+                syms_args += ' --nm="%s"' % clang_cl_nm
+            else:
+                syms_args += ' --dumpbin="%s"' % self.build_toolchain.dumpbin
         elif _lto_mode(self.options, self.build_toolchain):
             # Bitcode archives need the plugin-aware nm on Linux so the check
             # sees real symbols rather than an empty set (#1378). macOS cctools

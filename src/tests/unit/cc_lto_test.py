@@ -90,11 +90,13 @@ class LtoModeTest(unittest.TestCase):
         self.assertEqual('thin', _mode(_opts(lto='thin', profile='debug'), _tc(), cfg=''))
 
     def test_native_msvc_resolves(self):
-        # Native cl.exe now participates (maps to /GL+/LTCG); clang-cl does not.
+        # Native cl.exe participates (maps to /GL+/LTCG).
         self.assertEqual('thin', _mode(_opts(lto='thin'), _tc(vendor='msvc'), cfg='thin'))
 
-    def test_clang_cl_excluded(self):
-        self.assertIsNone(
+    def test_clang_cl_resolves(self):
+        # clang-cl resolves too (LLVM -flto path via _lto_clang_cl_*); the
+        # native /GL helpers still exclude it.
+        self.assertEqual('thin',
             _mode(_opts(lto='thin'), _tc(vendor='msvc', clang_cl=True), cfg='thin'))
 
 
@@ -141,6 +143,50 @@ class LtoMsvcFlagTest(unittest.TestCase):
         active, opts, tc = self._active(lto='thin', clang_cl=True, cfg='thin')
         self.assertFalse(active)
         self.assertEqual('', cc_rule_support._lto_msvc_compile_flag(opts, tc))
+
+
+class LtoClangClTest(unittest.TestCase):
+    """clang-cl LTO: LLVM `-flto[=thin]` compile, lld-link /lldltocache for thin,
+    llvm-nm for bitcode symbols. Distinct from native cl's /GL+/LTCG."""
+
+    def _ctx(self, lto='thin'):
+        opts = _opts(lto=lto)
+        tc = _tc(vendor='msvc', clang_cl=True)
+        return opts, tc
+
+    def test_active_and_compile_flag(self):
+        opts, tc = self._ctx('thin')
+        with mock.patch.object(cc_rule_support.config, 'get_item', return_value=''):
+            self.assertTrue(cc_rule_support._lto_clang_cl_active(opts, tc))
+            mode = cc_rule_support._lto_mode(opts, tc)
+        # clang-cl reuses the clang spelling (cc_is('gcc') is False).
+        self.assertEqual('-flto=thin', cc_rule_support._lto_compile_flag(mode, tc))
+
+    def test_thin_adds_lldlto_cache(self):
+        opts, tc = self._ctx('thin')
+        with mock.patch.object(cc_rule_support.config, 'get_item', return_value=''):
+            flags = cc_rule_support._lto_clang_cl_link_flags(opts, tc, '/bd')
+        self.assertEqual(['/lldltocache:/bd/.cache/thinlto'], flags)
+
+    def test_full_has_no_cache_flag(self):
+        opts, tc = self._ctx('full')
+        with mock.patch.object(cc_rule_support.config, 'get_item', return_value=''):
+            flags = cc_rule_support._lto_clang_cl_link_flags(opts, tc, '/bd')
+        self.assertEqual([], flags)
+
+    def test_off_inactive(self):
+        opts, tc = self._ctx('no')
+        with mock.patch.object(cc_rule_support.config, 'get_item', return_value='thin'):
+            self.assertFalse(cc_rule_support._lto_clang_cl_active(opts, tc))
+
+    def test_nm_resolution(self):
+        # Host-agnostic path so os.path.dirname splits it on the test host
+        # (on Windows the real bin dir uses backslashes, handled by ntpath).
+        tc = _tc(vendor='msvc', clang_cl=True)
+        tc.cc = '/llvm/bin/clang-cl.exe'
+        with mock.patch('os.path.isfile', return_value=True):
+            self.assertEqual('/llvm/bin/llvm-nm.exe',
+                             cc_rule_support._lto_clang_cl_nm(tc))
 
 
 class LtoCompileFlagTest(unittest.TestCase):
