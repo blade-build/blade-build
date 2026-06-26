@@ -6,6 +6,8 @@
   "timeout": "20s",
   "ignorePatterns": [
     { "pattern": "^https?://www\\.gnu\\.org/" },
-    { "pattern": "^https?://bazel\\.build/" }
+    { "pattern": "^https?://bazel\\.build/" },
+    { "pattern": "^https?://asciinema\\.org/" },
+    { "pattern": "^https?://starchart\\.cc/" }
   ]
 }
