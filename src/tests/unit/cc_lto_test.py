@@ -269,7 +269,7 @@ class LtoIntrinsicFlagsTest(unittest.TestCase):
     compile flag (that rides ${lto}), and nothing when off/debug."""
 
     def _link_flags(self, vendor='clang', target_os='linux', lto=None,
-                    profile='release', cfg='thin', export_dynamic=False):
+                    profile='release', cfg='thin'):
         gen = cc_rule_support.CcRuleGenerator.__new__(cc_rule_support.CcRuleGenerator)
         gen.options = mock.Mock()
         gen.options.m = None
@@ -290,8 +290,7 @@ class LtoIntrinsicFlagsTest(unittest.TestCase):
         gen.build_toolchain.filter_cc_flags = list
         gen.build_toolchain.supports_link_flag = lambda f: False
         section = {'fission': False, 'debug_info_levels': {'mid': ['-g']},
-                   'no_semantic_interposition': False,
-                   'lto_export_dynamic': export_dynamic}
+                   'no_semantic_interposition': False}
         gsection = {'debug_info_level': 'mid'}
 
         def fake_section(name):
@@ -317,23 +316,6 @@ class LtoIntrinsicFlagsTest(unittest.TestCase):
     def test_debug_adds_nothing(self):
         _, linkflags = self._link_flags(profile='debug', cfg='thin')
         self.assertFalse([f for f in linkflags if 'flto' in f])
-
-    def test_export_dynamic_under_lto(self):
-        # cc_config.lto_export_dynamic adds the per-OS export-all-globals flag
-        # when LTO is active, so by-name registrations survive LTO DCE.
-        _, mac = self._link_flags(target_os='darwin', cfg='thin', export_dynamic=True)
-        self.assertIn('-Wl,-export_dynamic', mac)
-        _, elf = self._link_flags(target_os='linux', cfg='thin', export_dynamic=True)
-        self.assertIn('-rdynamic', elf)
-
-    def test_export_dynamic_only_when_lto_active(self):
-        # No-op when LTO is off, even if the knob is set.
-        _, off = self._link_flags(cfg='', export_dynamic=True)
-        self.assertNotIn('-rdynamic', off)
-        self.assertNotIn('-Wl,-export_dynamic', off)
-        # And not added when the knob is False under LTO.
-        _, on = self._link_flags(cfg='thin', export_dynamic=False)
-        self.assertNotIn('-rdynamic', on)
 
 
 class LtoBuildDirTest(unittest.TestCase):

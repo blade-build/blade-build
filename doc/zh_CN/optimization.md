@@ -89,9 +89,16 @@ blade build //foo:server -p release --lto=no       # 关闭（开发迭代时跳
 
 **工具链说明 / 健壮性。** clang 与 clang-cl 的 thin 是真正的 ThinLTO（增量、带缓存）。gcc 没有 ThinLTO,所以 thin 映射到 gcc 的并行 WHOPR（`-flto=auto`）——另一套模型,没有持久缓存。原生 MSVC 的 `/GL`+`/LTCG` 让对象保持 COFF（故 `cc_check_undefined` 用 `dumpbin` 读取）；clang-cl LTO 产出 bitcode,检查改走 `llvm-nm`——两者都照常工作。gcc 的整程序 LTO 在**大型 C++ 二进制上也不够健壮**:已观察到 gcc 15.x 在链接重度 protobuf/RPC 二进制时 ICE(`internal compiler error: in odr_types_equivalent_p, at ipa-devirt.cc`)。ICE 是编译器 bug,不是代码错误——遇到时用 `--lto=no` 对那个二进制关掉 LTO(按 TU 的 `lto=False` 救不了,因为失败发生在整程序链接)。一句话:clang ThinLTO 是成熟路径,**gcc 整程序 LTO 当作实验性对待**。运行时收益也依赖工作负载与工具链——集中在真正跨模块的热路径上,其它地方往往可忽略——所以把项目切到 LTO 前,先在你自己的热路径上实测。
 
-**自注册 / 插件模式（常见坑）。** LTO 的整程序死代码消除会**删掉那些只在运行期按名字查找的静态初始化注册**——工厂 / 插件 / 依赖注入（DI）注册表，以及一般的自注册对象（`[[gnu::constructor]]` + 注册进 map 的惯用法）。从 LTO 的整程序视角看，注册器无人引用，于是它连同 `Register(...)` 的副作用一起被删除；运行期查找随即失败（`… not found` 或注册表 `CHECK` 失败），尽管**不开 LTO** 时构建与测试都通过。这是*代码模式*的性质，不是 blade 或编译器的缺陷；当项目的 DI 机制用到它时，会一次性挂掉大量测试。注意：给注册器加 `__attribute__((used))` **并不总是够**（LTO 下注册表单例还可能跨 TU 被拆分）。两条出路：
+**自注册 / 插件模式（常见坑）。** LTO 的整程序死代码消除会**删掉那些只在运行期按名字查找的静态初始化注册**——工厂 / 插件 / 依赖注入（DI）注册表，以及一般的自注册对象（`[[gnu::constructor]]` + 注册进 map 的惯用法）。从 LTO 的整程序视角看，注册器无人引用，于是它连同 `Register(...)` 的副作用一起被删除；运行期查找随即失败（`… not found` 或注册表 `CHECK` 失败），尽管**不开 LTO** 时构建与测试都通过。（注意：靠"强制加载归档"的招数——`link_all_symbols` / `-Wl,--whole-archive` / `-Wl,-force_load`——**救不了**：它们只强制把*对象*链接进来，LTO 仍会把注册器内部化并死剥离。LTO 并不为保留符号而尊重 force-load。）这是*代码模式*的性质，不是 blade 或编译器的缺陷；但当项目的 DI 机制用到它时，会一次性挂掉大量测试。
 
-- **保留 LTO，导出符号。** 导出所有全局符号会阻止 LTO 对注册项做内部化/死剥离，于是注册得以保留（已在真实 DI 注册表二进制上 `--lto` 验证有效）。Blade 把它做成了 **`cc_config(lto_export_dynamic = True)`**：**仅在 LTO 激活时**自动加 `-Wl,-export_dynamic`（macOS）/ `-rdynamic`（ELF）——非 LTO 构建分文不付。（也可以自己用 `linkflags` / `extra_linkflags` 手动加。）LTO 下的代价是丢掉*内部化*带来的收益（它无法再认定全局符号是私有的从而缩小/去虚化），动态符号表也变大；但你保留了跨模块**内联**——这才是 LTO 运行时价值的大头。
-- **或对该二进制跳过 LTO** —— 在目标上设 `lto = False`（或 `--lto=no`），直到注册表本身被改造为 LTO-safe（单个强链接实例）。
+**让注册在 LTO 下存活**的办法是保住注册器——给它加 `[[gnu::used, gnu::retain]]`（`used` 让它躲过 LTO 的 DCE，`retain` 让它躲过链接器的 `--gc-sections`）：
+
+```cpp
+[[gnu::constructor, gnu::used, gnu::retain]] static void register_foo() { registry.Register("foo", …); }
+```
+
+**`used` + `retain` 仍不够的情形。** 保住注册器，只有在它写入的注册表是**单一实例**时才有用。如果注册表是经由 vague-/COMDAT 链接的单例访问的——例如一个*模板函数内的局部* `static`（`template<class T> T& Get() { static T r; return r; }`）——**ThinLTO 可能把它按 TU 内部化**：注册器跑了，但注册进*它那个* TU 的副本，而查找读的是*另一个*副本 → 仍然 `not found`。这时的修法是把注册表做成**单个强链接的全局**，在单个 `.cc` 里定义（而不是经由模板/inline 局部 static 按 TU 合成）。
+
+**如果无法（或不想）改源码，就对该二进制关掉 LTO** —— 在目标上设 `lto = False`，或用 `--lto=no` 构建。当注册表无法被改造为 LTO-safe 时，这是可靠的解决办法。
 
 无论哪种，发布这类二进制前**务必在 LTO 下跑一遍测试套件**。
