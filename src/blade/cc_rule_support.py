@@ -1014,6 +1014,16 @@ class CcRuleGenerator:
         lto_mode = _lto_mode(self.options, self.build_toolchain)
         if lto_mode:
             linkflags += _lto_link_flags(lto_mode, self.build_toolchain, self.build_dir)
+            # cc_config.lto_export_dynamic: export all globals so LTO's
+            # internalize+DCE can't strip by-name registrations (self-
+            # registration / plugin / DI registries). See the self-registration
+            # caveat in optimization.md. Only when LTO is active. macOS ->
+            # -export_dynamic; ELF -> -rdynamic. (MSVC goes through the Windows
+            # rules, not here.)
+            if cc_config['lto_export_dynamic']:
+                linkflags.append('-Wl,-export_dynamic'
+                                 if self.build_toolchain.target_os == 'darwin'
+                                 else '-rdynamic')
 
         # Recover -fPIE-level optimization under -fPIC: tell the compiler the
         # current TU's symbol definitions aren't interposable, so it can

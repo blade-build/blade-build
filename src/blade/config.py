@@ -104,6 +104,18 @@ _CONFIG_TEMPLATE = {
             "(ThinLTO -- incremental, recommended), 'full' (monolithic), or '' "
             '(off, default). Debug builds never use LTO. Override per invocation '
             'with --lto / --lto=full / --no-lto. gcc/clang only (no MSVC yet).',
+        # When LTO is active, export all global symbols at link so LTO's
+        # internalize+dead-strip pass can't remove by-name registrations
+        # (self-registration / plugin / DI registries) -- see the self-
+        # registration caveat in doc/*/optimization.md. macOS adds
+        # `-Wl,-export_dynamic`, ELF adds `-rdynamic`. Only takes effect when LTO
+        # is on (gcc/clang); a no-op otherwise. Costs LTO's internalization wins
+        # but keeps cross-module inlining. Default False.
+        'lto_export_dynamic': False,
+        'lto_export_dynamic__help__': 'Under LTO, export all globals '
+            '(-Wl,-export_dynamic / -rdynamic) so by-name registrations survive '
+            "LTO's dead-stripping. Only effective when LTO is active (gcc/clang). "
+            'Default False.',
         'benchmark_libs': [],
         'benchmark_main_libs': [],
         'secretcc': '',
