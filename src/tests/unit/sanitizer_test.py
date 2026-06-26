@@ -176,6 +176,47 @@ class ResolveOptionsTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             sanitizer.resolve_options({'bogus': ['x=1']}, ['bogus'])
 
+
+class ResolveCompileFlagsTest(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual([], sanitizer.resolve_compile_flags(None, ['memory']))
+        self.assertEqual([], sanitizer.resolve_compile_flags({}, ['memory']))
+
+    def test_active_sanitizer_flags(self):
+        # Alias 'msan' -> 'memory'; the flags pass through in order.
+        self.assertEqual(
+            ['-fsanitize-memory-track-origins=1'],
+            sanitizer.resolve_compile_flags(
+                {'msan': ['-fsanitize-memory-track-origins=1']}, ['memory']))
+
+    def test_string_form_is_one_flag(self):
+        self.assertEqual(
+            ['-fsanitize-memory-track-origins=0'],
+            sanitizer.resolve_compile_flags(
+                {'memory': '-fsanitize-memory-track-origins=0'}, ['memory']))
+
+    def test_inactive_sanitizer_skipped(self):
+        # Configured for memory but only address is active -> nothing.
+        self.assertEqual(
+            ['-fsanitize-address-use-after-scope'],
+            sanitizer.resolve_compile_flags(
+                {'memory': ['-fsanitize-memory-track-origins=1'],
+                 'address': ['-fsanitize-address-use-after-scope']},
+                ['address']))
+
+    def test_overrides_default_by_last_occurrence(self):
+        # The whole point: appended after blade's default =2, the user's =1 wins.
+        flags = (sanitizer.compile_flags(['memory']) +
+                 sanitizer.resolve_compile_flags(
+                     {'memory': ['-fsanitize-memory-track-origins=1']}, ['memory']))
+        origins = [f for f in flags if 'track-origins' in f]
+        self.assertEqual(['-fsanitize-memory-track-origins=2',
+                          '-fsanitize-memory-track-origins=1'], origins)
+
+    def test_unknown_sanitizer_is_fatal(self):
+        with self.assertRaises(SystemExit):
+            sanitizer.resolve_compile_flags({'bogus': ['-x']}, ['bogus'])
+
     def test_missing_suppressions_file_is_fatal(self):
         with self.assertRaises(SystemExit):
             sanitizer.resolve_options(

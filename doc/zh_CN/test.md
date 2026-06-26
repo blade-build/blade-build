@@ -162,7 +162,7 @@ sanitizer 是**每次运行的选择**（命令行开关），不是项目配置
 
 - **编译选项：** 给编译和链接都加上 `-fsanitize=<集合> -fno-omit-frame-pointer -g`（链接以引入 sanitizer 运行时）。UBSan 被设为**致命**（`-fno-sanitize-recover=undefined`），使其发现问题时让测试失败，而非仅打印。对测试，Blade 还会设置合理的 `*_OPTIONS` 默认值（如 `TSAN_OPTIONS=halt_on_error=1`），使检测能可靠地以非零退出——你在环境变量中已设置的值仍然优先。因此 `blade test` 会把检测判为失败。
 - **MSVC：** MSVC 工具链**仅**支持 AddressSanitizer——`--sanitizer=address` 用 `/fsanitize=address` 编译（并加 `/Z7` 以便符号化报告），以非增量方式链接（`/INCREMENTAL:NO /DEBUG`；ASan 运行时由编译器自动引入），并把 ASan 运行时 DLL 加入测试的 `PATH`。在 MSVC 上请求其它 sanitizer 会在启动时明确报错。
-- **MemorySanitizer：** `--sanitizer=memory`（别名 `msan`）检测对未初始化内存的读取。它**仅限 Clang + Linux**——GCC 没有 MSan，运行时在 macOS 上也不可用，在其它环境请求会在启动时明确报错。Blade 会加上 `-fsanitize-memory-track-origins=2`，使报告能回溯到未初始化值的来源。MSan 只有在**所有**参与链接的代码都被插桩时才不会误报：你需要自行构建（或提供）一个经 MSan 插桩的 C++ 标准库，并让依赖项也在 MSan 下构建——否则未插桩的系统库会带来大量误报。
+- **MemorySanitizer：** `--sanitizer=memory`（别名 `msan`）检测对未初始化内存的读取。它**仅限 Clang + Linux**——GCC 没有 MSan，运行时在 macOS 上也不可用，在其它环境请求会在启动时明确报错。Blade 会加上 `-fsanitize-memory-track-origins=2`，使报告能回溯到未初始化值的来源（origin 跟踪很耗内存——可用 `sanitizer_config(compile_flags = {'memory': ['-fsanitize-memory-track-origins=1']})` 调低，或 `=0`，见下文）。MSan 只有在**所有**参与链接的代码都被插桩时才不会误报：你需要自行构建（或提供）一个经 MSan 插桩的 C++ 标准库，并让依赖项也在 MSan 下构建——否则未插桩的系统库会带来大量误报。
 - **独立的构建目录：** sanitizer 构建与普通构建在 ABI/代码生成上不兼容，因此使用带 sanitizer 标记的独立兄弟目录——`build_release_asan`。普通的 `build_release` 不受影响，两者可并存、互不覆盖、互不触发重新编译。
 - **按目标退出：** 不应被插桩的目标（有意的 UB、性能热点、对未插桩预编译库的包装）可设置 `sanitize = False`。它仍参与链接（仍获得运行时），只是自身的编译不再插桩。在 MSVC 上同样有效——由于 `cl` 没有 `-fno-sanitize`，Blade 改为将该目标的 `/fsanitize` 标志置空。
 
@@ -178,6 +178,15 @@ sanitizer 是**每次运行的选择**（命令行开关），不是项目配置
   sanitizer_config(options = {
       'thread': ['suppressions=etc/tsan.supp', 'history_size=7'],
       'address': ['detect_stack_use_after_return=1'],
+  })
+  ```
+
+- **按 sanitizer 的编译选项：** 那些不能放进 `cc_config.cppflags` 的 sanitizer 专属*编译*选项（它们只在该 sanitizer 开启时才合法）。在 `sanitizer_config(compile_flags = {...})` 里按 sanitizer 配置；它们仅在该 sanitizer 激活时（gcc/clang）加入，且**追加在** Blade 默认之后，因此单值类选项按末位生效覆盖默认。典型场景是把 MSan 的 origin 跟踪从默认 `=2` 调低以省内存：
+
+  ```python
+  sanitizer_config(compile_flags = {
+      'memory':  ['-fsanitize-memory-track-origins=1'],   # 或 =0 —— 比默认 =2 更省
+      'address': ['-fsanitize-address-use-after-scope'],
   })
   ```
 

@@ -501,6 +501,15 @@ _CONFIG_TEMPLATE = {
         # `suppressions=<path>` option is resolved relative to the workspace root
         # and the file must exist; every other option passes through verbatim.
         'options': {},
+        # Per-sanitizer extra *compile* flags: {sanitizer: [flag, ...]}. Keys
+        # accept the canonical name or its alias; the flags are added (gcc/clang
+        # only) when that sanitizer is active, appended AFTER blade's defaults so
+        # a single-value flag wins by last-occurrence -- e.g.
+        # {'memory': ['-fsanitize-memory-track-origins=1']} dials MSan origin
+        # tracking down from blade's default =2 to save memory. For sanitizer-
+        # specific knobs that can't go in cc_config.cppflags (they're only valid
+        # while that sanitizer is on). See doc/*/test.md.
+        'compile_flags': {},
     },
 
 }

@@ -166,7 +166,7 @@ A sanitizer is a **per-run choice** (a flag), not project config. `--sanitizer` 
 
 - **Flags:** `-fsanitize=<set> -fno-omit-frame-pointer -g` are added to compiles and links (the link pulls in the sanitizer runtime). UBSan is made **fatal** (`-fno-sanitize-recover=undefined`) so a finding fails the test rather than just printing. For tests, Blade also sets sane `*_OPTIONS` defaults (e.g. `TSAN_OPTIONS=halt_on_error=1`) so a detection reliably exits non-zero — any value you set in the environment still wins. So `blade test` reports a detection as a failure.
 - **MSVC:** the MSVC toolchain implements **only** AddressSanitizer — `--sanitizer=address` compiles with `/fsanitize=address` (plus `/Z7` for symbolized reports), links non-incrementally (`/INCREMENTAL:NO /DEBUG`; the ASan runtime is pulled in automatically), and puts the ASan runtime DLL on the test's `PATH`. Any other sanitizer on MSVC is a clear startup error.
-- **MemorySanitizer:** `--sanitizer=memory` (alias `msan`) catches reads of uninitialized memory. It is **Clang + Linux only** — GCC has no MSan and the runtime is unavailable on macOS, so requesting it elsewhere is a clear startup error. Blade adds `-fsanitize-memory-track-origins=2` so a report points back to where the uninitialized value originated. MSan reports false positives unless **every** linked translation unit is instrumented: you must build (or supply) an MSan-instrumented C++ standard library and build your dependencies under MSan too — otherwise expect spurious reports from uninstrumented system libraries.
+- **MemorySanitizer:** `--sanitizer=memory` (alias `msan`) catches reads of uninitialized memory. It is **Clang + Linux only** — GCC has no MSan and the runtime is unavailable on macOS, so requesting it elsewhere is a clear startup error. Blade adds `-fsanitize-memory-track-origins=2` so a report points back to where the uninitialized value originated (origin tracking is memory-hungry — dial it down with `sanitizer_config(compile_flags = {'memory': ['-fsanitize-memory-track-origins=1']})`, or `=0`, see below). MSan reports false positives unless **every** linked translation unit is instrumented: you must build (or supply) an MSan-instrumented C++ standard library and build your dependencies under MSan too — otherwise expect spurious reports from uninstrumented system libraries.
 - **Isolated build directory:** a sanitized build is ABI/codegen-incompatible with a normal one, so it gets its own sibling dir with a sanitizer tag — `build_release_asan`. The plain `build_release` is untouched, so the two coexist without clobbering or rebuilding each other.
 - **Per-target opt-out:** a target that must not be instrumented (intentional UB, a hot path, a wrapper around a non-instrumented prebuilt) sets `sanitize = False`. It still links (and still gets the runtime); only its own compiles drop the instrumentation. This works on MSVC too — since `cl` has no `-fno-sanitize`, Blade blanks the per-file `/fsanitize` flag for that target instead.
 
@@ -182,6 +182,15 @@ A sanitizer is a **per-run choice** (a flag), not project config. `--sanitizer` 
   sanitizer_config(options = {
       'thread': ['suppressions=etc/tsan.supp', 'history_size=7'],
       'address': ['detect_stack_use_after_return=1'],
+  })
+  ```
+
+- **Per-sanitizer compile flags:** sanitizer-specific *compile* knobs that can't live in `cc_config.cppflags` (they're only valid while that sanitizer is on). Set them in `sanitizer_config(compile_flags = {...})`, keyed by sanitizer; they are added (gcc/clang) only when that sanitizer is active, **appended after** Blade's defaults so a single-value flag wins by last occurrence. The motivating case is dialing MSan origin tracking down from the default `=2` to save memory:
+
+  ```python
+  sanitizer_config(compile_flags = {
+      'memory':  ['-fsanitize-memory-track-origins=1'],   # or =0 — cheaper than the default =2
+      'address': ['-fsanitize-address-use-after-scope'],
   })
   ```
 

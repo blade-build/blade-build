@@ -140,6 +140,31 @@ def msvc_link_flags(sanitizers):
     return []
 
 
+def resolve_compile_flags(compile_flags_config, sanitizers):
+    """Per-sanitizer extra compile flags for the active set (gcc/clang).
+
+    ``compile_flags_config`` is the ``{sanitizer: list}`` map from
+    ``sanitizer_config.compile_flags`` (keys accept aliases). Returns a flat list
+    of the flags for the sanitizers actually active this run, in config order; a
+    configured sanitizer that isn't requested is skipped. Callers append these
+    AFTER ``compile_flags()`` so a single-value flag (e.g.
+    ``-fsanitize-memory-track-origins=N``) wins by last occurrence.
+    """
+    if not compile_flags_config:
+        return []
+    active = set(sanitizers)
+    flags = []
+    for name, value in compile_flags_config.items():
+        canonical = _ALIASES.get(str(name).strip().lower())
+        if canonical is None:
+            console.fatal('sanitizer_config.compile_flags: unknown sanitizer '
+                          '"%s" (known: %s)' % (name, ', '.join(sorted(_ALIASES))))
+        if canonical not in active or not value:
+            continue
+        flags.extend([value] if isinstance(value, str) else list(value))
+    return flags
+
+
 def resolve_options(options, sanitizers):
     """Resolve configured ``*_OPTIONS`` for the active sanitizer set.
 

@@ -1413,7 +1413,17 @@ class CcRuleGenerator:
         # CcTarget._get_cc_vars). The set is already validated in
         # _get_intrinsic_cc_flags, which runs first.
         sanitizers = getattr(self.options, 'sanitizers', None)
-        sanitize = ' '.join(sanitizer.compile_flags(sanitizers)) if sanitizers else ''
+        if sanitizers:
+            # blade's defaults, then the project's per-sanitizer extra compile
+            # flags (sanitizer_config.compile_flags) -- appended last so a
+            # single-value flag like -fsanitize-memory-track-origins=N overrides
+            # blade's default by last-occurrence.
+            sanitize_flags = sanitizer.compile_flags(sanitizers) + \
+                sanitizer.resolve_compile_flags(
+                    config.get_item('sanitizer_config', 'compile_flags'), sanitizers)
+            sanitize = ' '.join(sanitize_flags)
+        else:
+            sanitize = ''
         # LTO compile flag (#1378) as an overridable variable, mirroring
         # ${sanitize}: the global default is the active mode's `-flto*`, and a
         # per-target lto=False blanks `${lto}` on that target's edges so it
@@ -1712,7 +1722,9 @@ class CcRuleGenerator:
         # opt-out, so it just always instruments under --sanitizer (as before).
         sanitizers = getattr(self.options, 'sanitizers', None)
         if sanitizers:
-            cppflags = cppflags + sanitizer.compile_flags(sanitizers)
+            cppflags = cppflags + sanitizer.compile_flags(sanitizers) + \
+                sanitizer.resolve_compile_flags(
+                    config.get_item('sanitizer_config', 'compile_flags'), sanitizers)
         cppflags = cc_config['cppflags'] + cppflags
         cxxflags = ['-Xcompiler %s' % flag for flag in cxxflags]
         cppflags = ['-Xcompiler %s' % flag for flag in cppflags]
