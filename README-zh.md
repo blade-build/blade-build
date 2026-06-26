@@ -25,25 +25,19 @@ Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based deve
 
 [![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
 
-## 版本发布
+## Blade 3
 
-`master` 分支是 **v3** 的当前开发主线；原先的 `v3` 分支已删除，现在 `master` 即 v3 主线。v3 目前处于预发布阶段（[`v3.0.0-beta`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0-beta)），尚无稳定发布——当前最新的稳定发布是 [`v2.1.0`](https://github.com/blade-build/blade-build/releases/tag/v2.1.0)。完整列表见 [Releases](https://github.com/blade-build/blade-build/releases)。
+Blade 3 把项目从一个仅限 Linux、以 GCC 为中心的工具，升级为**三平台、多工具链**的现代构建系统。主要亮点：
 
-### Blade 3.0
-
-V3 是一次全面的现代化升级，带来以下增强：
-
-- **仅支持 Python 3.10+**，彻底移除 Python 2 兼容代码
-- **全量类型标注**，通过 pyright 静态检查
-- **完善的单元测试**，覆盖核心构建规则和工具函数
-- **跨仓库 E2E 冒烟测试**，基于独立的 [blade-test](https://github.com/blade-build/blade-test) 仓库
-- **macOS 和 Windows 实验性支持**，修复了多个跨平台编译兼容性问题
-- **代码清理**：移除死代码和失效测试，修复已知 bug
-- **新增文档**：Go 构建和 `$(location)` 语法
+- **三平台，一份 BUILD** —— Linux + macOS（clang）+ Windows（MSVC），通过 `cc_toolchain_config` 按构建选择。
+- **原生 [vcpkg](https://github.com/microsoft/vcpkg) 集成** —— 版本锁定、隔离的 C/C++ 第三方库，用 `vcpkg#port:lib` 引用，相当于 C++ 版的 `maven_jar`。
+- **Sanitizer 与覆盖率** —— `--sanitizer=address,…`（ASan/UBSan/LSan/TSan/MSan；MSVC 上的 ASan）与 `--coverage`（C/C++ / Go / Python 的 HTML 报告），对既有目标树生效，无需改 BUILD。
+- **性能剖析引导与链接期优化** —— 插桩式 PGO、采样式 PGO / AutoFDO，以及 LTO / ThinLTO，在 gcc / clang / MSVC / clang-cl 上统一。见 [C/C++ 优化](doc/zh_CN/optimization.md)。
+- **跨平台符号控制** —— `export_map` / `linker_script` 在 GCC / clang / MSVC 上一致翻译。
+- **更强的依赖卫生** —— 新增 `unused-deps` 检查与静态未定义符号检查，与既有的 `missing-deps` 检查并列。
+- **现代化代码库** —— 仅 Python 3.10+（移除 Python 2），全量类型标注 + pyright，完善的单元与跨仓库 E2E 测试。
 
 升级细节请参考[升级到 V3 版](doc/zh_CN/upgrade-to-v3.md)。
-
-如果需要 V2，请使用 [`v2`](https://github.com/blade-build/blade-build/tree/v2) 分支或 [v2.1.0 tag](https://github.com/blade-build/blade-build/releases/tag/v2.1.0)，升级细节参考 [V2 升级说明](doc/zh_CN/upgrade-to-v2.md)。
 
 ## Stargazers over time
 
@@ -150,6 +144,12 @@ cc_binary(
 
 * 头文件已更新，但受影响的模块未能重新构建。
 * 所依赖的库需要更新，但在构建时未被同步更新（例如某子目录的依赖被遗漏）。
+
+## 版本发布
+
+`master` 分支是 Blade 3 的当前开发主线，处于预发布阶段（[`v3.0.0-beta`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0-beta)）；尚无稳定的 v3 发布——当前最新的稳定发布是 [`v2.1.0`](https://github.com/blade-build/blade-build/releases/tag/v2.1.0)。完整列表见 [Releases](https://github.com/blade-build/blade-build/releases)。
+
+如果需要 Blade 2，请使用 [`v2`](https://github.com/blade-build/blade-build/tree/v2) 分支或 [v2.1.0 tag](https://github.com/blade-build/blade-build/releases/tag/v2.1.0)；升级细节参考 [V2 升级说明](doc/zh_CN/upgrade-to-v2.md)。
 
 ## 文档
 

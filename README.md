@@ -25,25 +25,19 @@ First, let's see a cool demo:
 
 [![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
 
-## Releases
+## Blade 3
 
-The `master` branch is the current development line for **v3**; the former `v3` branch has been removed, so `master` is now the v3 line. v3 is at pre-release ([`v3.0.0-beta`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0-beta)) with no stable release yet — the latest stable release is [`v2.1.0`](https://github.com/blade-build/blade-build/releases/tag/v2.1.0). See all [Releases](https://github.com/blade-build/blade-build/releases).
+Blade 3 takes the project from a Linux-only, GCC-focused tool to a **three-platform, multi-toolchain** modern build system. Highlights:
 
-### Blade 3.0
-
-V3 is a comprehensive modernization upgrade with these highlights:
-
-- **Python 3.10+ only**, all Python 2 compatibility code removed
-- **Full type annotations** with pyright static checking
-- **Comprehensive unit tests** covering core build rules and utilities
-- **Cross-repo E2E smoke tests** against the standalone [blade-test](https://github.com/blade-build/blade-test) repository
-- **Experimental macOS and Windows support**, with multiple cross-platform compilation fixes
-- **Code cleanup**: dead code and invalid tests removed, known bugs fixed
-- **New documentation**: Go builds and `$(location)` syntax
+- **Three platforms, one BUILD file** — Linux + macOS (clang) + Windows (MSVC), selectable per build via `cc_toolchain_config`.
+- **Native [vcpkg](https://github.com/microsoft/vcpkg) integration** — version-pinned, hermetic C/C++ third-party libraries via `vcpkg#port:lib`, the `maven_jar` analog for C++.
+- **Sanitizers & coverage** — `--sanitizer=address,…` (ASan/UBSan/LSan/TSan/MSan; ASan on MSVC) and `--coverage` (C/C++ / Go / Python HTML reports) on an existing target tree, no BUILD changes.
+- **Profile-guided & link-time optimization** — instrumentation PGO, sample-based PGO / AutoFDO, and LTO / ThinLTO, unified across gcc / clang / MSVC / clang-cl. See [C/C++ Optimization](doc/en/optimization.md).
+- **Cross-platform symbol control** — `export_map` / `linker_script` translated consistently across GCC / clang / MSVC.
+- **Stronger dependency hygiene** — an `unused-deps` check and a static undefined-symbol check join the existing `missing-deps` check.
+- **Modernized codebase** — Python 3.10+ only (Python 2 removed), full type annotations with pyright, comprehensive unit + cross-repo E2E tests.
 
 See the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide for details.
-
-For V2, use the [`v2`](https://github.com/blade-build/blade-build/tree/v2) branch or [v2.1.0 tag](https://github.com/blade-build/blade-build/releases/tag/v2.1.0). See the [V2 Upgrade Notes](doc/en/upgrade-to-v2.md).
 
 ## Stargazers over time
 
@@ -153,6 +147,12 @@ Completely avoiding the following problems:
 
 * Header files updated, but affected modules were not rebuilt.
 * Dependent libraries needed updates but were not updated during build, such as certain subdirectory dependencies.
+
+## Releases
+
+The `master` branch is the current development line for Blade 3, at pre-release ([`v3.0.0-beta`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0-beta)); there is no stable v3 release yet — the latest stable release is [`v2.1.0`](https://github.com/blade-build/blade-build/releases/tag/v2.1.0). See all [Releases](https://github.com/blade-build/blade-build/releases).
+
+For Blade 2, use the [`v2`](https://github.com/blade-build/blade-build/tree/v2) branch or the [v2.1.0 tag](https://github.com/blade-build/blade-build/releases/tag/v2.1.0); see the [V2 Upgrade Notes](doc/en/upgrade-to-v2.md).
 
 ## Documentation
 
