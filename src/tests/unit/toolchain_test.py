@@ -393,11 +393,13 @@ class DefaultToolNamesFollowKindTest(unittest.TestCase):
 
     def _cc_cxx(self, kind):
         # Mock the version/vendor probe so __init__ doesn't shell out; we only
-        # assert the resolved cc/cxx tool *names*.
+        # assert the resolved cc/cxx tool *names*. Compare the stem so a Windows
+        # `which` result (e.g. clang -> clang.EXE) still matches.
         with mock.patch.object(toolchain, 'run_command',
                                side_effect=_make_run_command(_GCC_BANNER)):
             tc = toolchain.GccToolChain(kind=kind)
-        return os.path.basename(tc.cc), os.path.basename(tc.cxx)
+        stem = lambda p: os.path.splitext(os.path.basename(p))[0]
+        return stem(tc.cc), stem(tc.cxx)
 
     def test_clang_kind_defaults_to_clang_tools(self):
         cc, cxx = self._cc_cxx('clang')
