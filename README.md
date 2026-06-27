@@ -49,7 +49,7 @@ Blade is engineered as a modern, high-performance build system that combines pow
 
 Designed to enhance development productivity, Blade simplifies build configuration while maintaining robust functionality for complex projects.
 
-Blade is primarily positioned for large C++ projects, closely integrated with development workflows such as unit testing, continuous integration, and coverage statistics. Like Unix text filtering programs, it maintains relative independence and can run standalone. It currently supports Linux (i386/x86_64/aarch64) as the primary platform, with experimental support for macOS and Windows.
+Blade is primarily positioned for large C++ projects, closely integrated with development workflows such as unit testing, continuous integration, and coverage statistics. Like Unix text filtering programs, it maintains relative independence and can run standalone. It supports Linux (i386/x86_64/aarch64), macOS (clang), and Windows (MSVC) as first-class platforms.
 
 During the development of [Tencent's "Typhoon" cloud computing platform](doc/Hadoop-in-China-2011-Typhoon.mhtml), we identified significant challenges with GNU Make and Autotools in large-scale environments. Inspired by insights from [Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we engineered Blade as a declarative build system.
 
@@ -62,28 +62,22 @@ The project has fostered an active contributor community, receiving numerous Pul
 With Blade, you can compile, link, and test multiple targets by just inputting one simple command line.
 For example:
 
-Build and test all targets in the  common directory recursively.
+Build and test all targets in the common directory recursively.
 
 ```bash
 blade test common...
 ```
 
-Build and test targets as 32-bit
-
-```bash
-blade test -m32 common...
-```
-
 Build and test targets in debug mode
 
-``` bash
+```bash
 blade test -pdebug common...
 ```
 
-And you can combine the flags:
+Build and test with a specific sanitizer enabled:
 
-``` bash
-blade test -m32 -pdebug common...
+```bash
+blade test --sanitizer=address common...
 ```
 
 ## Why It Exists
@@ -150,7 +144,7 @@ Completely avoiding the following problems:
 
 ## Releases
 
-The `master` branch is the current development line for Blade 3, at pre-release ([`v3.0.0-beta`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0-beta)); there is no stable v3 release yet — the latest stable release is [`v2.1.0`](https://github.com/blade-build/blade-build/releases/tag/v2.1.0). See all [Releases](https://github.com/blade-build/blade-build/releases).
+The latest stable release is [`v3.0.0`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0); the `master` branch is the active development line for Blade 3. See all [Releases](https://github.com/blade-build/blade-build/releases), and the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide.
 
 For Blade 2, use the [`v2`](https://github.com/blade-build/blade-build/tree/v2) branch or the [v2.1.0 tag](https://github.com/blade-build/blade-build/releases/tag/v2.1.0); see the [V2 Upgrade Notes](doc/en/upgrade-to-v2.md).
 
