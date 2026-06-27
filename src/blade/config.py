@@ -711,10 +711,19 @@ class BladeConfig:
             section[name] = var_to_list(value)
         elif isinstance(section[name], set):  # Allow using `list` to config `set`
             section[name] = set(var_to_list(value))
-        elif isinstance(value, type(section[name])):
-            section[name] = value
         else:
-            self.error(f'Incorrect type for "{name}", expect "{type(section[name]).__name__}", actual "{type(value).__name__}"')
+            # A literal override of an item that currently holds a deferred
+            # (callable) value is valid as long as it matches the item's
+            # underlying expected type, not the `_DeferredConfigValue` wrapper.
+            current = section[name]
+            expected_type = (current._expected_type
+                             if isinstance(current, _DeferredConfigValue)
+                             else type(current))
+            if isinstance(value, expected_type):
+                section[name] = value
+            else:
+                self.error(f'Incorrect type for "{name}", expect "{expected_type.__name__}", '
+                           f'actual "{type(value).__name__}"')
 
     def _append_item_value(self, section, name, item_name, value, user_config):
         """Append value to config item."""

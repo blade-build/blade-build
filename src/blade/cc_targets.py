@@ -2340,6 +2340,17 @@ class VcpkgLibrary(PrebuiltCcLibrary):
             self.generate_build('copy', dynamic_target, inputs=dynamic_source)
             if dynamic_source.startswith(os.path.abspath(self.build_dir) + os.sep):
                 self._emit_archive_syms(dynamic_source)
+        elif static:
+            # No shared lib is materialized for this 'auto' port (nothing
+            # dynamic-links it -- e.g. under MSan, which forbids shared libraries
+            # entirely). `_setup_auto` exposed DYNAMIC_LIB_LABEL pointing at a
+            # `.so` that now has no copy rule, which would make the target's
+            # `__outputs__` reference a non-existent file ("no known rule to make
+            # it"). Re-point the dynamic label at the always-present static
+            # archive: `__outputs__` stays consistent and any would-be dynamic
+            # consumer falls back to the `.a`.
+            self._add_target_file(
+                self.blade.get_build_toolchain().DYNAMIC_LIB_LABEL, static)
 
 
 def prebuilt_cc_library(

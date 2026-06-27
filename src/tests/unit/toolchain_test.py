@@ -386,5 +386,36 @@ class ClangClToolChainTest(unittest.TestCase):
             self.assertEqual(ClangClToolChain._llvm_tool(d, 'lld-link'), '')
 
 
+class DefaultToolNamesFollowKindTest(unittest.TestCase):
+    """`kind='clang'` with no explicit cc/cxx must default to clang/clang++, not
+    gcc/g++ -- otherwise `--cc-toolchain=clang` silently runs gcc, which rejects
+    clang-only sanitizers (e.g. MSan). Regression for that bug."""
+
+    def _cc_cxx(self, kind):
+        # Mock the version/vendor probe so __init__ doesn't shell out; we only
+        # assert the resolved cc/cxx tool *names*.
+        with mock.patch.object(toolchain, 'run_command',
+                               side_effect=_make_run_command(_GCC_BANNER)):
+            tc = toolchain.GccToolChain(kind=kind)
+        return os.path.basename(tc.cc), os.path.basename(tc.cxx)
+
+    def test_clang_kind_defaults_to_clang_tools(self):
+        cc, cxx = self._cc_cxx('clang')
+        self.assertEqual(cc, 'clang')
+        self.assertEqual(cxx, 'clang++')
+
+    def test_gcc_kind_defaults_to_gcc_tools(self):
+        cc, cxx = self._cc_cxx('gcc')
+        self.assertEqual(cc, 'gcc')
+        self.assertEqual(cxx, 'g++')
+
+    def test_explicit_cc_cxx_override_kind_default(self):
+        with mock.patch.object(toolchain, 'run_command',
+                               side_effect=_make_run_command(_GCC_BANNER)):
+            tc = toolchain.GccToolChain(kind='clang', cc='/opt/cc', cxx='/opt/cxx')
+        self.assertEqual(tc.cc, '/opt/cc')
+        self.assertEqual(tc.cxx, '/opt/cxx')
+
+
 if __name__ == '__main__':
     unittest.main()

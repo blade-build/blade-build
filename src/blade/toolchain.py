@@ -448,9 +448,16 @@ class GccToolChain(ToolChain):
         self._kind = kind
         self._target = target or _default_target_for_kind(kind)
 
-        self.cc = cc or _resolve_tool(prefix, tool_prefix, 'gcc')
-        self.cxx = cxx or _resolve_tool(prefix, tool_prefix, 'g++')
-        self.ld = ld or _resolve_tool(prefix, tool_prefix, 'g++')
+        # Default tool names follow the kind: a `kind='clang'` toolchain that
+        # didn't spell out cc/cxx must use clang/clang++ (not gcc/g++), so that
+        # selecting clang -- e.g. `--cc-toolchain=clang` for a sanitizer that
+        # requires it, such as MSan -- actually runs clang. (mingw/cygwin are
+        # GCC-based and keep the gcc/g++ names, resolved via tool_prefix.)
+        default_cc = 'clang' if kind == 'clang' else 'gcc'
+        default_cxx = 'clang++' if kind == 'clang' else 'g++'
+        self.cc = cc or _resolve_tool(prefix, tool_prefix, default_cc)
+        self.cxx = cxx or _resolve_tool(prefix, tool_prefix, default_cxx)
+        self.ld = ld or _resolve_tool(prefix, tool_prefix, default_cxx)
         self.ar = ar or _resolve_tool(prefix, tool_prefix, 'ar')
         self.cc_version = self._get_cc_version()
         self._cc_vendor = self._detect_cc_vendor()

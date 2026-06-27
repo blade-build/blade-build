@@ -24,6 +24,7 @@ from blade import command_line
 from blade import config
 from blade import console
 from blade import init_command
+from blade import sanitizer
 from blade import target_pattern
 from blade import workspace
 from blade.toolchain import BuildArchitecture, create_toolchain
@@ -56,6 +57,33 @@ def adjust_config_by_options(config, options):
                 getattr(config, section)(**{name: value})
 
 
+def force_static_linkage_for_msan(options):
+    """Under MemorySanitizer, force fully static linkage.
+
+    MSan ships only a static runtime (there is no `libclang_rt.msan*.so`), so
+    nothing in the process can be a shared library -- an instrumented `.so` can
+    never resolve `__msan_*` at link time, and building one always fails. So
+    force static both for the project's own libraries (`generate_dynamic`) and
+    for how tests link their dependencies (`cc_test_config.dynamic_link`, which
+    also drives `auto`-linkage vcpkg ports). Only override an option that was
+    actually enabled, and tell the user we did. The other sanitizers have a
+    shared runtime and are unaffected.
+
+    Runs after `build_manager.initialize` so deferred (lambda) config values
+    resolve, and before targets are loaded so the override takes effect.
+    """
+    if 'memory' not in sanitizer.parse(getattr(options, 'sanitizer', None)):
+        return
+    if config.get_item('cc_library_config', 'generate_dynamic'):
+        console.notice('MemorySanitizer has no shared runtime; forcing '
+                       'cc_library_config.generate_dynamic=False (static libraries)')
+        config.cc_library_config(generate_dynamic=False)
+    if config.get_item('cc_test_config', 'dynamic_link'):
+        console.notice('MemorySanitizer requires static linking; forcing '
+                       'cc_test_config.dynamic_link=False')
+        config.cc_test_config(dynamic_link=False)
+
+
 def _check_error_log(stage):
     """Check whether any error log occur during stage."""
     error_count = console.error_count()
@@ -68,6 +96,8 @@ def _check_error_log(stage):
 def run_subcommand(blade_path, command, options, ws, toolchain, targets):
     """Run particular subcommands."""
     builder = build_manager.initialize(blade_path, command, options, ws, toolchain, targets)
+
+    force_static_linkage_for_msan(options)
 
     # The 'dump' command is special, some kind of dump items should be ran before loading.
     if command == 'dump' and options.dump_config:
