@@ -39,9 +39,15 @@ Blade 3 把项目从一个仅限 Linux、以 GCC 为中心的工具，升级为*
 
 升级细节请参考[升级到 V3 版](doc/zh_CN/upgrade-to-v3.md)。
 
-## Stargazers over time
+## Star History
 
-[![Stargazers over time](https://starchart.cc/blade-build/blade-build.svg)](https://starchart.cc/blade-build/blade-build)
+<a href="https://www.star-history.com/?repos=blade-build%2Fblade-build&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## 源起
 

@@ -39,9 +39,15 @@ Blade 3 takes the project from a Linux-only, GCC-focused tool to a **three-platf
 
 See the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide for details.
 
-## Stargazers over time
+## Star History
 
-[![Stargazers over time](https://starchart.cc/blade-build/blade-build.svg)](https://starchart.cc/blade-build/blade-build)
+<a href="https://www.star-history.com/?repos=blade-build%2Fblade-build&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## Origin
 

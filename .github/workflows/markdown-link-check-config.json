@@ -8,7 +8,7 @@
     { "pattern": "^https?://www\\.gnu\\.org/" },
     { "pattern": "^https?://bazel\\.build/" },
     { "pattern": "^https?://asciinema\\.org/" },
-    { "pattern": "^https?://starchart\\.cc/" },
+    { "pattern": "^https?://(www\\.|api\\.)?star-history\\.com/" },
     { "pattern": "^https?://github\\.com/blade-build/blade-build/releases/tag/" }
   ]
 }
