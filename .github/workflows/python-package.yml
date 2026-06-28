@@ -5,9 +5,11 @@ name: Python package
 
 on:
   push:
-    branches: [ master, v3 ]
+    branches: [ master ]
+    paths-ignore: [ '**.md' ]  # doc-only changes: only check-md-links runs
   pull_request:
-    branches: [ master, v3 ]
+    branches: [ master ]
+    paths-ignore: [ '**.md' ]
 
 jobs:
   integration-tests:

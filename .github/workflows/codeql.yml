@@ -3,8 +3,10 @@ name: "CodeQL"
 on:
   push:
     branches: [ "master" ]
+    paths-ignore: [ '**.md' ]  # doc-only changes don't affect code analysis
   pull_request:
     branches: [ "master" ]
+    paths-ignore: [ '**.md' ]
   schedule:
     - cron: "27 21 * * 0"
 
