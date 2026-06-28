@@ -156,8 +156,7 @@ For Blade 2, use the [`v2`](https://github.com/blade-build/blade-build/tree/v2) 
 
 ## Documentation
 
-* [Full Documentation](doc/en/README.md)
-* [FAQ](doc/en/FAQ.md)
+* [Full Documentation](https://blade-build.github.io/docs/en/)
 
 ## Contributers
 
