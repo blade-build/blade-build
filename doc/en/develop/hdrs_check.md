@@ -153,6 +153,8 @@ Done in `_check_generated_headers()`. For each inclusion stack, take the **gener
 
 **Why is the indirect check restricted to "generated headers"?** If a generated header (a product of `proto_library`, `gen_rule`, etc.) has a missing dependency, it may **not yet be generated** or be a **stale version** when the current target compiles, causing compile errors or — worse — subtle runtime errors. Non-generated headers have their transitive visibility guaranteed naturally by compilation/linking, so they need no enforced declaration and are not checked indirectly.
 
+**Boundary — trust stops at the generating target.** The indirect check verifies only that the consumer **declares a dependency** on the generated header it includes; it does **not** descend into that generated header's own `#include`s. Those are trusted to be covered by the *generating* target's own compilation — e.g. `proto_library` compiles its `.pb.cc`, so the `.pb.h`'s includes are `-H`-checked in that context. A `gen_rule` that merely **emits a raw header without compiling any translation unit** is therefore a known blind spot: if such a header itself `#include`s another project header, that transitive dependency is not enforced. In practice this is low-risk, because generated headers seldom include project headers — they pull in their runtime (`google/protobuf/...`, the standard library), not your libraries. If you do hit this case, declare the dependency explicitly on the consuming side (or in the `gen_rule`'s `deps`).
+
 ### Severity and suppression
 
 - `cc_config.hdr_dep_missing_severity`: the severity of a finding (`error` / `warning`). The check fails only when it is `error` and a problem actually exists.
