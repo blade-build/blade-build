@@ -30,3 +30,6 @@ __pycache__
 !/.agent/tools/*.sh
 !/.agent/tools/README.md
 .claude/
+
+# MkDocs build output (docs are deployed to blade-build.github.io)
+/_site/

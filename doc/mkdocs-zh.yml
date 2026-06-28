@@ -1,0 +1,88 @@
+# MkDocs config for the Chinese documentation site (readthedocs theme).
+# Built and deployed to blade-build.github.io/docs/zh/ by .github/workflows.
+# Page titles come from each file's H1 (already in Chinese); only the section
+# headers below are spelled out.
+site_name: Blade Build
+site_description: Blade 构建系统文档
+site_url: https://blade-build.github.io/docs/zh/
+repo_url: https://github.com/blade-build/blade-build
+repo_name: blade-build/blade-build
+docs_dir: zh_CN
+site_dir: ../_site/zh
+use_directory_urls: true
+
+hooks:
+  - mkdocs_hooks.py
+
+theme:
+  name: readthedocs
+  highlightjs: true
+  language: zh
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - fenced_code
+
+nav:
+  - README.md
+  - 介绍:
+      - intro.md
+      - features.md
+  - 快速开始:
+      - prerequisites.md
+      - install.md
+      - quick_start.md
+  - 用户指南:
+      - workspace.md
+      - build_file.md
+      - dsl.md
+      - functions.md
+      - command_line.md
+      - test.md
+      - output.md
+      - build_cache.md
+      - optimization.md
+      - config.md
+      - misc.md
+  - 构建规则:
+      - build_rules/cc.md
+      - build_rules/custom_rule.md
+      - build_rules/extension.md
+      - build_rules/gen_rule.md
+      - build_rules/go.md
+      - build_rules/idl.md
+      - build_rules/java.md
+      - build_rules/lexyacc.md
+      - build_rules/package.md
+      - build_rules/python.md
+      - build_rules/scala.md
+      - build_rules/shell.md
+      - build_rules/swig.md
+      - build_rules/vcpkg.md
+  - 升级:
+      - upgrade-to-v3.md
+      - upgrade-to-v2.md
+  - 开发文档:
+      - develop.md
+      - develop/build_file_loading.md
+      - develop/cc_build.md
+      - develop/check_undefined.md
+      - develop/configuration.md
+      - develop/console.md
+      - develop/custom_rule.md
+      - develop/dependency_analysis.md
+      - develop/dsl_api.md
+      - develop/export_map.md
+      - develop/gen_rule.md
+      - develop/hdrs_check.md
+      - develop/java_scala_build.md
+      - develop/protobuf_build.md
+      - develop/python_build.md
+      - develop/self_testing.md
+      - develop/test_execution.md
+      - develop/vcpkg.md
+      - develop/visibility.md
+  - FAQ.md
