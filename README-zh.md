@@ -153,8 +153,7 @@ cc_binary(
 
 ## 文档
 
-* [完整文档](doc/zh_CN/README.md)
-* [FAQ](doc/zh_CN/FAQ.md)
+* [完整文档](https://blade-build.github.io/docs/zh/)
 
 ## 贡献者
 
