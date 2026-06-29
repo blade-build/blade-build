@@ -49,19 +49,19 @@ nav:
       - misc.md
   - Build Rules:
       - build_rules/cc.md
-      - build_rules/custom_rule.md
-      - build_rules/extension.md
-      - build_rules/gen_rule.md
+      - build_rules/vcpkg.md
       - build_rules/go.md
       - build_rules/idl.md
       - build_rules/java.md
+      - build_rules/scala.md
       - build_rules/lexyacc.md
       - build_rules/package.md
       - build_rules/python.md
-      - build_rules/scala.md
       - build_rules/shell.md
       - build_rules/swig.md
-      - build_rules/vcpkg.md
+      - build_rules/gen_rule.md
+      - build_rules/extension.md
+      - build_rules/custom_rule.md
   - Upgrade:
       - upgrade-to-v3.md
       - upgrade-to-v2.md
