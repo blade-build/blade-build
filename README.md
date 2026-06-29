@@ -21,17 +21,13 @@ A modern, high-performance build system optimized for trunk-based development in
 
 ## Introduction
 
-In 2010, during the development of [Tencent's "Typhoon" cloud computing platform](doc/Hadoop-in-China-2011-Typhoon.mhtml), we experienced first-hand the limitations of traditional build systems such as GNU Make and Autotools at large scale. Inspired by a [series of articles on Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we designed and built the Blade build system.
+In 2010, during the development of [Tencent's "Typhoon" cloud computing platform](doc/Hadoop-in-China-2011-Typhoon.mhtml), we ran into the limits of traditional build systems such as GNU Make and Autotools at large scale. Inspired by a [series of articles on Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we designed and built Blade.
 
-Blade is a modern, high-performance build system that pursues both power and a good user experience, with the goal of freeing programmers from tedious build chores. It provides native support for many languages including C/C++, Java, Python, Scala, and Protocol Buffers, automatically analyzes the dependencies between targets, and seamlessly integrates compilation, linking, testing (with incremental and parallel testing), and static code analysis.
+Blade frees programmers from tedious build chores: you write declarative BUILD scripts that say *what* to build (targets, sources, direct dependencies), not *how*. Blade resolves the dependencies between targets and unifies compilation, linking, testing (incremental and parallel), and static analysis. It natively supports C/C++, Java, Python, Scala, Protocol Buffers, and more.
 
-While simplifying build configuration, Blade also provides enough flexibility for complex projects, with extensive built-in integration of modern compiler features such as test coverage, memory-error diagnosis and analysis, and compiler optimization.
-
-Blade is primarily aimed at large C++ projects and integrates closely with development workflows such as unit testing, continuous integration, and coverage statistics; at the same time, it follows the Unix philosophy and can run standalone. Blade treats Linux (i386/x86_64/aarch64), macOS (clang), and Windows (MSVC) as first-class platforms.
+Blade targets large C++ projects and fits closely into workflows like unit testing and continuous integration, yet follows the Unix philosophy and runs standalone; it treats Linux (i386/x86_64/aarch64), macOS (clang), and Windows (MSVC) as first-class platforms. It keeps configuration simple while giving complex projects flexibility, with extensive built-in integration of modern compiler features — test coverage, memory-error diagnosis and sanitizers, and compiler optimization.
 
 Blade has been battle-tested on codebases of tens of millions of lines. For a real-world account of trunk-based development at that scale, see [*Tencent Ads: Trunk-Based Development on a 30-Million-Line Codebase*](https://cloud.tencent.com/developer/article/1804858) (in Chinese).
-
-The whole system is driven by a set of declarative build scripts. In these scripts, developers only declare *what* to build (targets, sources, and direct dependencies) rather than *how* to build it. This approach dramatically reduces configuration complexity and significantly improves development efficiency and maintainability.
 
 With Blade, a single command line compiles, links, and tests multiple targets. For example:
 

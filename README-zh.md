@@ -21,17 +21,13 @@ Blade 是一款面向大规模 monorepo 环境和主干开发（trunk-based deve
 
 ## 简介
 
-2010 年时，在腾讯[「台风」云计算平台](doc/Hadoop-in-China-2011-Typhoon.mhtml)的研发过程中，我们深刻体会到 GNU Make、Autotools 等传统构建系统在大规模环境下的不足。受 [Google 工程博客上一系列文章](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html) 的启发，我们设计和实现了 Blade 构建系统。
+2010 年，在腾讯[「台风」云计算平台](doc/Hadoop-in-China-2011-Typhoon.mhtml)的研发中，我们深刻体会到 GNU Make、Autotools 等传统构建系统在大规模环境下的不足。受 [Google 工程博客系列文章](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html)的启发，我们设计并实现了 Blade。
 
-Blade 是一款现代化的高性能构建系统，既追求强大的能力，也追求良好的使用体验，目标是把程序员从繁琐的构建工作中解放出来。它原生支持 C/C++、Java、Python、Scala、Protocol Buffers 等多种语言，自动分析目标间的依赖，并将编译、链接、测试（支持增量测试与并行测试）以及静态代码分析无缝整合在一起。
+Blade 旨在把程序员从繁琐的构建工作中解放出来：你只需用声明式的 BUILD 脚本声明「构建什么」（目标、源文件、直接依赖），而无需描述「如何构建」；Blade 会自动分析目标间的依赖，并将编译、链接、测试（支持增量与并行测试）以及静态代码分析无缝整合在一起。它原生支持 C/C++、Java、Python、Scala、Protocol Buffers 等多种语言。
 
-Blade 在简化构建配置的同时，也为复杂项目的构建提供足够的灵活性，并内置集成了大量现代编译器特性，如测试覆盖率、内存错误诊断与分析、编译器优化等。
-
-Blade 主要面向大型 C++ 项目，与研发流程（单元测试、持续集成、覆盖率统计等）紧密配合；同时也奉行 Unix 哲学，可以单独运行。Blade 将 Linux（i386/x86_64/aarch64）、macOS（clang）和 Windows（MSVC）作为一等平台支持。
+Blade 主要面向大型 C++ 项目，与单元测试、持续集成等研发流程紧密配合，同时奉行 Unix 哲学、可独立运行，并将 Linux（i386/x86_64/aarch64）、macOS（clang）和 Windows（MSVC）作为一等平台支持。它在简化配置的同时也为复杂项目保留足够的灵活性，并内置集成了大量现代编译器特性，如测试覆盖率、内存错误诊断与 sanitizer、编译器优化等。
 
 Blade 已在数千万行规模的代码库上经受实战检验。关于在这种规模下进行主干开发的实践，可参阅[《腾讯广告 3000+万行大代码库主干开发实战》](https://cloud.tencent.com/developer/article/1804858)。
-
-整个系统基于若干声明式的构建脚本。在这些脚本中，开发者只需声明「构建什么」（目标、源文件、直接依赖），而不必描述「如何构建」。这种思路大幅降低了配置复杂度，也显著提升了开发效率与可维护性。
 
 借助 Blade，只需一行命令即可完成多个目标的编译、链接与测试。例如：
 
