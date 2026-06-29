@@ -72,6 +72,12 @@ export PATH=~/bin:$PATH
 - **ccache：** 通过缓存加速构建
 - **argcomplete：** 提供增强的命令行补全
 
+## 编辑器集成
+
+安装官方 **[Blade VS Code 扩展](https://marketplace.visualstudio.com/items?itemName=blade-build.vscode-blade)**（[源码](https://github.com/blade-build/vscode-blade)），即可获得目标浏览器、构建/运行/测试、BUILD 文件语言特性，以及基于 clangd 的 C/C++ 智能感知。
+
+详情，以及在 Vim、Emacs 等其他编辑器中通过 clangd 获得 C/C++ 智能感知的方法，见[编辑器支持](editor_support.md)。
+
 ## 故障排查
 
 ### 常见问题

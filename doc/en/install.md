@@ -69,6 +69,12 @@ export PATH=~/bin:$PATH
 - **ccache:** For build acceleration through caching
 - **argcomplete:** Enhanced command-line completion support
 
+## Editor Integration
+
+Install the official **[Blade VS Code extension](https://marketplace.visualstudio.com/items?itemName=blade-build.vscode-blade)** ([source](https://github.com/blade-build/vscode-blade)) for a targets explorer, build/run/test, BUILD-file language features, and clangd-based C/C++ IntelliSense.
+
+See [Editor Support](editor_support.md) for details, including how to get C/C++ IntelliSense via clangd in other editors such as Vim and Emacs.
+
 ## Troubleshooting
 
 ### Common Issues
