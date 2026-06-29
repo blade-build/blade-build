@@ -19,68 +19,33 @@ A modern, high-performance build system optimized for trunk-based development in
 [![Coverage](https://coveralls.io/repos/blade-build/blade-build/badge.svg?branch=master)](https://coveralls.io/github/blade-build/blade-build)
 [![Downloads](https://img.shields.io/github/downloads/blade-build/blade-build/total.svg)](https://github.com/blade-build/blade-build/releases)
 
-## Demo
+## Introduction
 
-First, let's see a cool demo:
+In 2010, during the development of [Tencent's "Typhoon" cloud computing platform](doc/Hadoop-in-China-2011-Typhoon.mhtml), we experienced first-hand the limitations of traditional build systems such as GNU Make and Autotools at large scale. Inspired by a [series of articles on Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we designed and built the Blade build system.
 
-[![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
+Blade is a modern, high-performance build system that pursues both power and a good user experience, with the goal of freeing programmers from tedious build chores. It provides native support for many languages including C/C++, Java, Python, Scala, and Protocol Buffers, automatically analyzes the dependencies between targets, and seamlessly integrates compilation, linking, testing (with incremental and parallel testing), and static code analysis.
 
-## Blade 3
+While simplifying build configuration, Blade also provides enough flexibility for complex projects, with extensive built-in integration of modern compiler features such as test coverage, memory-error diagnosis and analysis, and compiler optimization.
 
-Blade 3 takes the project from a Linux-only, GCC-focused tool to a **three-platform, multi-toolchain** modern build system. Highlights:
+Blade is primarily aimed at large C++ projects and integrates closely with development workflows such as unit testing, continuous integration, and coverage statistics; at the same time, it follows the Unix philosophy and can run standalone. Blade treats Linux (i386/x86_64/aarch64), macOS (clang), and Windows (MSVC) as first-class platforms.
 
-- **Three platforms, one BUILD file** — Linux + macOS (clang) + Windows (MSVC), selectable per build via `cc_toolchain_config`.
-- **Native [vcpkg](https://github.com/microsoft/vcpkg) integration** — version-pinned, hermetic C/C++ third-party libraries via `vcpkg#port:lib`, the `maven_jar` analog for C++.
-- **Sanitizers & coverage** — `--sanitizer=address,…` (ASan/UBSan/LSan/TSan/MSan; ASan on MSVC) and `--coverage` (C/C++ / Go / Python HTML reports) on an existing target tree, no BUILD changes.
-- **Profile-guided & link-time optimization** — instrumentation PGO, sample-based PGO / AutoFDO, and LTO / ThinLTO, unified across gcc / clang / MSVC / clang-cl. See [C/C++ Optimization](doc/en/optimization.md).
-- **Cross-platform symbol control** — `export_map` / `linker_script` translated consistently across GCC / clang / MSVC.
-- **Stronger dependency hygiene** — an `unused-deps` check and a static undefined-symbol check join the existing `missing-deps` check.
-- **Modernized codebase** — Python 3.10+ only (Python 2 removed), full type annotations with pyright, comprehensive unit + cross-repo E2E tests.
+The whole system is driven by a set of declarative build scripts. In these scripts, developers only declare *what* to build (targets, sources, and direct dependencies) rather than *how* to build it. This approach dramatically reduces configuration complexity and significantly improves development efficiency and maintainability.
 
-See the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide for details.
+With Blade, a single command line compiles, links, and tests multiple targets. For example:
 
-## Star History
-
-<a href="https://www.star-history.com/?repos=blade-build%2Fblade-build&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
- </picture>
-</a>
-
-## Origin
-
-Blade is engineered as a modern, high-performance build system that combines power with ease of use. It provides comprehensive support for multiple programming languages including C/C++, Java, Python, Scala, Protocol Buffers, and more. The system automatically analyzes target dependencies and seamlessly integrates compilation, linking, testing (with support for incremental and parallel testing), and static code analysis.
-
-Designed to enhance development productivity, Blade simplifies build configuration while maintaining robust functionality for complex projects.
-
-Blade is primarily positioned for large C++ projects, closely integrated with development workflows such as unit testing, continuous integration, and coverage statistics. Like Unix text filtering programs, it maintains relative independence and can run standalone. It supports Linux (i386/x86_64/aarch64), macOS (clang), and Windows (MSVC) as first-class platforms.
-
-During the development of [Tencent's "Typhoon" cloud computing platform](doc/Hadoop-in-China-2011-Typhoon.mhtml), we identified significant challenges with GNU Make and Autotools in large-scale environments. Inspired by insights from [Google's engineering blog](http://google-engtools.blogspot.hk/2011/08/build-in-cloud-how-build-system-works.html), we engineered Blade as a declarative build system.
-
-The system utilizes declarative build scripts where developers specify what to build (targets, sources, and direct dependencies) rather than how to build it. This approach dramatically reduces configuration complexity while significantly improving development efficiency and maintainability.
-
-Blade was open-sourced in 2012 as one of Tencent's earliest open-source initiatives. The system has achieved widespread adoption across Tencent's technology stack, including advertising platforms, WeChat backend services, gaming infrastructure, and core infrastructure systems. Beyond Tencent, Blade has been deployed at major technology companies including Xiaomi, Baidu, and iQiyi.
-
-The project has fostered an active contributor community, receiving numerous Pull Requests from both internal and external developers. Originally hosted on Google Code, the project was migrated to chen3feng's personal repository following Google Code's deprecation, where it continues to be actively maintained and developed.
-
-With Blade, you can compile, link, and test multiple targets by just inputting one simple command line.
-For example:
-
-Build and test all targets in the common directory recursively.
+Recursively build and test all targets under the `common` directory:
 
 ```bash
 blade test common...
 ```
 
-Build and test targets in debug mode
+Build and test in debug mode:
 
 ```bash
 blade test -pdebug common...
 ```
 
-Build and test with a specific sanitizer enabled:
+Build and test with a sanitizer enabled:
 
 ```bash
 blade test --sanitizer=address common...
@@ -88,9 +53,9 @@ blade test --sanitizer=address common...
 
 ## Why It Exists
 
-First and foremost, Blade solves dependency problems. When you build certain targets, if header files have changed, it will automatically rebuild them.
+First and foremost, Blade solves dependency problems. When you build certain targets, if header files have changed, it will automatically rebuild the affected code.
 
-Most conveniently, Blade can also track library file dependencies. For example, if library foo depends on library common, then in library foo's BUILD file, you list the dependency:
+Most conveniently, Blade can also track dependencies between libraries. For example, if library `foo` depends on library `common`, you just declare that dependency in `foo`'s BUILD file:
 
 ```python
 cc_library(
@@ -101,7 +66,7 @@ cc_library(
 )
 ```
 
-Then for programs using foo, if they don't directly use common, you only need to list foo, not common:
+Then a program that uses `foo`, even if it does not directly use `common`, only needs to list `foo` as a dependency, not `common`:
 
 ```python
 cc_binary(
@@ -111,42 +76,66 @@ cc_binary(
 )
 ```
 
-This way, when your library implementation changes, adding or removing libraries, you don't need to notify library users to make changes together. Blade automatically maintains this layer of indirect dependencies. When building my_app, it will also automatically check whether foo and common need to be updated.
+This way, when a library's implementation changes, or dependencies are added or removed, the library's users don't need to change anything in step. Blade automatically maintains this layer of indirect dependencies; when building `my_app`, it also automatically checks whether `foo` and `common` need to be updated.
 
-In terms of ease of use, besides automatic dependency maintenance, Blade can also achieve that users only need to type one command line to handle compilation, linking, and unit testing for the entire directory tree.
+Besides automatic dependency maintenance, another highlight of Blade's ease of use is that a single command line can compile, link, and unit-test an entire directory tree.
+
+## Demo
+
+Let's look at a real demo to get a feel for how concise and efficient Blade is:
+
+[![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
 
 ## Features
 
 * **Native [vcpkg](https://github.com/microsoft/vcpkg) integration for C/C++ third-party libraries.** Using third-party libraries in Blade has long been cumbersome; as vcpkg has matured, Blade now integrates it as a first-class package manager — declare `vcpkg#<port>:<lib>` in `deps` and Blade installs and links them, with version pinning and a binary cache. See [Using vcpkg packages](doc/en/build_rules/vcpkg.md).
-* Automatic analysis of header file dependencies, building affected code.
-* Incremental compilation and linking, only building code that needs to be rebuilt due to changes.
-* Automatic calculation of indirect library dependencies - library authors only need to write direct dependencies, and builds automatically check if dependent libraries need rebuilding.
-* Ability to build from any subdirectory in any code tree.
-* Support for recursive building of all targets in multiple directories at once, as well as building only specific arbitrary targets.
-* Whatever targets you build, their dependent targets are also automatically updated.
-* Built-in debug/release build types.
-* Colorful highlighting of error messages during build process.
+* Automatic analysis of header-file dependencies, rebuilding affected code.
+* Incremental compilation and linking — only rebuild what actually needs rebuilding.
+* Automatic calculation of indirect library dependencies — library authors declare only direct dependencies, and builds automatically check whether indirect dependencies need rebuilding.
+* Ability to start a build from any subdirectory of the code tree.
+* Recursively build all targets in multiple directories at once, or build only specific targets.
+* Whatever targets you build, their dependencies are automatically updated too.
+* Built-in debug / release build types.
+* Colorful highlighting of error messages during the build.
 * Support for ccache.
 * Support for distcc.
 * Support for building multi-platform targets.
-* Support for compiler selection during build (different versions of gcc, clang, etc.).
-* Support for compiling protobuf, lex, yacc, swig.
-* Support for custom rules.
-* Support for testing, running multiple tests from command line.
+* Support for compiler selection at build time (different versions of gcc, clang, etc.).
+* Support for compiling protobuf, lex, yacc, and SWIG.
+* Support for custom build rules.
+* Support for running multiple tests from the command line at once.
 * Support for parallel testing (multiple test processes running concurrently).
-* Support for incremental testing (unchanged test programs are automatically skipped).
-* Integration with gperftools for automatic memory leak detection in test programs.
+* Support for incremental testing (tests that don't need to rerun are skipped automatically).
+* Integration with gperftools for automatic memory-leak detection in test programs.
 * Vim syntax highlighting for build scripts.
-* git-style subcommand command line interface.
-* Support for bash command line completion.
-* Written in Python, no compilation needed, direct installation and use.
+* A git-style subcommand command-line interface.
+* Support for bash command-line completion.
+* Written in Python — no compilation needed, install and use directly.
 
-## Problems Avoided
+It completely avoids problems such as:
 
-Completely avoiding the following problems:
+* Header files were updated, but the affected modules were not rebuilt.
+* A dependent library needed updating but was not updated during the build (for example, a dependency in some subdirectory was missed).
 
-* Header files updated, but affected modules were not rebuilt.
-* Dependent libraries needed updates but were not updated during build, such as certain subdirectory dependencies.
+## Version History
+
+Blade has had three major versions so far.
+
+Blade 1 was the early version, aiming to provide a simple, easy-to-use build system; its backend was the [Scons](https://scons.org/) build system.
+
+Blade 2 upgraded the backend to the [Ninja](https://ninja-build.org/) build system, greatly improving performance.
+
+The latest Blade is Blade 3, which aims to be a modern build system. Blade 3 takes the project from a Linux-only, GCC-focused tool to a **three-platform, multi-toolchain** modern build system. Highlights:
+
+* **Three platforms, one BUILD file** — Linux + macOS (clang) + Windows (MSVC), selectable per build via `cc_toolchain_config`.
+* **Native [vcpkg](https://github.com/microsoft/vcpkg) integration** — version-pinned, hermetic C/C++ third-party libraries via `vcpkg#port:lib`, the `maven_jar` analog for C++.
+* **Sanitizers & coverage** — `--sanitizer=address,…` (ASan/UBSan/LSan/TSan/MSan; ASan on MSVC) and `--coverage` (C/C++ / Go / Python HTML reports) on an existing target tree, no BUILD changes.
+* **Profile-guided & link-time optimization** — instrumentation PGO, sample-based PGO / AutoFDO, and LTO / ThinLTO, unified across gcc / clang / MSVC / clang-cl. See [C/C++ Optimization](doc/en/optimization.md).
+* **Cross-platform symbol control** — `export_map` / `linker_script` translated consistently across GCC / clang / MSVC.
+* **Stronger dependency hygiene** — an `unused-deps` check and a static undefined-symbol check join the existing `missing-deps` check.
+* **Modernized codebase** — Python 3.10+ only (Python 2 removed), full type annotations with pyright, comprehensive unit + cross-repo E2E tests.
+
+See the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide for details.
 
 ## Releases
 
@@ -158,29 +147,35 @@ For Blade 2, use the [`v2`](https://github.com/blade-build/blade-build/tree/v2) 
 
 * [Full Documentation](https://blade-build.github.io/docs/en/)
 
-## Contributers
+## Contributors
+
+Blade was open-sourced in 2012 as one of Tencent's earliest open-source projects. It has since seen wide adoption across Tencent's technology stack — advertising platforms, WeChat backend services, game servers, and core infrastructure — and beyond Tencent, companies such as Xiaomi, Baidu, and iQiyi use Blade as well.
+
+This has grown an active contributor community, with many Pull Requests from inside and outside the company. The project was originally hosted on Google Code; after Google Code shut down, it moved to chen3feng's personal repository for continued maintenance and evolution, and finally moved here.
 
 [![Contributers](https://contrib.rocks/image?repo=blade-build/blade-build)](https://github.com/blade-build/blade-build/graphs/contributors)
+
+## Star History
+
+Even if you don't have the time or energy to contribute, stars are warmly welcome.
+
+<a href="https://www.star-history.com/?repos=blade-build%2Fblade-build&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## Credits
 
 * Blade is inspired by Google's public information about their build system. Here is a reference article from Google's official blog:
-  [build in cloud: how build system works](http://google-engtools.blogspot.com/2011/08/build-in-cloud-how-build-system-works.html).
+  [Build in the Cloud: How the Build System Works](http://google-engtools.blogspot.com/2011/08/build-in-cloud-how-build-system-works.html).
+  Later, in 2015, Google released a partially rewritten version under the new name `bazel`.
 
-  Later in 2015, they released it with a partially rewritten version as the `bazel` open-source build system.
+* Blade generates [Ninja](https://ninja-build.org/) scripts internally to drive the build, so it depends on Ninja at runtime.
+* [Python](http://www.python.org) is a simple yet powerful language, and we like it a lot.
 
-* Blade generates [Ninja](https://ninja-build.org/) script internally, so of course it depends on Ninja.
-* [Python](http://www.python.org) is a powerful and easy-to-used language, we like python.
+Our philosophy: liberate programmers, improve productivity, and use tools to solve non-creative technical problems.
 
-Some libraries open-sourced by Google, such as:
-
-* [glog](https://google.github.io/glog/stable/)
-* [protobuf](https://github.com/protocolbuffers/protobuf)
-* [gtest](https://github.com/google/googletest)
-* [gperftools](https://github.com/gperftools/gperftools)
-
-They are handy and powerful; we have integrated these libraries.
-
-Our philosophy: Liberate programmers, improve productivity. Use tools to solve non-creative technical problems.
-
-Welcome to use and help us improve Blade, we look forward to your contributions.
+Welcome to Blade — we look forward to your contributions.
