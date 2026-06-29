@@ -53,9 +53,7 @@ blade test --sanitizer=address common...
 
 ## Why It Exists
 
-First and foremost, Blade solves dependency problems. When you build certain targets, if header files have changed, it will automatically rebuild the affected code.
-
-Most conveniently, Blade can also track dependencies between libraries. For example, if library `foo` depends on library `common`, you just declare that dependency in `foo`'s BUILD file:
+Blade tracks dependencies between libraries. For example, if library `foo` depends on library `common`, you just declare that dependency in `foo`'s BUILD file:
 
 ```python
 cc_library(
@@ -77,8 +75,6 @@ cc_binary(
 ```
 
 This way, when a library's implementation changes, or dependencies are added or removed, the library's users don't need to change anything in step. Blade automatically maintains this layer of indirect dependencies; when building `my_app`, it also automatically checks whether `foo` and `common` need to be updated.
-
-Besides automatic dependency maintenance, another highlight of Blade's ease of use is that a single command line can compile, link, and unit-test an entire directory tree.
 
 ## Demo
 
