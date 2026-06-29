@@ -29,6 +29,8 @@ While simplifying build configuration, Blade also provides enough flexibility fo
 
 Blade is primarily aimed at large C++ projects and integrates closely with development workflows such as unit testing, continuous integration, and coverage statistics; at the same time, it follows the Unix philosophy and can run standalone. Blade treats Linux (i386/x86_64/aarch64), macOS (clang), and Windows (MSVC) as first-class platforms.
 
+Blade has been battle-tested on codebases of tens of millions of lines. For a real-world account of trunk-based development at that scale, see [*Tencent Ads: Trunk-Based Development on a 30-Million-Line Codebase*](https://cloud.tencent.com/developer/article/1804858) (in Chinese).
+
 The whole system is driven by a set of declarative build scripts. In these scripts, developers only declare *what* to build (targets, sources, and direct dependencies) rather than *how* to build it. This approach dramatically reduces configuration complexity and significantly improves development efficiency and maintainability.
 
 With Blade, a single command line compiles, links, and tests multiple targets. For example:

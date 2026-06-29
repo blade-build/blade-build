@@ -23,6 +23,8 @@ Blade is a modern, high-performance build system designed to address the complex
 
 Developed during Tencent's ["Typhoon" cloud computing platform](http://storage.it168.com/a2011/1203/1283/000001283196.shtml) initiative, Blade represents a next-generation build system engineered for enterprise-scale development.
 
+It has since been battle-tested on codebases of tens of millions of lines. For a real-world account of using Blade for trunk-based development at that scale, see [*Tencent Ads: Trunk-Based Development on a 30-Million-Line Codebase*](https://cloud.tencent.com/developer/article/1804858) (in Chinese).
+
 **Key Design Principles:**
 - **Declarative Configuration:** BUILD files specify what to build, not how to build
 - **Automatic Dependency Management:** Comprehensive dependency tracking without manual specification
