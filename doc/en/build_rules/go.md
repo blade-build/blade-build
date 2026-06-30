@@ -111,6 +111,24 @@ Blade scans the current directory for `.go` files:
 - Otherwise, a `go_library` is created.
 - If `*_test.go` files exist, a `go_test` is created automatically.
 
+## Dependencies
+
+A go target's `deps` lists **other Blade targets** it depends on — `go_library`
+targets and `proto_library` targets that emit Go code. Blade builds those first
+and makes them importable.
+
+How you pull in **third-party packages** (e.g. `github.com/...`) depends on the
+mode configured in `go_config`:
+
+- **Go modules** (`go_module_enabled = True`, recommended): declare third-party
+  packages in your `go.mod` as usual. Blade invokes `go` inside the module
+  directory (`go_module_relpath`), so `go` resolves, downloads, and builds those
+  dependencies — you do **not** list them in Blade `deps`.
+- **GOPATH mode** (the default): packages are resolved from
+  `$go_home/src/<import-path>`. Place the third-party source under, for example,
+  `$go_home/src/github.com/golang/glog`, then either let `go` pick it up from
+  `GOPATH` or build it as its own `go_library` and depend on that target.
+
 ## Using Protobuf with Go
 
 Add a `proto_library` dependency to generate Go protobuf code:
