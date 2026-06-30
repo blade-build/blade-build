@@ -1,4 +1,4 @@
-# MkDocs config for the Chinese documentation site (readthedocs theme).
+# MkDocs config for the Chinese documentation site (Material theme).
 # Built and deployed to blade-build.github.io/docs/zh/ by .github/workflows.
 # Page titles come from each file's H1 (already in Chinese); only the section
 # headers below are spelled out.
@@ -15,19 +15,46 @@ hooks:
   - mkdocs_hooks.py
 
 theme:
-  name: readthedocs
-  highlightjs: true
+  name: material
   language: zh
-
-extra_css:
-  - css/extra.css
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: 切换到浅色模式
 
 markdown_extensions:
   - admonition
+  - tables
   - toc:
       permalink: true
-  - tables
-  - fenced_code
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
 
 nav:
   - README.md

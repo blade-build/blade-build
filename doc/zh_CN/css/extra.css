@@ -1,5 +1,0 @@
-/* Keep the last navigation entry (e.g. FAQ) clear of the sidebar's fixed
-   footer / version flyout, which otherwise overlaps it on shorter viewports. */
-.wy-menu-vertical {
-  padding-bottom: 4rem;
-}

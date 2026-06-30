@@ -1,4 +1,4 @@
-# MkDocs config for the English documentation site (readthedocs theme).
+# MkDocs config for the English documentation site (Material theme).
 # Built and deployed to blade-build.github.io/docs/en/ by .github/workflows.
 # Page titles are taken from each file's H1 (already localized); only the
 # section headers below are spelled out.
@@ -15,18 +15,46 @@ hooks:
   - mkdocs_hooks.py
 
 theme:
-  name: readthedocs
-  highlightjs: true
-
-extra_css:
-  - css/extra.css
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
 
 markdown_extensions:
   - admonition
+  - tables
   - toc:
       permalink: true
-  - tables
-  - fenced_code
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
 
 nav:
   - README.md
