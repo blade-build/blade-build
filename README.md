@@ -74,11 +74,15 @@ cc_binary(
 
 This way, when a library's implementation changes, or dependencies are added or removed, the library's users don't need to change anything in step. Blade automatically maintains this layer of indirect dependencies; when building `my_app`, it also automatically checks whether `foo` and `common` need to be updated.
 
-## Demo
+## User Interface
 
 Let's look at a real demo to get a feel for how concise and efficient Blade is:
 
 [![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
+
+Beyond the command line, Blade has an official [VS Code extension](https://marketplace.visualstudio.com/items?itemName=blade-build.vscode-blade) that brings the targets explorer, build/run/test/debug, and BUILD-file language features into the editor:
+
+[![Blade for VS Code](https://raw.githubusercontent.com/blade-build/vscode-blade/main/assets/demo.gif)](https://marketplace.visualstudio.com/items?itemName=blade-build.vscode-blade)
 
 ## Features
 

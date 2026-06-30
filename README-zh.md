@@ -74,11 +74,15 @@ cc_binary(
 
 这样一来，当库的实现发生变化、或新增、删除依赖时，库的使用方无需同步修改。Blade 会自动维护这层间接依赖；在构建 `my_app` 时，也会自动检查 `foo` 与 `common` 是否需要更新。
 
-## 演示
+## 用户界面
 
 我们看一个真实的演示来感受 Blade 的简洁和高效：
 
 [![asciicast](https://asciinema.org/a/1203812.svg)](https://asciinema.org/a/1203812)
+
+除了命令行，Blade 还提供官方 [VS Code 扩展](https://marketplace.visualstudio.com/items?itemName=blade-build.vscode-blade)，把目标浏览、构建/运行/测试/调试以及 BUILD 文件的语言特性带进编辑器：
+
+[![Blade for VS Code](https://raw.githubusercontent.com/blade-build/vscode-blade/main/assets/demo.gif)](https://marketplace.visualstudio.com/items?itemName=blade-build.vscode-blade)
 
 ## 特点
 
