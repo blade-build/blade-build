@@ -19,6 +19,9 @@ theme:
   highlightjs: true
   language: zh
 
+extra_css:
+  - css/extra.css
+
 markdown_extensions:
   - admonition
   - toc:
