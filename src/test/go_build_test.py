@@ -235,5 +235,40 @@ class TestCgo(GoBuildTestBase):
         self.assertEqual(out.stdout.strip(), 'hi-from-base')
 
 
+class TestGoUnconfigured(unittest.TestCase):
+    """A go target with `go` unconfigured must fail with a clear analyze-stage
+    message, not a cryptic `ninja: unknown build rule 'gobinary'`. Needs no go
+    toolchain -- it exercises exactly the unconfigured path."""
+
+    def setUp(self):
+        self.cur_dir = os.getcwd()
+        here = os.path.dirname(os.path.abspath(__file__))
+        self.blade = os.path.join(here, '..', '..', 'blade')
+        self.work = tempfile.mkdtemp(prefix='blade_go_noconf_')
+        self._write('BLADE_ROOT', "go_config(go='')\n")  # unconfigured
+        self._write('go.mod', 'module x\n\ngo 1.20\n')
+        self._write('app/main.go', 'package main\nfunc main() {}\n')
+        self._write('app/BUILD', "go_binary(name='app', srcs='main.go')\n")
+
+    def tearDown(self):
+        os.chdir(self.cur_dir)
+        shutil.rmtree(self.work, ignore_errors=True)
+
+    def _write(self, rel, text):
+        path = os.path.join(self.work, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(text)
+
+    def testClearErrorWhenGoUnconfigured(self):
+        os.chdir(self.work)
+        p = subprocess.run(
+            [self.blade, 'build', 'app:app'],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8')
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('Go toolchain is not configured', p.stdout)
+        self.assertNotIn('unknown build rule', p.stdout)  # not the cryptic one
+
+
 if __name__ == '__main__':
     unittest.main()

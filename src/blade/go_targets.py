@@ -99,6 +99,12 @@ class GoTarget(Target):
 
         self.attr['extra_goflags'] = extra_goflags
         self._add_tags('lang:go')
+        if not config.get_item('go_config', 'go'):
+            # Without this, generation still emits `gobinary`/etc. build edges
+            # while the rule provider (no `go`) emits no rules, and the failure
+            # surfaces only as a cryptic `ninja: unknown build rule 'gobinary'`.
+            self.error('Go toolchain is not configured; set '
+                       '`go_config(go="/path/to/go")` in BLADE_ROOT.')
         self._resolve_module()
 
     def _resolve_module(self):
