@@ -112,19 +112,22 @@ Blade 会扫描当前目录的 `.go` 文件：
 - 否则创建 `go_library`。
 - 如果有 `*_test.go` 文件，自动创建 `go_test`。
 
+生成的目标名基于 `name`：`go_binary` / `go_library` 使用 `name`，自动创建的测试名为
+`<name>_test`。
+
 ## 依赖
 
-go 目标的 `deps` 列出它所依赖的**其他 Blade 目标**——`go_library` 目标，以及生成
-Go 代码的 `proto_library` 目标。Blade 会先构建它们，并使其可被 import。
+go 目标的 `deps` 列出它构建时所需的**其他 Blade 目标**——其他 `go_library`，以及生成
+Go 代码的 `proto_library`。Blade 会先构建它们。
 
-如何引入**第三方包**（如 `github.com/...`）取决于 `go_config` 中配置的模式：
+在同一个模块内，通常**无需声明 Go→Go 的 `deps`**：`go build` 会从源码自身解析模块内的
+import。只有当依赖跨越 Blade 需要排序的语言 / 构建边界时才需要声明——例如
+`proto_library`（生成代码）或 `cc_library`（cgo）——或者你希望对它施加可见性 / 依赖
+治理时。
 
-- **Go modules**（`go_module_enabled = True`，推荐）：像平常一样在 `go.mod` 中声明
-  第三方包。Blade 会在模块目录（`go_module_relpath`）下调用 `go`，由 `go` 负责解析、
-  下载并构建这些依赖——你**无需**在 Blade 的 `deps` 中列出它们。
-- **GOPATH 模式**（默认）：包从 `$go_home/src/<导入路径>` 解析。把第三方源码放到
-  例如 `$go_home/src/github.com/golang/glog` 下，再让 `go` 从 `GOPATH` 中找到它，
-  或将其构建为独立的 `go_library` 并加以依赖。
+引入**第三方包**（如 `github.com/...`）按 Go 的常规方式：在 `go.mod`（多个本地模块时用
+`go.work`）中声明，由 Blade 交给 `go` 解析、下载并构建——你**无需**在 Blade `deps`
+中列出它们。
 
 ## 与 Protobuf 集成
 
