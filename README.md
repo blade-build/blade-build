@@ -137,7 +137,7 @@ See the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide for details.
 
 ## Releases
 
-The latest stable release is [`v3.0.0`](https://github.com/blade-build/blade-build/releases/tag/v3.0.0); the `master` branch is the active development line for Blade 3. See all [Releases](https://github.com/blade-build/blade-build/releases), and the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide.
+Get the [latest stable release](https://github.com/blade-build/blade-build/releases/latest); the `master` branch is the active development line for Blade 3. See all [releases](https://github.com/blade-build/blade-build/releases), and the [Upgrade to V3](doc/en/upgrade-to-v3.md) guide.
 
 For Blade 2, use the [`v2`](https://github.com/blade-build/blade-build/tree/v2) branch or the [v2.1.0 tag](https://github.com/blade-build/blade-build/releases/tag/v2.1.0); see the [V2 Upgrade Notes](doc/en/upgrade-to-v2.md).
 
