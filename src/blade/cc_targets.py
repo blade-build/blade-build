@@ -306,6 +306,90 @@ def _system_lib_link_flag(lib, is_msvc):
     return '-l%s' % lib
 
 
+def collect_static_link_deps(target, dep_keys):
+    """Collect static-link inputs by walking ``dep_keys`` (a list of target keys).
+
+    Factored out of ``CcTarget._static_dependencies`` so a non-cc consumer -- a
+    go target wiring cgo against ``cc_library`` deps -- reuses the *exact*
+    resolution (``#name`` syslibs, vcpkg system/required archives, the static
+    archive, whole-archive libs, ``.res`` files) instead of re-deriving it.
+
+    Returns ``(sys_libs, usr_libs, link_all_symbols_libs, incchk_deps)`` in the
+    dependency order of ``dep_keys``.
+    """
+    targets = target.blade.get_build_targets()
+    tc = target.blade.get_build_toolchain()
+    sys_libs, usr_libs, link_all_symbols_libs = [], [], []
+    incchk_deps = []
+    for key in dep_keys:
+        dep = targets[key]
+        if dep.path == '#':
+            sys_libs.append(getattr(dep, 'libpath', dep.name))
+            continue
+
+        # A vcpkg port also contributes the OS/SDK libraries its pkg-config
+        # marks private (issue #1322), plus the sibling archives it transitively
+        # requires; its own archive is still added below.
+        if dep.type == 'vcpkg_library':
+            sys_libs.extend(dep.system_libs())
+            usr_libs.extend(dep.required_archives())
+
+        lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
+        if lib:
+            if dep.attr.get('link_all_symbols'):
+                link_all_symbols_libs.append(lib)
+            else:
+                usr_libs.append(lib)
+            continue
+
+        # Windows .res files from windows_resources deps (CcInfo-like propagation)
+        res_files = dep.data.get('res_files', [])
+        if res_files:
+            usr_libs.extend(res_files)
+            continue
+
+        # No '.a' for a header-only library; take its inclusion-check stamp as an
+        # implicit dep so header generation still orders ahead of the consumer.
+        incchk_result = dep._get_target_file('incchk.result')
+        if incchk_result:
+            incchk_deps.append(incchk_result)
+
+    return sys_libs, usr_libs, link_all_symbols_libs, incchk_deps
+
+
+def collect_export_incs(target, dep_keys):
+    """Collect ``(regular_incs, system_incs)`` exported by ``dep_keys``.
+
+    Factored out of ``CcTarget._export_incs_list`` for the same reuse as
+    ``collect_static_link_deps`` -- a go target needs the cc deps' public header
+    dirs for ``CGO_CFLAGS``.
+    """
+    regular, system = [], []
+    for key in dep_keys:
+        if key[0] == '#':
+            continue
+        dep = target.target_database[key]
+        regular += dep.attr.get('export_incs', [])
+        system += dep.attr.get('system_export_incs', [])
+    return regular, system
+
+
+def whole_archive_link_flags(libs):
+    """Render ``libs`` so every symbol is linked (whole-archive), platform-aware.
+
+    Factored out of ``CcTarget._generate_link_all_symbols_link_flags``: Apple's
+    ld64 rejects GNU ``--whole-archive`` and wants ``-force_load`` per archive;
+    MSVC uses ``/WHOLEARCHIVE:``; GNU ld/gold/lld/mold take the group form.
+    """
+    if not libs:
+        return []
+    if sys.platform == 'darwin':
+        return ['-Wl,-force_load,' + lib for lib in libs]
+    if os.name == 'nt':
+        return ['/WHOLEARCHIVE:' + lib for lib in libs]
+    return ['-Wl,--whole-archive'] + libs + ['-Wl,--no-whole-archive']
+
+
 class CcTarget(Target):
     """
     This class is derived from Target and it is the base class
@@ -673,16 +757,8 @@ class CcTarget(Target):
         ``-isystem`` for those instead of ``-I``, so the dep's own header
         diagnostics don't propagate into the consumer's ``-Werror`` budget.
         """
-        regular, system = [], []
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
-        for dep in self.expanded_deps:
-            # system dep
-            if dep[0] == '#':
-                continue
-            target = self.target_database[dep]
-            regular += target.attr.get('export_incs', [])
-            system += target.attr.get('system_export_incs', [])
-        return regular, system
+        return collect_export_incs(self, self.expanded_deps)
 
     def _get_incs_list(self):
         """Get ``(regular_incs, system_incs)`` for ``-I`` / ``-isystem`` emission.
@@ -815,13 +891,7 @@ class CcTarget(Target):
         instead; leave all other platforms (Linux with GNU ld / gold / lld /
         mold, *BSD, etc.) on the original spelling.
         """
-        if not libs:
-            return []
-        if sys.platform == 'darwin':
-            return ['-Wl,-force_load,' + lib for lib in libs]
-        if os.name == 'nt':
-            return ['/WHOLEARCHIVE:' + lib for lib in libs]
-        return ['-Wl,--whole-archive'] + libs + ['-Wl,--no-whole-archive']
+        return whole_archive_link_flags(libs)
 
     def _dynamic_dependencies(self):
         """
@@ -874,49 +944,8 @@ class CcTarget(Target):
         User libraries consist of normal libraries and libraries which should
         be linked all symbols within them using whole-archive option of gnu linker.
         """
-        targets = self.blade.get_build_targets()
-        sys_libs, usr_libs, link_all_symbols_libs = [], [], []
-        incchk_deps = []
-        tc = self.blade.get_build_toolchain()
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
-        for key in self.expanded_deps:
-            dep = targets[key]
-            if dep.path == '#':
-                lib_name = getattr(dep, 'libpath', dep.name)
-                sys_libs.append(lib_name)
-                continue
-
-            # A vcpkg port also contributes the OS/SDK libraries its pkg-config
-            # marks private (issue #1322); resolved now, at generate time, when
-            # the install tree exists. Its own archive is still added below.
-            if dep.type == 'vcpkg_library':
-                sys_libs.extend(dep.system_libs())
-                # ... and the sibling vcpkg archives it transitively requires
-                # (protobuf -> absl/utf8_range). Appended after its own archive
-                # below; macOS ld64 re-scans archives so inter-abseil cycles
-                # resolve regardless of order.
-                usr_libs.extend(dep.required_archives())
-
-            lib = dep._get_target_file(tc.STATIC_LIB_LABEL)
-            if lib:
-                if dep.attr.get('link_all_symbols'):
-                    link_all_symbols_libs.append(lib)
-                else:
-                    usr_libs.append(lib)
-                continue
-
-            # Windows .res files from windows_resources deps (CcInfo-like propagation)
-            res_files = dep.data.get('res_files', [])
-            if res_files:
-                usr_libs.extend(res_files)
-                continue
-
-            # '.a' file is not generated for header only libraries, use this file as implicit dep.
-            incchk_result = dep._get_target_file('incchk.result')
-            if incchk_result:
-                incchk_deps.append(incchk_result)
-
-        return sys_libs, usr_libs, link_all_symbols_libs, incchk_deps
+        return collect_static_link_deps(self, self.expanded_deps)
 
     def _cc_compile_deps(self):
         """Return a stamp which depends on targets which generate header files."""

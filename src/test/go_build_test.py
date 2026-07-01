@@ -153,5 +153,87 @@ class TestSubdirModule(GoBuildTestBase):
         self.assertEqual(out.stdout.strip(), 'in-subdir-module')
 
 
+@unittest.skipUnless(shutil.which('go') and shutil.which('cc'),
+                     'go or cc toolchain not available')
+class TestCgo(GoBuildTestBase):
+    def testGoBinaryLinksCcLibrary(self):
+        # A go_binary with `import "C"` links a Blade cc_library: Blade feeds the
+        # library's include dir (CGO_CFLAGS) and static archive (CGO_LDFLAGS) to
+        # `go build`, and orders the archive ahead of the go link.
+        self._write('go.mod', 'module cgoapp\n\ngo 1.20\n')
+        self._write('greeter/greeter.h', textwrap.dedent('''\
+            #ifndef GREETER_H
+            #define GREETER_H
+            const char* greet(void);
+            #endif
+            '''))
+        self._write('greeter/greeter.c', textwrap.dedent('''\
+            #include "greeter/greeter.h"
+            const char* greet(void) { return "hi-from-cc"; }
+            '''))
+        self._write('greeter/BUILD',
+                    "cc_library(name='greeter', srcs=['greeter.c'], "
+                    "hdrs=['greeter.h'], visibility=['PUBLIC'])\n")
+        self._write('app/main.go', textwrap.dedent('''\
+            package main
+
+            /*
+            #include "greeter/greeter.h"
+            */
+            import "C"
+            import "fmt"
+
+            func main() { fmt.Println(C.GoString(C.greet())) }
+            '''))
+        self._write('app/BUILD',
+                    "go_binary(name='app', srcs='main.go', deps=['//greeter:greeter'])\n")
+        p = self._blade('build', 'app:app')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        binpath = self._built('app/app')
+        self.assertIsNotNone(binpath, 'cgo binary not built:\n%s' % p.stdout)
+        out = subprocess.run([binpath], stdout=subprocess.PIPE, encoding='utf-8')
+        self.assertEqual(out.stdout.strip(), 'hi-from-cc')
+
+    def testCgoCollectsTransitiveCcArchive(self):
+        # greeter -> base: the go binary must link *both* archives (rooted at the
+        # direct cc dep, walking its transitive closure), not just the direct one.
+        self._write('go.mod', 'module cgotrans\n\ngo 1.20\n')
+        self._write('base/base.h', 'const char* base_word(void);\n')
+        self._write('base/base.c',
+                    '#include "base/base.h"\n'
+                    'const char* base_word(void) { return "hi-from-base"; }\n')
+        self._write('base/BUILD',
+                    "cc_library(name='base', srcs=['base.c'], hdrs=['base.h'], "
+                    "visibility=['PUBLIC'])\n")
+        self._write('greeter/greeter.h', 'const char* greet(void);\n')
+        self._write('greeter/greeter.c',
+                    '#include "greeter/greeter.h"\n'
+                    '#include "base/base.h"\n'
+                    'const char* greet(void) { return base_word(); }\n')
+        self._write('greeter/BUILD',
+                    "cc_library(name='greeter', srcs=['greeter.c'], "
+                    "hdrs=['greeter.h'], deps=['//base:base'], visibility=['PUBLIC'])\n")
+        self._write('app/main.go', textwrap.dedent('''\
+            package main
+
+            /*
+            #include "greeter/greeter.h"
+            */
+            import "C"
+            import "fmt"
+
+            func main() { fmt.Println(C.GoString(C.greet())) }
+            '''))
+        self._write('app/BUILD',
+                    "go_binary(name='app', srcs='main.go', deps=['//greeter:greeter'])\n")
+        p = self._blade('build', 'app:app')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        binpath = self._built('app/app')
+        self.assertIsNotNone(binpath, 'cgo binary not built:\n%s' % p.stdout)
+        out = subprocess.run([binpath], stdout=subprocess.PIPE, encoding='utf-8')
+        # Resolves a symbol that lives in the *transitive* archive.
+        self.assertEqual(out.stdout.strip(), 'hi-from-base')
+
+
 if __name__ == '__main__':
     unittest.main()

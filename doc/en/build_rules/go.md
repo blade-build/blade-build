@@ -174,3 +174,50 @@ normally. Don't route external consumers through the overlay-generated Go.
 Requires the protoc-gen-go plugin — `proto_library_config(protoc_go_plugin=...)`
 in `BLADE_ROOT`. (`proto_library` also emits C++, so the C++ protobuf toolchain
 must be configured as usual.)
+
+## Using C/C++ with cgo
+
+A go target can call into a Blade `cc_library` through Go's
+[cgo](https://pkg.go.dev/cmd/cgo). List the `cc_library` in `deps` and use
+`import "C"` in the Go source:
+
+```python
+go_binary(
+    name = 'app',
+    srcs = ['main.go'],
+    deps = [
+        '//greeter:greeter',  # a cc_library
+    ],
+)
+```
+
+```go
+package main
+
+/*
+#include "greeter/greeter.h"
+*/
+import "C"
+import "fmt"
+
+func main() { fmt.Println(C.GoString(C.greet())) }
+```
+
+Blade wires the dependency into the cgo build: the cc_library's exported include
+dirs become `CGO_CFLAGS`, and its static archive plus its transitive libraries
+and system libs become `CGO_LDFLAGS` — so the C preamble's `#include` resolves
+and the linker finds the C symbols. The archive is built before the go link.
+
+Notes:
+
+- The C preamble sees the **workspace root** and the **build dir** on its include
+  path, so headers are included by their workspace-relative path (e.g.
+  `#include "greeter/greeter.h"`), matching how cc targets include headers.
+- cgo can only call the **C ABI**. A C++ `cc_library` must expose `extern "C"`
+  entry points; Blade adds the C++ runtime (`-lstdc++` / `-lc++`) to the link, so
+  a C++ archive links cleanly.
+- Only `cc_library` deps are linked. A `proto_library` dep contributes its **Go**
+  (§ Protobuf), never its C++ archive.
+- This is the only supported direction — a Go target *using* C/C++. The reverse (a
+  `cc_binary` embedding Go) is a non-goal: each Go archive carries a whole Go
+  runtime, and a process can't host two.

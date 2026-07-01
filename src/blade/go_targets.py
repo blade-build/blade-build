@@ -28,6 +28,7 @@ Each target is compiled in the context of its owning module -- the nearest
 
 import os
 import re
+import sys
 
 from blade import build_manager
 from blade import build_rules
@@ -41,6 +42,13 @@ from blade.util import to_unix_path, var_to_list, var_to_list_or_none
 
 
 _package_re = re.compile(r'^\s*package\s+(\w+)\s*$')
+
+# Direct deps of these types are C/C++ libraries a go target links via cgo. A
+# proto_library is deliberately absent: it also registers a C++ archive, but a
+# go target consumes its *Go* (through the overlay), never that archive.
+_CC_LIBRARY_TYPES = frozenset([
+    'cc_library', 'prebuilt_cc_library', 'foreign_cc_library', 'vcpkg_library',
+])
 
 
 def _find_module_dir(start):
@@ -174,6 +182,61 @@ class GoTarget(Target):
                 files += var_to_list(pb)
         return list(dict.fromkeys(files))  # de-dup, keep order
 
+    def _cgo(self):
+        """cgo wiring for `cc_library` deps: `(cgoenv, implicit_deps)`.
+
+        A go target's direct deps of a cc-library type become C/C++ dependencies
+        of its `import "C"` code. We surface them to `go build` via the cgo env:
+        `CGO_CFLAGS` = the deps' exported include dirs; `CGO_LDFLAGS` = their
+        static archives + transitive libs + `#`-syslibs (+ the C++ runtime, since
+        `go` links cgo through the C driver). Returns `('', [])` when there are
+        no such deps -- cgo stays at its default and nothing is injected.
+
+        Collection is **rooted at the direct cc-library deps** and walks their own
+        transitive closure -- not the go target's flat `expanded_deps`, which also
+        contains proto_library C++ archives the Go side never links (see
+        `_CC_LIBRARY_TYPES`).
+        """
+        # Local import: keep the cc<->go module load order unconstrained.
+        from blade.cc_targets import (
+            collect_static_link_deps, collect_export_incs,
+            whole_archive_link_flags, _system_lib_link_flag)
+
+        targets = self.blade.get_build_targets()
+        roots = [d for d in self.deps if targets[d].type in _CC_LIBRARY_TYPES]
+        if not roots:
+            return '', []
+        keys = []
+        for r in roots:
+            keys.append(r)
+            keys.extend(targets[r].expanded_deps or [])
+        keys = list(dict.fromkeys(keys))  # de-dup, keep dependency order
+
+        sys_libs, usr_libs, whole_libs, incchk = collect_static_link_deps(self, keys)
+        reg_incs, sys_incs = collect_export_incs(self, keys)
+        is_msvc = self.blade.get_build_toolchain().cc_is('msvc')
+
+        def _abs(p):
+            # `go -C <module_dir>` moves the cwd, so every path must be absolute.
+            return p if os.path.isabs(p) else '$$PWD/' + to_unix_path(p)
+
+        # Workspace root + build dir on the include path, mirroring how a cc
+        # compile resolves workspace-relative and generated headers.
+        cflags = ['-I$$PWD', '-I$$PWD/' + to_unix_path(self.build_dir)]
+        cflags += ['-I' + _abs(i) for i in reg_incs + sys_incs]
+        ldflags = [_abs(l) for l in usr_libs]
+        ldflags += whole_archive_link_flags([_abs(l) for l in whole_libs])
+        ldflags += [_system_lib_link_flag(l, is_msvc) for l in sys_libs]
+        if not is_msvc:
+            # cgo links through the C driver (cc, not c++); a C++ archive needs
+            # the C++ runtime spelled out. Harmless when the archive is pure C.
+            ldflags.append('-lc++' if sys.platform == 'darwin' else '-lstdc++')
+
+        cgoenv = 'CGO_ENABLED=1 CGO_CFLAGS="%s" CGO_LDFLAGS="%s" ' % (
+            ' '.join(cflags), ' '.join(ldflags))
+        implicit = [l for l in usr_libs + whole_libs if l] + incchk
+        return cgoenv, implicit
+
     def generate(self):
         output = self._target_file_path(self.name)
         implicit_deps = self._go_implicit_deps()
@@ -189,6 +252,10 @@ class GoTarget(Target):
             variables['goverlay'] = '-overlay $$PWD/%s' % to_unix_path(overlay)
         else:
             variables['goverlay'] = ''
+        # cgo: link cc_library deps into the go build via the CGO_* env.
+        cgoenv, cgo_deps = self._cgo()
+        variables['cgoenv'] = cgoenv
+        implicit_deps = implicit_deps + cgo_deps
         self.generate_build(self.attr['go_rule'], output,
                             implicit_deps=implicit_deps, variables=variables)
         label = self.attr.get('go_label')
@@ -322,17 +389,17 @@ def _generate_go_rules(ctx):
 
     ctx.emit_rule(NinjaRule(
         name='golibrary',
-        command=f'{goenv}{go} -C ${{module_dir}} build ${{goverlay}} ${{extra_goflags}} '
-                f'${{package}} && touch ${{out}}',
+        command=f'{goenv}${{cgoenv}}{go} -C ${{module_dir}} build ${{goverlay}} '
+                f'${{extra_goflags}} ${{package}} && touch ${{out}}',
         description='GO BUILD ${package}'))
     ctx.emit_rule(NinjaRule(
         name='gobinary',
-        command=f'{goenv}{go} -C ${{module_dir}} build ${{goverlay}} ${{extra_goflags}} '
-                f'-o $$PWD/${{out}} ${{gofiles}}',
+        command=f'{goenv}${{cgoenv}}{go} -C ${{module_dir}} build ${{goverlay}} '
+                f'${{extra_goflags}} -o $$PWD/${{out}} ${{gofiles}}',
         description='GO LINK ${out}'))
     ctx.emit_rule(NinjaRule(
         name='gotest',
-        command=f'{goenv}{go} -C ${{module_dir}} test -c{gocover} ${{goverlay}} '
+        command=f'{goenv}${{cgoenv}}{go} -C ${{module_dir}} test -c{gocover} ${{goverlay}} '
                 f'${{extra_goflags}} -o $$PWD/${{out}} ${{package}}',
         description='GO TEST ${package}'))
     # Writes the `go build -overlay` JSON that exposes build_dir-generated Go
