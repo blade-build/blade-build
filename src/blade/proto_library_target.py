@@ -23,7 +23,7 @@ from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.cc_targets import CcTarget  # lgtm[py/cyclic-import]
 from blade.ninja_rule import NinjaRule
-from blade.util import to_unix_path, var_to_list, var_to_list_or_none
+from blade.util import to_unix_path, var_to_list, var_to_list_or_none, which
 
 
 class ProtocPlugin:
@@ -472,22 +472,22 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         self._add_target_file('pylib', pylib)
 
     def _proto_go_rules(self):
-        go_home = config.get_item('go_config', 'go_home')
-        protobuf_go_path = config.get_item('proto_library_config', 'protobuf_go_path')
+        # Modules-only: generate `.pb.go` under `build_dir` (out of the source
+        # tree), at the .proto's source-relative path. A consuming go target
+        # sees it via a `go build -overlay` map that exposes it at its in-module
+        # location, so the source tree stays clean while `go build` resolves it.
+        # `option go_package` is mandatory and must be the .proto directory's
+        # in-module import path.
         generated_goes = []
         for src in self.srcs:
             path = self._source_file_path(src)
-            package = self._get_go_package_name(path)
-            if not package:
+            if not self._get_go_package_name(path):  # mandatory; errors if absent
                 continue
-            if not package.startswith(protobuf_go_path):
-                self.warning(f'go_package "{package}" is not starting with "{protobuf_go_path}" in {src}')
-            basename = os.path.basename(src)
-            output = os.path.join(go_home, 'src', package, '%s.pb.go' % basename[:-6])
+            output = os.path.join(self.build_dir, '%s.pb.go' % path[:-len('.proto')])
             self.generate_build('protogo', output, inputs=path,
-                                variables={'srcdir': to_unix_path(os.path.dirname(path))})
+                                variables={'goout': to_unix_path(self.build_dir)})
             generated_goes.append(output)
-        self._add_target_file('gopkg', generated_goes)
+        self._add_target_file('go_pb', generated_goes)
 
     def _proto_rules(self):
         """Generate ninja rules for other languages if needed."""
@@ -753,22 +753,22 @@ def _generate_proto_rules(ctx):
         description='PROTODESCRIPTORS ${in}'))
     protoc_go_plugin = proto_config['protoc_go_plugin']
     if protoc_go_plugin:
-        go_home = config.get_item('go_config', 'go_home')
-        if not go_home:
-            console.fatal('"go_config.go_home" is not configured')
-        # Modules-only: emit into the configured module-relative go path.
-        # (A full proto->Go rework -- generate in-tree, no GOPATH -- is tracked
-        # separately; see the Go modernization issue.)
-        outdir = proto_config['protobuf_go_path']
+        # protoc runs the `--plugin=` value directly and does NOT search PATH for
+        # a bare command name (only an absolute path works, or the implicit
+        # plugin when no --plugin is passed). Resolve a bare name to its full
+        # path so `protoc_go_plugin='protoc-gen-go'` works when it is on PATH.
+        if os.path.basename(protoc_go_plugin) == protoc_go_plugin:
+            protoc_go_plugin = which(protoc_go_plugin) or protoc_go_plugin
+        # Modules-only: `--go_out=${goout}` (the build dir) + `paths=source_relative`
+        # writes `.pb.go` under build_dir at the .proto's source-relative path. No
+        # GOPATH; no `-I=${srcdir}` (which would make source_relative resolve the
+        # output to the root instead of the .proto's directory).
         subplugins = proto_config['protoc_go_subplugins']
-        if subplugins:
-            go_out = 'plugins={}:{}'.format('+'.join(subplugins), outdir)
-        else:
-            go_out = outdir
+        go_out = ('plugins=%s:${goout}' % '+'.join(subplugins)) if subplugins else '${goout}'
         ctx.emit_rule(NinjaRule(
             name='protogo',
-            command='%s --proto_path=. %s -I=${srcdir} '
-                    '--plugin=protoc-gen-go=%s --go_out=%s ${in}' % (
+            command='%s --proto_path=. %s --plugin=protoc-gen-go=%s '
+                    '--go_out=%s --go_opt=paths=source_relative ${in}' % (
                         protoc, protobuf_incs, protoc_go_plugin, go_out),
             description='PROTOCGOLANG ${in}'))
 

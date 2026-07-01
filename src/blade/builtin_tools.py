@@ -18,6 +18,7 @@ lazily inside the functions that use them, each marked
 """
 
 
+import json
 import os
 import pickle
 import shutil
@@ -1755,8 +1756,33 @@ def generate_dwp(args):
     dwp_wrapper.run_dwp(output_file, dwo_files)
 
 
+def generate_go_overlay(args, out, build_dir):
+    """Write a `go build -overlay` JSON map for generated Go sources.
+
+    Each generated `.pb.go` lives under `build_dir` (out of the source tree);
+    the overlay maps its **virtual** in-module location (the same path with the
+    `build_dir` prefix stripped) to its **actual** `build_dir` path, so a
+    module-mode `go build`/`test`/`vet` resolves it as if it were checked in.
+    Absolute paths are used so the map is independent of `go -C`'s working dir.
+
+    args: the generated .pb.go files (build_dir-relative).
+    """
+    prefix = util.to_unix_path(build_dir).rstrip('/') + '/'
+    replace = {}
+    for actual in args:
+        rel = util.to_unix_path(actual)
+        if rel.startswith(prefix):
+            rel = rel[len(prefix):]
+        replace[os.path.abspath(rel)] = os.path.abspath(actual)
+    _declare_outputs(out)
+    with open(out, 'w', encoding='utf-8') as f:
+        json.dump({'Replace': replace}, f, indent=2)
+    return 0
+
+
 _BUILTIN_TOOLS = {
     'scm': generate_scm,
+    'go_overlay': generate_go_overlay,
     'package': generate_package,
     'javac_compile': generate_javac_compile,
     'proto_java_srcjar': generate_proto_java_srcjar,

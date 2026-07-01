@@ -37,7 +37,7 @@ from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.ninja_rule import NinjaRule
 from blade.target import Target
-from blade.util import var_to_list, var_to_list_or_none
+from blade.util import to_unix_path, var_to_list, var_to_list_or_none
 
 
 _package_re = re.compile(r'^\s*package\s+(\w+)\s*$')
@@ -158,11 +158,39 @@ class GoTarget(Target):
             'extra_goflags': self.attr['extra_goflags'],
         }
 
+    def _transitive_go_pb(self):
+        """All generated `.pb.go` files reachable through deps (build_dir paths).
+
+        `go build` compiles the whole import closure, so a binary/test needs the
+        overlay to cover proto-generated Go anywhere beneath it, not just direct
+        deps.
+        """
+        targets = self.blade.get_build_targets()
+        files = []
+        assert self.expanded_deps is not None, 'expanded_deps not expanded'
+        for key in self.expanded_deps:
+            pb = targets[key]._get_target_file('go_pb')
+            if pb:
+                files += var_to_list(pb)
+        return list(dict.fromkeys(files))  # de-dup, keep order
+
     def generate(self):
         output = self._target_file_path(self.name)
+        implicit_deps = self._go_implicit_deps()
+        variables = self._go_variables()
+        # Overlay for proto-generated Go (under build_dir): map each `.pb.go` to
+        # its in-module location so `go build` resolves it without an in-tree copy.
+        pb_files = self._transitive_go_pb()
+        if pb_files:
+            overlay = self._target_file_path(self.name + '.overlay.json')
+            self.generate_build('gooverlay', overlay, inputs=pb_files,
+                                variables={'build_dir': to_unix_path(self.build_dir)})
+            implicit_deps = implicit_deps + [overlay]
+            variables['goverlay'] = '-overlay $$PWD/%s' % to_unix_path(overlay)
+        else:
+            variables['goverlay'] = ''
         self.generate_build(self.attr['go_rule'], output,
-                            implicit_deps=self._go_implicit_deps(),
-                            variables=self._go_variables())
+                            implicit_deps=implicit_deps, variables=variables)
         label = self.attr.get('go_label')
         if label:
             self._add_target_file(label, output)
@@ -294,19 +322,25 @@ def _generate_go_rules(ctx):
 
     ctx.emit_rule(NinjaRule(
         name='golibrary',
-        command=f'{goenv}{go} -C ${{module_dir}} build ${{extra_goflags}} ${{package}} '
-                f'&& touch ${{out}}',
+        command=f'{goenv}{go} -C ${{module_dir}} build ${{goverlay}} ${{extra_goflags}} '
+                f'${{package}} && touch ${{out}}',
         description='GO BUILD ${package}'))
     ctx.emit_rule(NinjaRule(
         name='gobinary',
-        command=f'{goenv}{go} -C ${{module_dir}} build ${{extra_goflags}} '
+        command=f'{goenv}{go} -C ${{module_dir}} build ${{goverlay}} ${{extra_goflags}} '
                 f'-o $$PWD/${{out}} ${{gofiles}}',
         description='GO LINK ${out}'))
     ctx.emit_rule(NinjaRule(
         name='gotest',
-        command=f'{goenv}{go} -C ${{module_dir}} test -c{gocover} ${{extra_goflags}} '
-                f'-o $$PWD/${{out}} ${{package}}',
+        command=f'{goenv}{go} -C ${{module_dir}} test -c{gocover} ${{goverlay}} '
+                f'${{extra_goflags}} -o $$PWD/${{out}} ${{package}}',
         description='GO TEST ${package}'))
+    # Writes the `go build -overlay` JSON that exposes build_dir-generated Go
+    # (proto .pb.go) at its in-module location; see builtin_tools.go_overlay.
+    ctx.emit_rule(NinjaRule(
+        name='gooverlay',
+        command=ctx.builtin_command('go_overlay', '--out=${out} --build_dir=${build_dir} ${in}'),
+        description='GO OVERLAY ${out}'))
 
 
 rule_registry.register_rule_provider(

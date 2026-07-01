@@ -138,10 +138,10 @@ list them in Blade `deps`.
 
 ## Using Protobuf with Go
 
-Add a `proto_library` dependency to generate Go protobuf code:
+Depend on a `proto_library` to generate and import Go protobuf code:
 
 ```python
-go_library(
+go_binary(
     name = 'service',
     srcs = ['service.go'],
     deps = [
@@ -150,8 +150,27 @@ go_library(
 )
 ```
 
-The proto file must contain a `go_package` option:
+The `.proto` must set `option go_package` to its **in-module import path** — the
+import path of the `.proto`'s own directory within the Go module:
 
 ```protobuf
-option go_package = "github.com/example/myproto";
+option go_package = "example.com/mymodule/proto";
 ```
+
+Blade generates the `.pb.go` **into the build directory** — not the source tree —
+and builds consuming go targets with `go build -overlay`, which maps the generated
+file into its in-module location just for the build. The source tree stays clean:
+nothing to commit, and `blade build` regenerates the `.pb.go` when the `.proto`
+changes, ordered before the consuming go target.
+
+Because the generated file lives only in the build directory, it is visible **only
+to Blade's build**. A plain `go build`, `gopls`/IDEs, and external importers of your
+module do not see it — which is fine for Go that is internal to your Blade build.
+For a package you **publish** (imported outside your Blade build), generate the
+`.pb.go` yourself, check it in beside the `.proto`, and build it as an ordinary
+`go_library` — a real source file that tooling and external importers resolve
+normally. Don't route external consumers through the overlay-generated Go.
+
+Requires the protoc-gen-go plugin — `proto_library_config(protoc_go_plugin=...)`
+in `BLADE_ROOT`. (`proto_library` also emits C++, so the C++ protobuf toolchain
+must be configured as usual.)

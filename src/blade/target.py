@@ -793,7 +793,6 @@ class Target:
         for k, v in self.__targets.items():
             if k in exclude_labels:
                 continue
-            results.add(v)
             if isinstance(v, list):
                 results.update(v)
             else:

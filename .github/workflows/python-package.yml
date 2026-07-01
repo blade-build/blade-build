@@ -144,6 +144,13 @@ jobs:
       # ahead of the suite PRs keeps later commits focused.
       run: |
         sudo apt-get install -y flex bison protobuf-compiler libprotobuf-dev python3-protobuf
+    - name: Install protoc-gen-go
+      # //suites/go_proto generates Go from .proto (proto -> Go overlay). Put
+      # $(go env GOPATH)/bin on PATH so blade's bare `protoc_go_plugin` resolves.
+      # A no-op for the other suites; installed ahead of the go_proto suite PR.
+      run: |
+        go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
     - name: Run blade-test suites
       working-directory: blade-test
       run: |
