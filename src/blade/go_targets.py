@@ -5,15 +5,29 @@
 # Date:   July 12, 2016
 
 """
-Implement go_library, go_binary and go_test. In addition, provide
-a simple wrapper function go_package wrapping all sorts of go tar-
-gets totally.
+Implement go_library, go_binary and go_test, plus the go_package wrapper.
+
+Go modules only (GOPATH mode is not supported). Compilation is delegated to the
+`go` toolchain; Blade owns the dependency graph and ordering:
+
+  * go_binary   -- built from its declared srcs in **file mode**
+                   (`go build <srcs...>`), so a directory with multiple `main`
+                   files can be split into separate binaries.
+  * go_test     -- `go test -c` over its package directory.
+  * go_library  -- package-scoped **compile-check** (`go build <pkg>`); it has
+                   no linkable artifact (the Go build cache replaced the GOPATH
+                   archive), only a stamp file. It exists as a dependency-graph
+                   node (ordering / visibility) and an early per-package check;
+                   consumers take the stamp as an order-only dep and let `go`
+                   recompile the package (a build-cache hit).
+
+Each target is compiled in the context of its owning module -- the nearest
+`go.mod` at or above the target's directory -- via `go -C <module_dir>`.
 """
 
 
 import os
 import re
-import textwrap
 
 from blade import build_manager
 from blade import build_rules
@@ -23,17 +37,32 @@ from blade import rule_registry
 from blade.blade_types import StrOrListOpt
 from blade.ninja_rule import NinjaRule
 from blade.target import Target
-from blade.util import run_command, var_to_list, var_to_list_or_none
+from blade.util import var_to_list, var_to_list_or_none
 
 
 _package_re = re.compile(r'^\s*package\s+(\w+)\s*$')
 
 
-class GoTarget(Target):
-    """This class is the base of all go targets."""
+def _find_module_dir(start):
+    """Find the owning module directory: the nearest ancestor of `start`
+    (a workspace-relative dir, '' == workspace root) that contains a `go.mod`.
 
-    _go_os = None
-    _go_arch = None
+    Existence is checked relative to the current directory, which is the
+    workspace root during target analysis. Returns the workspace-relative module
+    directory ('' for the root module) or None if no `go.mod` is found.
+    """
+    cur = start
+    while True:
+        gomod = os.path.join(cur, 'go.mod') if cur else 'go.mod'
+        if os.path.exists(gomod):
+            return cur
+        if not cur:
+            return None
+        cur = os.path.dirname(cur)
+
+
+class GoTarget(Target):
+    """Base of all go targets."""
 
     def __init__(self,
                  name: str | None,
@@ -44,9 +73,6 @@ class GoTarget(Target):
                  visibility: StrOrListOpt,
                  tags: StrOrListOpt,
                  kwargs: dict[str, object]):
-        """Init the go target."""
-        # Normalize BUILD-file-friendly StrOrList unions to list[str] once,
-        # right at the top; Target.__init__ below sees layer-2 shapes.
         srcs = var_to_list(srcs)
         deps = var_to_list(deps)
         tags = var_to_list(tags)
@@ -63,224 +89,143 @@ class GoTarget(Target):
                 tags=tags,
                 kwargs=kwargs)
 
-        self._set_go_package()
-        self._init_go_environment()
         self.attr['extra_goflags'] = extra_goflags
         self._add_tags('lang:go')
+        self._resolve_module()
 
-    def _set_go_package(self):
-        """
-        Set the package path from the source path inside the workspace
-        specified by GOPATH. All the go sources of the same package
-        should be in the same directory.
+    def _resolve_module(self):
+        """Locate the owning Go module and compute module-relative paths.
+
+        Go sources of one package must share a directory; the module is the
+        nearest `go.mod` at or above it.
         """
         srcs = [self._source_file_path(s) for s in self.srcs]
         dirs = {os.path.dirname(s) for s in srcs}
         if len(dirs) != 1:
-            self.error('Go sources belonging to the same package should be in the same '
+            self.error('Go sources of the same target must be in the same '
                        'directory. Sources: %s' % ', '.join(self.srcs))
+            self._module_dir = '.'
+            self._pkg = '.'
             return
-        go_home = config.get_item('go_config', 'go_home')
-        go_module_enabled = config.get_item('go_config', 'go_module_enabled')
-        go_module_relpath = config.get_item('go_config', 'go_module_relpath')
-        if go_module_enabled and not go_module_relpath:
-            self.attr['go_package'] = os.path.join("./", self.path)
-        else:
-            self.attr['go_package'] = os.path.relpath(self.path, os.path.join(go_home, 'src'))
-
-    def _init_go_environment(self):
-        if GoTarget._go_os is None and GoTarget._go_arch is None:
-            go = config.get_item('go_config', 'go')
-            returncode, stdout, stderr = run_command([go, 'env'])
-            if returncode != 0:
-                self.error('Failed to initialize go environment: %s' % stderr)
-                return
-            for line in stdout.splitlines():
-                if line.startswith('GOOS='):
-                    GoTarget._go_os = line.replace('GOOS=', '').strip('"')
-                elif line.startswith('GOARCH='):
-                    GoTarget._go_arch = line.replace('GOARCH=', '').strip('"')
+        module_dir = _find_module_dir(self.path)
+        if module_dir is None:
+            self.error(
+                'No go.mod found at or above "%s". Blade builds Go in module '
+                'mode only; add a go.mod at the module root.' % (self.path or '.'))
+            module_dir = ''
+        # `-C` dir and paths back into the module, all workspace-relative
+        # (ninja/analysis run from the workspace root).
+        self._module_dir = module_dir or '.'
+        pkg_rel = os.path.relpath(self.path or '.', module_dir or '.')
+        self._pkg = '.' if pkg_rel == '.' else './' + pkg_rel
+        # module-relative source files, for file-mode `go build`
+        self._go_files = ' '.join(
+            os.path.relpath(s, module_dir or '.') for s in srcs)
+        # go.mod / go.sum as build inputs (workspace-relative)
+        self._module_files = []
+        for f in ('go.mod', 'go.sum'):
+            p = os.path.join(module_dir, f) if module_dir else f
+            if os.path.exists(p):
+                self._module_files.append(p)
 
     def _expand_deps_generation(self):
         build_targets = self.blade.get_build_targets()
         assert self.expanded_deps is not None, 'expanded_deps not expanded'
         for dep in self.expanded_deps:
-            d = build_targets[dep]
-            d.attr['generate_go'] = True
+            build_targets[dep].attr['generate_go'] = True
 
-    def _go_dependencies(self):
+    def _go_implicit_deps(self):
+        """Ninja implicit deps: own srcs, module files, and dep outputs.
+
+        Depending on a dep's output (a go_library stamp, or a proto_library's
+        generated `.pb.go` files) gives both ordering and stamp-chain
+        incrementality without declaring Go->Go imports by hand.
+        """
         targets = self.blade.get_build_targets()
-        srcs = [self._source_file_path(s) for s in self.srcs]
-        implicit_deps = []
+        deps = list(self._module_files)
+        deps += [self._source_file_path(s) for s in self.srcs]
         for key in self.deps:
             path = targets[key]._get_target_file('gopkg')
             if path:
-                # There are two cases for go package(gopkg)
-                #
-                #   - gopkg produced by another go_library,
-                #     the target file here is a path to the
-                #     generated lib
-                #
-                #   - gopkg produced by a proto_library, the
-                #     target file is a list of pb.go files
-                implicit_deps += var_to_list(path)
-        return srcs + implicit_deps
+                deps += var_to_list(path)
+        return deps
 
-    def _go_target_path(self):
-        """Return the full path of generate target file"""
-        return self._target_file_path(self.name)
+    def _go_variables(self):
+        return {
+            'module_dir': self._module_dir,
+            'package': self._pkg,
+            'gofiles': self._go_files,
+            'extra_goflags': self.attr['extra_goflags'],
+        }
 
     def generate(self):
-        implicit_deps = self._go_dependencies()
-        output = self._go_target_path()
-        variables = {'package': self.attr['go_package']}
-        if self.attr['extra_goflags']:
-            variables['extra_goflags'] = self.attr['extra_goflags']
+        output = self._target_file_path(self.name)
         self.generate_build(self.attr['go_rule'], output,
-                            implicit_deps=implicit_deps,
-                            variables=variables)
+                            implicit_deps=self._go_implicit_deps(),
+                            variables=self._go_variables())
         label = self.attr.get('go_label')
         if label:
             self._add_target_file(label, output)
 
 
 class GoLibrary(GoTarget):
-    """GoLibrary generates build rules for a go package."""
+    """A Go package built as a compile-check (no artifact, just a stamp)."""
 
-    def __init__(self,
-                 name: str | None,
-                 srcs: StrOrListOpt,
-                 deps: StrOrListOpt,
-                 visibility: StrOrListOpt,
-                 tags: StrOrListOpt,
-                 extra_goflags: StrOrListOpt,
-                 kwargs: dict[str, object]):
+    def __init__(self, name, srcs, deps, visibility, tags, extra_goflags, kwargs):
         super().__init__(
-                name=name,
-                type='go_library',
-                srcs=srcs,
-                deps=deps,
-                visibility=visibility,
-                tags=tags,
-                extra_goflags=extra_goflags,
+                name=name, type='go_library', srcs=srcs, deps=deps,
+                visibility=visibility, tags=tags, extra_goflags=extra_goflags,
                 kwargs=kwargs)
-        self.attr['go_rule'] = 'gopackage'
+        self.attr['go_rule'] = 'golibrary'
         self.attr['go_label'] = 'gopkg'
         self._add_tags('type:library')
 
-    def _go_target_path(self):  # Override
-        """Return package object path according to the standard go directory layout."""
-        go_home = config.get_item('go_config', 'go_home')
-        return os.path.join(go_home, 'pkg',
-                            f'{GoTarget._go_os}_{GoTarget._go_arch}',
-                            '%s.a' % self.attr['go_package'])
-
 
 class GoBinary(GoTarget):
-    """GoBinary generates build rules for a go command executable."""
+    """A Go executable, built from its srcs in file mode."""
 
-    def __init__(self,
-                 name: str | None,
-                 srcs: StrOrListOpt,
-                 deps: StrOrListOpt,
-                 visibility: StrOrListOpt,
-                 tags: StrOrListOpt,
-                 extra_goflags: StrOrListOpt,
-                 kwargs: dict[str, object]):
+    def __init__(self, name, srcs, deps, visibility, tags, extra_goflags, kwargs):
         super().__init__(
-                name=name,
-                type='go_binary',
-                srcs=srcs,
-                deps=deps,
-                visibility=visibility,
-                tags=tags,
-                extra_goflags=extra_goflags,
+                name=name, type='go_binary', srcs=srcs, deps=deps,
+                visibility=visibility, tags=tags, extra_goflags=extra_goflags,
                 kwargs=kwargs)
-        self.attr['go_rule'] = 'gocommand'
+        self.attr['go_rule'] = 'gobinary'
         self.attr['go_label'] = 'bin'
         self._add_tags('type:binary')
 
 
 class GoTest(GoTarget):
-    """GoTest generates build rules for a go test binary."""
+    """A Go test binary, built with `go test -c` over its package."""
 
-    def __init__(self,
-                 name: str | None,
-                 srcs: StrOrListOpt,
-                 deps: StrOrListOpt,
-                 visibility: StrOrListOpt,
-                 tags: StrOrListOpt,
-                 testdata: StrOrListOpt,
-                 extra_goflags: StrOrListOpt,
-                 kwargs: dict[str, object]):
+    def __init__(self, name, srcs, deps, visibility, tags, testdata, extra_goflags, kwargs):
         super().__init__(
-                name=name,
-                type='go_test',
-                srcs=srcs,
-                deps=deps,
-                visibility=visibility,
-                tags=tags,
-                extra_goflags=extra_goflags,
+                name=name, type='go_test', srcs=srcs, deps=deps,
+                visibility=visibility, tags=tags, extra_goflags=extra_goflags,
                 kwargs=kwargs)
         self.attr['go_rule'] = 'gotest'
         self.attr['testdata'] = var_to_list(testdata)
         self._add_tags('type:test')
 
 
-def go_library(
-        name: str,
-        srcs: StrOrListOpt,
-        deps: StrOrListOpt = None,
-        extra_goflags: StrOrListOpt = None,
-        visibility: StrOrListOpt = None,
-        tags: StrOrListOpt = None,
-        **kwargs: object):
+def go_library(name, srcs, deps=None, extra_goflags=None, visibility=None,
+               tags=None, **kwargs):
     build_manager.instance.register_target(GoLibrary(
-        name=name,
-        srcs=srcs,
-        deps=deps,
-        visibility=visibility,
-        tags=tags,
-        extra_goflags=extra_goflags,
-        kwargs=kwargs))
+        name=name, srcs=srcs, deps=deps, visibility=visibility, tags=tags,
+        extra_goflags=extra_goflags, kwargs=kwargs))
 
 
-def go_binary(
-        name: str,
-        srcs: StrOrListOpt,
-        deps: StrOrListOpt = None,
-        visibility: StrOrListOpt = None,
-        tags: StrOrListOpt = None,
-        extra_goflags: StrOrListOpt = None,
-        **kwargs: object):
+def go_binary(name, srcs, deps=None, visibility=None, tags=None,
+              extra_goflags=None, **kwargs):
     build_manager.instance.register_target(GoBinary(
-            name=name,
-            srcs=srcs,
-            deps=deps,
-            extra_goflags=extra_goflags,
-            visibility=visibility,
-            tags=tags,
-            kwargs=kwargs))
+        name=name, srcs=srcs, deps=deps, extra_goflags=extra_goflags,
+        visibility=visibility, tags=tags, kwargs=kwargs))
 
 
-def go_test(
-        name: str,
-        srcs: StrOrListOpt,
-        deps: StrOrListOpt = None,
-        visibility: StrOrListOpt = None,
-        tags: StrOrListOpt = None,
-        testdata: StrOrListOpt = None,
-        extra_goflags: StrOrListOpt = None,
-        **kwargs: object):
+def go_test(name, srcs, deps=None, visibility=None, tags=None, testdata=None,
+            extra_goflags=None, **kwargs):
     build_manager.instance.register_target(GoTest(
-            name=name,
-            srcs=srcs,
-            deps=deps,
-            visibility=visibility,
-            tags=tags,
-            testdata=testdata,
-            extra_goflags=extra_goflags,
-            kwargs=kwargs))
+        name=name, srcs=srcs, deps=deps, visibility=visibility, tags=tags,
+        testdata=testdata, extra_goflags=extra_goflags, kwargs=kwargs))
 
 
 def find_go_srcs(path):
@@ -305,24 +250,15 @@ def extract_go_package(path):
     raise Exception('Failed to find package in %s' % path)
 
 
-def go_package(
-        name,
-        deps=None,
-        testdata=None,
-        visibility=None,
-        extra_goflags=None):
+def go_package(name, deps=None, testdata=None, visibility=None, extra_goflags=None):
     path = build_manager.instance.get_current_source_path()
     srcs, tests = find_go_srcs(path)
     if not srcs and not tests:
         console.error('Empty go sources in %s' % path)
         return
     if srcs:
-        main = False
-        for src in srcs:
-            package = extract_go_package(os.path.join(path, src))
-            if package == 'main':
-                main = True
-                break
+        main = any(extract_go_package(os.path.join(path, src)) == 'main'
+                   for src in srcs)
         if main:
             go_binary(name=name, srcs=srcs, deps=deps, visibility=visibility,
                       extra_goflags=extra_goflags)
@@ -330,11 +266,8 @@ def go_package(
             go_library(name=name, srcs=srcs, deps=deps, visibility=visibility,
                        extra_goflags=extra_goflags)
     if tests:
-        go_test(name='%s_test' % name,
-                srcs=tests,
-                deps=deps,
-                visibility=visibility,
-                testdata=testdata,
+        go_test(name='%s_test' % name, srcs=tests, deps=deps,
+                visibility=visibility, testdata=testdata,
                 extra_goflags=extra_goflags)
 
 
@@ -345,51 +278,35 @@ build_rules.register_function(go_package)
 
 
 def _generate_go_rules(ctx):
-    """Ninja rules for go_library / go_binary / go_test.
+    """Ninja rules for go_library / go_binary / go_test (modules only).
 
-    No-op unless go is configured (go_home + go), matching the original
-    behaviour of emitting nothing when there is no go toolchain.
+    No-op unless `go` is configured. Each rule compiles in the target's module
+    via `go -C ${module_dir}`; outputs are written with an absolute path
+    (`$PWD/${out}`) since `-C` also reinterprets `-o`. No serialization pool --
+    the Go build cache is concurrency-safe.
     """
-    go_home = config.get_item('go_config', 'go_home')
     go = config.get_item('go_config', 'go')
-    go_module_enabled = config.get_item('go_config', 'go_module_enabled')
-    go_module_relpath = config.get_item('go_config', 'go_module_relpath')
-    if not (go_home and go):
+    if not go:
         return
-    go_pool = 'golang_pool'
-    ctx.add_line(textwrap.dedent('''\
-            pool %s
-              depth = 1
-            ''') % go_pool)
-    go_path = os.path.normpath(os.path.abspath(go_home))
-    out_relative = ""
-    if go_module_enabled:
-        prefix = go
-        if go_module_relpath:
-            relative_prefix = os.path.relpath(prefix, go_module_relpath)
-            prefix = f"cd {go_module_relpath} && {relative_prefix}"
-            # add slash to the end of the relpath
-            out_relative = os.path.join(os.path.relpath("./", go_module_relpath), "")
-    else:
-        prefix = f'GOPATH={go_path} {go}'
+    go_home = config.get_item('go_config', 'go_home')
+    goenv = 'GOPATH=%s ' % os.path.abspath(go_home) if go_home else ''
+    gocover = ' -cover -covermode=count' if getattr(ctx.options, 'coverage', False) else ''
+
     ctx.emit_rule(NinjaRule(
-        name='gopackage',
-        command='%s install ${extra_goflags} ${package}' % prefix,
-        description='GO INSTALL ${package}',
-        pool=go_pool))
+        name='golibrary',
+        command=f'{goenv}{go} -C ${{module_dir}} build ${{extra_goflags}} ${{package}} '
+                f'&& touch ${{out}}',
+        description='GO BUILD ${package}'))
     ctx.emit_rule(NinjaRule(
-        name='gocommand',
-        command=f'{prefix} build -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
-        description='GO BUILD ${package}',
-        pool=go_pool))
-    # Under --coverage, build the test binary with coverage instrumentation;
-    # the test runner then passes -test.coverprofile to collect a profile.
-    gotest_cover = ' -cover -covermode=count' if getattr(ctx.options, 'coverage', False) else ''
+        name='gobinary',
+        command=f'{goenv}{go} -C ${{module_dir}} build ${{extra_goflags}} '
+                f'-o $$PWD/${{out}} ${{gofiles}}',
+        description='GO LINK ${out}'))
     ctx.emit_rule(NinjaRule(
         name='gotest',
-        command=f'{prefix} test -c{gotest_cover} -o {out_relative}${{out}} ${{extra_goflags}} ${{package}}',
-        description='GO TEST ${package}',
-        pool=go_pool))
+        command=f'{goenv}{go} -C ${{module_dir}} test -c{gocover} ${{extra_goflags}} '
+                f'-o $$PWD/${{out}} ${{package}}',
+        description='GO TEST ${package}'))
 
 
 rule_registry.register_rule_provider(

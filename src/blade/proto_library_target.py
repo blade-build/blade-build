@@ -754,14 +754,12 @@ def _generate_proto_rules(ctx):
     protoc_go_plugin = proto_config['protoc_go_plugin']
     if protoc_go_plugin:
         go_home = config.get_item('go_config', 'go_home')
-        go_module_enabled = config.get_item('go_config', 'go_module_enabled')
-        go_module_relpath = config.get_item('go_config', 'go_module_relpath')
         if not go_home:
             console.fatal('"go_config.go_home" is not configured')
-        if go_module_enabled and not go_module_relpath:
-            outdir = proto_config['protobuf_go_path']
-        else:
-            outdir = os.path.join(go_home, 'src')
+        # Modules-only: emit into the configured module-relative go path.
+        # (A full proto->Go rework -- generate in-tree, no GOPATH -- is tracked
+        # separately; see the Go modernization issue.)
+        outdir = proto_config['protobuf_go_path']
         subplugins = proto_config['protoc_go_subplugins']
         if subplugins:
             go_out = 'plugins={}:{}'.format('+'.join(subplugins), outdir)

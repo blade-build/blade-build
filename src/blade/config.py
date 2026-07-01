@@ -317,11 +317,10 @@ _CONFIG_TEMPLATE = {
     'go_config': {
         '__help__': 'Golang Configuration',
         'go': '',
-        'go_home': os.path.expandvars('$HOME/go'),  # GOPATH
-        # enable go module for explicit use
-        'go_module_enabled': os.environ.get("GO111MODULE") == "on",
-        # onetree repository go module doesn't work in repository root
-        'go_module_relpath': os.environ.get("go_module_relpath"),
+        # GOPATH -- the Go module/build cache location. Blade builds Go in
+        # module mode only (a go.mod at the module root); this is not a source
+        # root. Leave empty to use the go toolchain's default GOPATH.
+        'go_home': os.path.expandvars('$HOME/go'),
     },
 
     'proto_library_config': {

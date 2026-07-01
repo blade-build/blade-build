@@ -8,20 +8,15 @@ Blade 通过 `go_library`、`go_binary`、`go_test` 构建 Go 程序，另外提
 
 ```python
 go_config(
-    go = '/usr/local/go/bin/go',
-    go_home = '/usr/local/go',
+    go = '/usr/local/go/bin/go',   # 必填
+    go_home = '/usr/local/go',     # GOPATH / 构建缓存；可选（留空则用 go 默认值）
 )
 ```
 
-如果启用了 Go modules，设置 `go_module_enabled = True`：
-
-```python
-go_config(
-    go_home = '/usr/local/go',
-    go_module_enabled = True,
-    go_module_relpath = '',
-)
-```
+Blade 只支持 **module 模式**：每个目标的包必须位于某个 `go.mod` 之下（其上层最近的
+`go.mod` 即为该目标所属模块），不再支持 GOPATH 模式。一个工作区可以包含多个模块；
+若模块间存在本地互相 import，请使用 [`go.work`](https://go.dev/ref/mod#workspaces)
+或 `replace` 指令，由 `go` 负责解析。
 
 ## go_library
 
@@ -48,7 +43,10 @@ go_library(
 - `visibility`：可见性控制。
 - `tags`：构建标记。
 
-输出：`.a` 归档文件，位于 `$go_home/pkg/$GOOS_$GOARCH/`。
+`go_library` **没有可链接的产物**（Go 的构建缓存取代了 GOPATH 归档）。构建它会对该
+包做一次编译检查（`go build`）并生成一个 stamp；使用方依赖它以获得构建顺序与可见性
+约束，实际编译仍交给 `go`。`go_library` 是**可选**的——纯 Go、且不跨语言依赖的包无需
+Blade 目标，因为使用它的 `go_binary`/`go_test` 在 `go build` 时会自动带上它。
 
 ## go_binary
 
@@ -67,6 +65,10 @@ go_binary(
 ```
 
 参数与 `go_library` 相同。
+
+`go_binary` 以 **文件模式**（`go build <srcs...>`）从其 `srcs` 构建，而非按整个包构建。
+因此，一个目录下若有多个 `main` 文件，可以拆分为各自独立的 `go_binary` 目标——每个程序
+一个。
 
 ## go_test
 

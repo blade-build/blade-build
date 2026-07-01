@@ -71,8 +71,8 @@ _LANG_BLOCKS = {
 ''',
     'go': '''\
 # go_config(
-#     # go = 'go',                # the go command
-#     go_module_enabled = True,
+#     go = 'go',                  # the go command (required for go targets)
+#     # go_home = '',             # GOPATH / build cache; empty = go default
 # )
 ''',
     'python': '''\

@@ -9,20 +9,16 @@ Before using go targets, configure the Go toolchain in `BLADE_ROOT`:
 
 ```python
 go_config(
-    go = '/usr/local/go/bin/go',
-    go_home = '/usr/local/go',
+    go = '/usr/local/go/bin/go',   # required
+    go_home = '/usr/local/go',     # GOPATH / build cache; optional (empty = go default)
 )
 ```
 
-When Go modules are enabled, set `go_module_enabled = True`:
-
-```python
-go_config(
-    go_home = '/usr/local/go',
-    go_module_enabled = True,
-    go_module_relpath = '',
-)
-```
+Blade builds Go in **module mode only**: each target's package must sit under a
+`go.mod` (the nearest one at or above the target's directory is its module).
+GOPATH-mode projects are not supported. A workspace may contain multiple modules;
+for local cross-module imports use a [`go.work`](https://go.dev/ref/mod#workspaces)
+file or `replace` directives, which `go` resolves.
 
 ## go_library
 
@@ -49,7 +45,12 @@ Attributes:
 - `visibility`: Visibility specification.
 - `tags`: Build tags.
 
-Output: a `.a` archive file placed under `$go_home/pkg/$GOOS_$GOARCH/`.
+A `go_library` has **no linkable artifact** (the Go build cache replaced the
+GOPATH archive). Building one compile-checks the package (`go build`) and emits a
+stamp; consumers depend on it for ordering and visibility and let `go` recompile
+the package. A `go_library` is optional — a pure-Go package with no cross-language
+dependency needs no Blade target, since `go build` of a consuming `go_binary`/
+`go_test` pulls it in.
 
 ## go_binary
 
@@ -68,6 +69,10 @@ go_binary(
 ```
 
 Attributes are the same as `go_library`.
+
+A `go_binary` is built from its `srcs` in **file mode** (`go build <srcs...>`), not
+by whole package. This means a single directory holding several `main` files can
+be split into separate `go_binary` targets — one per program.
 
 ## go_test
 

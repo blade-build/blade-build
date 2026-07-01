@@ -43,7 +43,7 @@ class TestGoCoverage(unittest.TestCase):
     def testGoCoverageReport(self):
         go = shutil.which('go')
         self._write('BLADE_ROOT',
-                    "go_config(go='%s', go_home='%s', go_module_enabled=True)\n"
+                    "go_config(go='%s', go_home='%s')\n"
                     % (go, os.path.join(self.work, 'gopath')))
         self._write('go.mod', 'module calc\n\ngo 1.20\n')
         self._write('calc/calc.go', textwrap.dedent('''\
