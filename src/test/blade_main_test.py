@@ -45,48 +45,78 @@ from cc_coverage_test import TestCcCoverage
 from go_coverage_test import TestGoCoverage
 from py_coverage_test import TestPyCoverage
 from sanitizer_test import TestSanitizerAsan, TestSanitizerUbsan, TestSanitizerTsan
+# Previously omitted from the suite (they only ran when invoked by hand); wired
+# in below. A guard test (tests/unit/integration_suite_coverage_test.py) now
+# fails if any src/test/*_test.py class is left out.
+from go_build_test import (
+    TestGoBinary,
+    TestGoLibrary,
+    TestSubdirModule,
+    TestCgo,
+    TestGoUnconfigured,
+)
+from guard_suppression_test import TestGuardSuppression
+from header_only_incstk_test import TestHeaderOnlyIncstk
+from tags_test import TagsTest
 
 from html_test_runner import HTMLTestRunner
 from test_target_test import TestTestRunner
 
 
+# Every integration TestCase CI runs. Keep this exhaustive: the guard test
+# tests/unit/integration_suite_coverage_test.py fails if any src/test/*_test.py
+# class with `test*` methods is missing here, so a new test can't be silently
+# dropped from CI (the bug this list caused before).
+TEST_CASES = [
+    TargetPatternTest,
+    TestCcLibrary,
+    TestCcBinary,
+    TestCcPlugin,
+    TestCcTest,
+    DeclareHdrsVirtualPathTest,
+    EffectiveTimeoutTest,
+    ExportIncsListTest,
+    GetCcFlagsTest,
+    GetIncsListTest,
+    GetenvTest,
+    TestDump,
+    TestExtension,
+    TestGenRule,
+    TestHdrDepCheck,
+    TestJava,
+    TestLexYacc,
+    TestProtoLibrary,
+    TestResourceLibrary,
+    TestQuery,
+    TestTestRunner,
+    TestPrebuildCcLibrary,
+    LinkerScriptsTest,
+    BuildFromSubdirTest,
+    RootCommandTest,
+    TestDeprecatedDep,
+    TestCcCoverage,
+    TestGoCoverage,
+    TestPyCoverage,
+    TestSanitizerAsan,
+    TestSanitizerUbsan,
+    TestSanitizerTsan,
+    # Newly wired in (were silently omitted from the suite):
+    TestGoBinary,
+    TestGoLibrary,
+    TestSubdirModule,
+    TestCgo,
+    TestGoUnconfigured,
+    TestGuardSuppression,
+    TestHeaderOnlyIncstk,
+    TagsTest,
+]
+
+
 def _main():
     """main method."""
     suite_test = unittest.TestSuite()
-    suite_test.addTests([
-        unittest.defaultTestLoader.loadTestsFromTestCase(TargetPatternTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestCcLibrary),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestCcBinary),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestCcPlugin),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestCcTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(DeclareHdrsVirtualPathTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(EffectiveTimeoutTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(ExportIncsListTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(GetCcFlagsTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(GetIncsListTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(GetenvTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestDump),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestExtension),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestGenRule),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestHdrDepCheck),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestJava),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestLexYacc),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestProtoLibrary),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestResourceLibrary),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestQuery),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestTestRunner),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestPrebuildCcLibrary),
-        unittest.defaultTestLoader.loadTestsFromTestCase(LinkerScriptsTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(BuildFromSubdirTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(RootCommandTest),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestDeprecatedDep),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestCcCoverage),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestGoCoverage),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestPyCoverage),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestSanitizerAsan),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestSanitizerUbsan),
-        unittest.defaultTestLoader.loadTestsFromTestCase(TestSanitizerTsan),
-        ])
+    suite_test.addTests(
+        unittest.defaultTestLoader.loadTestsFromTestCase(tc) for tc in TEST_CASES)
 
     generate_html = len(sys.argv) > 1 and sys.argv[1].startswith('html')
     if generate_html:
