@@ -26,6 +26,7 @@ from blade import console
 from blade import dsl_api  # lgtm[py/cyclic-import]
 from blade import restricted
 from blade import target_tags
+from blade import util
 
 from pathlib import Path
 from blade.util import path_under_dir, var_to_list, exec_file, source_location
@@ -96,6 +97,19 @@ def enable_if(cond, true_value, false_value=None):
     if ret is None:
         ret = []
     return ret
+
+
+def fail(*args, sep=' '):
+    """Abort the current BUILD/extension with a fatal, source-located error.
+
+    The Starlark-compatible way to signal a hard error from the DSL (Starlark has
+    no `assert` / `raise` / exceptions): `fail('message')`. Positional args are
+    joined by `sep`, matching Starlark's `fail`. Raising SystemExit routes through
+    the loader's clean `except SystemExit` path (no Python traceback).
+    """
+    message = sep.join(str(a) for a in args)
+    console.diagnose(util.calling_source_location(1), 'error', message)
+    raise SystemExit(1)
 
 
 def _current_source_location():
@@ -342,6 +356,7 @@ def load(name, *symbols, **aliases):
 
 
 build_rules.register_function(enable_if)
+build_rules.register_function(fail)
 build_rules.register_function(glob)
 build_rules.register_function(include)
 build_rules.register_function(load)
