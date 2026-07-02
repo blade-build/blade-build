@@ -57,6 +57,13 @@ whole suite). On CI, integration is one of the longer-running jobs in
 (invoked as `../../../blade`), so a change in `src/blade/...` is
 exercised the same run.
 
+The suite `runall.sh` runs is built from the explicit `TEST_CASES` list
+in `blade_main_test.py`, so a new integration test class must be added
+there to run in CI. `tests/unit/integration_suite_coverage_test.py`
+guards this: it fails if any `src/test/*_test.py` class that defines a
+`test*` method is missing from `TEST_CASES`, so a test can no longer be
+silently dropped from CI.
+
 ## 3. Smoke tests
 
 Two distinct things both go by "smoke":

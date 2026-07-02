@@ -30,7 +30,7 @@ src/
 ├── tests/
 │   ├── unit/           # Unit tests (pytest, fast, offline)
 │   └── (integration)   # See src/test/
-└── test/               # Integration / end-to-end tests (pytest, require toolchain)
+└── test/               # Integration / end-to-end tests (runall.sh / blade_main_test.py, require toolchain)
 ```
 
 **Rule-target modules** (`*_targets.py`) each define one or more build rule types:
@@ -75,7 +75,7 @@ Each target generates backend actions (Ninja rules) which are written to a backe
 
 ### Executing the Backend Build
 
-Blade invokes the backend build tool (Ninja) to perform the actual build, then removes the generated build file.
+Blade invokes the backend build tool (Ninja) to perform the actual build. The generated build file (e.g. `build.ninja`) is kept in the build directory for incremental builds and debugging; only `blade clean` removes it.
 
 ### Running Tests
 
@@ -137,7 +137,7 @@ pyright
 1. **Create a target class** in a new or existing `*_targets.py` module. Inherit from `Target` (or a suitable subclass) and implement `generate()`.
 2. **Define the rule-entry function** (e.g., `windows_resources()`) — this function normalizes BUILD-file-friendly types (`StrOrListOpt`) into `list[str]` via `var_to_list` / `var_to_list_or_none`, creates the target instance, and registers it via `build_manager.instance.register_target()`.
 3. **Expose it in the DSL** by adding the function to `blade/__init__.py` and [dsl_api.py](../../src/blade/dsl_api.py).
-4. **Add integration test data** under `src/test/testdata/<rule_name>/` with a `BUILD` file and source fixtures, then add a test class in `src/test/<rule_name>_test.py`.
+4. **Add integration test data** under `src/test/testdata/<rule_name>/` with a `BUILD` file and source fixtures, add a test class in `src/test/<rule_name>_test.py`, and register that class in the `TEST_CASES` list in `src/test/blade_main_test.py` (CI runs only the classes listed there; `src/tests/unit/integration_suite_coverage_test.py` guards against omissions).
 5. **Update documentation** in [build_rules/cc.md](build_rules/cc.md) (or a new file for a new category).
 
 ### Key design patterns
@@ -173,7 +173,7 @@ blade build //foo/... --backend-builder-options="-v"
 
 `-d explain` prints, for every edge it would run, *why* it is considered dirty — a newer input, an output older than an input, a changed command line, or a recorded dependency (`deps`/depfile) that no longer exists. It is the first tool to reach for when a build isn't incremental.
 
-You can also run ninja directly against the generated build file (handy after `blade build --stop-after generate`, which keeps it instead of deleting it). Blade runs ninja from the workspace root, so use the build-dir-relative path; add `-n` for a dry run that explains without building:
+You can also run ninja directly against the generated build file (handy after `blade build --stop-after generate`, which stops once the file is written, before ninja runs). Blade runs ninja from the workspace root, so use the build-dir-relative path; add `-n` for a dry run that explains without building:
 
 ```bash
 ninja -f build_release/build.ninja -d explain -n
@@ -187,8 +187,9 @@ GitHub Actions workflows run on every PR and push to `master`:
 
 | Workflow | Purpose |
 | --- | --- |
-| **Python package** | Unit tests + integration tests + pyright on Ubuntu (Python 3.10–3.14) |
-| **Windows CI** | Unit tests + smoke tests + E2E on Windows (Python 3.10–3.13) |
+| **Python package** | Unit tests + integration tests + E2E smoke + pyright on Ubuntu (Python 3.10–3.14) |
+| **macOS CI** | Platform unit subset + in-process smoke + E2E smoke on macOS |
+| **Windows CI** | Platform unit subset + in-process smoke + E2E smoke on Windows |
 | **CodeQL** | Security analysis |
 | **Check Markdown links** | Link validation for documentation |
 
