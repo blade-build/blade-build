@@ -143,7 +143,12 @@ def _glob_full_match(path, pattern):
     """
     if hasattr(path, 'full_match'):
         return path.full_match(pattern)
-    return _match_globstar(str(path).split('/'), pattern.split('/'))
+    # Use path.parts, not str(path).split('/'): on Windows str(PureWindowsPath)
+    # renders '\'-separated, so splitting on '/' yields one component and the
+    # match fails. .parts gives the components on every platform. (This fallback
+    # only runs on Python < 3.13, where PurePath.full_match is absent -- which is
+    # exactly the version range that shipped on Windows here.)
+    return _match_globstar(list(path.parts), pattern.split('/'))
 
 
 def _match_globstar(parts, pat_parts):
