@@ -1780,8 +1780,36 @@ def generate_go_overlay(args, out, build_dir):
     return 0
 
 
+def generate_go(args, envb64='', touch=''):
+    """Run `go` with a blade-computed environment, cross-platform.
+
+    The Go rules cannot use a shell env-var prefix (`GOPATH=x CGO_...=y go ...`):
+    that syntax is POSIX-only and fails under cmd.exe on Windows. This wrapper
+    receives the environment as base64(JSON) -- shell-safe (no spaces or quotes
+    to survive two levels of shell parsing, and CGO_CFLAGS/LDFLAGS carry spaces)
+    -- plus the `go` command as positional args (after `--`), sets the env, and
+    runs go. On success it optionally touches a stamp output (the `go build`
+    package compile-check produces no file of its own). Output paths in the
+    command are already absolute (baked at rule-generation time), so there is no
+    `$PWD` to expand. See issue #1369 follow-up.
+    """
+    import base64  # pylint: disable=import-outside-toplevel
+    if args and args[0] == '--':
+        args = args[1:]
+    env = dict(os.environ)
+    if envb64:
+        env.update(json.loads(base64.b64decode(envb64).decode('utf-8')))
+    rc = subprocess.call(list(args), env=env)
+    if rc == 0 and touch:
+        _declare_outputs(touch)
+        open(touch, 'a').close()
+        os.utime(touch, None)
+    return rc
+
+
 _BUILTIN_TOOLS = {
     'scm': generate_scm,
+    'go': generate_go,
     'go_overlay': generate_go_overlay,
     'package': generate_package,
     'javac_compile': generate_javac_compile,

@@ -26,6 +26,8 @@ Each target is compiled in the context of its owning module -- the nearest
 """
 
 
+import base64
+import json
 import os
 import re
 import sys
@@ -189,13 +191,13 @@ class GoTarget(Target):
         return list(dict.fromkeys(files))  # de-dup, keep order
 
     def _cgo(self):
-        """cgo wiring for `cc_library` deps: `(cgoenv, implicit_deps)`.
+        """cgo wiring for `cc_library` deps: `(cgo_env, implicit_deps)`.
 
         A go target's direct deps of a cc-library type become C/C++ dependencies
         of its `import "C"` code. We surface them to `go build` via the cgo env:
         `CGO_CFLAGS` = the deps' exported include dirs; `CGO_LDFLAGS` = their
         static archives + transitive libs + `#`-syslibs (+ the C++ runtime, since
-        `go` links cgo through the C driver). Returns `('', [])` when there are
+        `go` links cgo through the C driver). Returns `({}, [])` when there are
         no such deps -- cgo stays at its default and nothing is injected.
 
         Collection is **rooted at the direct cc-library deps** and walks their own
@@ -211,7 +213,7 @@ class GoTarget(Target):
         targets = self.blade.get_build_targets()
         roots = [d for d in self.deps if targets[d].type in _CC_LIBRARY_TYPES]
         if not roots:
-            return '', []
+            return {}, []
         keys = []
         for r in roots:
             keys.append(r)
@@ -224,11 +226,14 @@ class GoTarget(Target):
 
         def _abs(p):
             # `go -C <module_dir>` moves the cwd, so every path must be absolute.
-            return p if os.path.isabs(p) else '$$PWD/' + to_unix_path(p)
+            # Baked here (the wrapper passes CGO_* through as-is); ninja/analysis
+            # run from the workspace root, so abspath matches the runtime cwd.
+            return to_unix_path(p if os.path.isabs(p) else os.path.abspath(p))
 
         # Workspace root + build dir on the include path, mirroring how a cc
         # compile resolves workspace-relative and generated headers.
-        cflags = ['-I$$PWD', '-I$$PWD/' + to_unix_path(self.build_dir)]
+        cflags = ['-I' + to_unix_path(os.path.abspath('.')),
+                  '-I' + to_unix_path(os.path.abspath(self.build_dir))]
         cflags += ['-I' + _abs(i) for i in reg_incs + sys_incs]
         ldflags = [_abs(l) for l in usr_libs]
         ldflags += whole_archive_link_flags([_abs(l) for l in whole_libs])
@@ -238,10 +243,27 @@ class GoTarget(Target):
             # the C++ runtime spelled out. Harmless when the archive is pure C.
             ldflags.append('-lc++' if sys.platform == 'darwin' else '-lstdc++')
 
-        cgoenv = 'CGO_ENABLED=1 CGO_CFLAGS="%s" CGO_LDFLAGS="%s" ' % (
-            ' '.join(cflags), ' '.join(ldflags))
+        env = {'CGO_ENABLED': '1',
+               'CGO_CFLAGS': ' '.join(cflags),
+               'CGO_LDFLAGS': ' '.join(ldflags)}
         implicit = [l for l in usr_libs + whole_libs if l] + incchk
-        return cgoenv, implicit
+        return env, implicit
+
+    def _go_env_b64(self, cgo_env):
+        """The go wrapper's environment (GOPATH + cgo), as base64(JSON).
+
+        Passed shell-safe through ninja/cmd/sh in the `${goenvb64}` var; the
+        `go` builtin decodes it and applies it to the child env. Empty string
+        when there is nothing to set (wrapper then runs with the ambient env).
+        """
+        env = dict(cgo_env)
+        go_home = config.get_item('go_config', 'go_home')
+        if go_home:
+            env['GOPATH'] = os.path.abspath(go_home)
+        if not env:
+            return ''
+        return base64.b64encode(
+            json.dumps(env, sort_keys=True).encode('utf-8')).decode('ascii')
 
     def generate(self):
         output = self._target_file_path(self.name)
@@ -255,12 +277,12 @@ class GoTarget(Target):
             self.generate_build('gooverlay', overlay, inputs=pb_files,
                                 variables={'build_dir': to_unix_path(self.build_dir)})
             implicit_deps = implicit_deps + [overlay]
-            variables['goverlay'] = '-overlay $$PWD/%s' % to_unix_path(overlay)
+            variables['goverlay'] = '-overlay ' + to_unix_path(os.path.abspath(overlay))
         else:
             variables['goverlay'] = ''
         # cgo: link cc_library deps into the go build via the CGO_* env.
-        cgoenv, cgo_deps = self._cgo()
-        variables['cgoenv'] = cgoenv
+        cgo_env, cgo_deps = self._cgo()
+        variables['goenvb64'] = self._go_env_b64(cgo_env)
         implicit_deps = implicit_deps + cgo_deps
         self.generate_build(self.attr['go_rule'], output,
                             implicit_deps=implicit_deps, variables=variables)
@@ -389,24 +411,36 @@ def _generate_go_rules(ctx):
     go = config.get_item('go_config', 'go')
     if not go:
         return
-    go_home = config.get_item('go_config', 'go_home')
-    goenv = 'GOPATH=%s ' % os.path.abspath(go_home) if go_home else ''
     gocover = ' -cover -covermode=count' if getattr(ctx.options, 'coverage', False) else ''
+    # Every go invocation goes through the `go` builtin wrapper (builtin_tools):
+    # it sets GOPATH / CGO_* from a base64(JSON) env (${goenvb64}, per target)
+    # and, for golibrary, touches the stamp -- none of which a shell env-prefix
+    # or `touch` could do portably (both are POSIX-only, broken under cmd.exe).
+    # Output paths are absolute (rooted at the workspace, which is ninja's cwd)
+    # so `go -C <module_dir>` -- which moves the cwd -- still resolves `-o`.
+    # See issue #1369 follow-up.
+    root = to_unix_path(os.path.abspath('.'))
+
+    def _go(builder_args):
+        return ctx.builtin_command('go', builder_args)
 
     ctx.emit_rule(NinjaRule(
         name='golibrary',
-        command=f'{goenv}${{cgoenv}}{go} -C ${{module_dir}} build ${{goverlay}} '
-                f'${{extra_goflags}} ${{package}} && touch ${{out}}',
+        command=_go('--envb64=${goenvb64} --touch=%s/${out} -- '
+                    '%s -C ${module_dir} build ${goverlay} ${extra_goflags} '
+                    '${package}' % (root, go)),
         description='GO BUILD ${package}'))
     ctx.emit_rule(NinjaRule(
         name='gobinary',
-        command=f'{goenv}${{cgoenv}}{go} -C ${{module_dir}} build ${{goverlay}} '
-                f'${{extra_goflags}} -o $$PWD/${{out}} ${{gofiles}}',
+        command=_go('--envb64=${goenvb64} -- '
+                    '%s -C ${module_dir} build ${goverlay} ${extra_goflags} '
+                    '-o %s/${out} ${gofiles}' % (go, root)),
         description='GO LINK ${out}'))
     ctx.emit_rule(NinjaRule(
         name='gotest',
-        command=f'{goenv}${{cgoenv}}{go} -C ${{module_dir}} test -c{gocover} ${{goverlay}} '
-                f'${{extra_goflags}} -o $$PWD/${{out}} ${{package}}',
+        command=_go('--envb64=${goenvb64} -- '
+                    '%s -C ${module_dir} test -c%s ${goverlay} ${extra_goflags} '
+                    '-o %s/${out} ${package}' % (go, gocover, root)),
         description='GO TEST ${package}'))
     # Writes the `go build -overlay` JSON that exposes build_dir-generated Go
     # (proto .pb.go) at its in-module location; see builtin_tools.go_overlay.
