@@ -478,6 +478,16 @@ class ProtoLibrary(CcTarget, java_targets.JavaTargetMixIn):
         # location, so the source tree stays clean while `go build` resolves it.
         # `option go_package` is mandatory and must be the .proto directory's
         # in-module import path.
+        # The `protogo` ninja rule is only emitted when protoc_go_plugin is
+        # configured (see _generate_proto_rules); without it, emitting a protogo
+        # build edge would produce an "unknown build rule 'protogo'" ninja error.
+        # Fail here with an actionable message instead.
+        if not config.get_section('proto_library_config')['protoc_go_plugin']:
+            self.error(
+                'generate_go needs proto_library_config(protoc_go_plugin=...) '
+                '(the protoc-gen-go plugin); it is not configured, so no Go '
+                'code can be generated for this proto_library.')
+            return
         generated_goes = []
         for src in self.srcs:
             path = self._source_file_path(src)
