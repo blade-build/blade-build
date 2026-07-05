@@ -500,8 +500,61 @@ class GoCoverageReporter:
             for row in rows:
                 f.write(row + '\n')
 
+    @staticmethod
+    def _read_module_path(go_mod):
+        """The `module <path>` import path declared in a go.mod, or ''."""
+        try:
+            with open(go_mod, encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('module '):
+                        return line[len('module '):].strip()
+        except OSError:
+            pass
+        return ''
+
+    def _discover_modules(self):
+        """Map each Go module's import path to its directory.
+
+        Found by scanning `go.mod` files under the workspace root (ninja/analysis
+        run from there). Build dirs and vendored/VCS trees are pruned.
+        """
+        modules = {}
+        for dirpath, dirnames, filenames in os.walk('.'):
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith('build') and not d.startswith('.')
+                           and d not in ('vendor', 'node_modules')]
+            if 'go.mod' in filenames:
+                path = self._read_module_path(os.path.join(dirpath, 'go.mod'))
+                if path:
+                    # os.walk('.') prefixes './'; normalize for `go -C`.
+                    modules[path] = os.path.normpath(dirpath)
+        return modules
+
+    @staticmethod
+    def _group_by_module(rows, modules):
+        """Group coverprofile rows by owning module dir (longest-prefix match).
+
+        A merged profile can span several modules; `go tool cover -html`
+        resolves a package only from within its module, so each module's rows
+        are rendered separately (via `go -C <module_dir>`).
+        """
+        paths = sorted(modules, key=len, reverse=True)
+        groups = {}
+        for row in rows:
+            token = row.split(':', 1)[0]  # `<import-path>/<file>.go`
+            for mp in paths:
+                if token == mp or token.startswith(mp + '/'):
+                    groups.setdefault(modules[mp], []).append(row)
+                    break
+        return groups
+
+    @staticmethod
+    def _sanitize(name):
+        return re.sub(r'[^A-Za-z0-9._-]', '_', name)
+
     def generate(self):
-        """Merge profiles and render `go tool cover -html`."""
+        """Merge profiles and render `go tool cover -html`, per module."""
         if not self.__go:
             return  # go toolchain not configured
         profiles = self._profiles()
@@ -517,14 +570,36 @@ class GoCoverageReporter:
         self.merge_profiles(profiles, merged)
         console.info('Generating Go coverage report `%s`' % report_dir)
 
+        with open(merged, encoding='utf-8') as f:
+            lines = f.read().splitlines()
+        mode = lines[0] if lines and lines[0].startswith('mode:') else 'mode: count'
+        rows = [ln for ln in lines[1:] if ln]
+        # `go tool cover -html` needs the module context to resolve import paths
+        # -- run it inside each owning module (`go -C`), not the workspace root
+        # (which has no go.mod). Rows are grouped so a multi-module profile still
+        # renders. See issue #1369 follow-up.
+        groups = self._group_by_module(rows, self._discover_modules())
+        if not groups:
+            console.warning('Go coverage: could not map any profile to a Go '
+                            'module; skipping the HTML report')
+            return
+
         env = dict(os.environ)
         if self.__go_home:
             env['GOPATH'] = os.path.abspath(self.__go_home)
-        cmd = [self.__go, 'tool', 'cover', '-html=' + merged,
-               '-o', os.path.join(report_dir, 'index.html')]
-        console.debug(' '.join(cmd))
-        if subprocess.call(cmd, shell=False, env=env) != 0:
-            console.warning('Failed to generate the Go coverage report')
+        single = len(groups) == 1
+        for module_dir, mod_rows in sorted(groups.items()):
+            stem = 'index' if single else 'cover_' + self._sanitize(module_dir)
+            sub = os.path.join(report_dir, stem + '.coverprofile')
+            with open(sub, 'w', encoding='utf-8') as f:
+                f.write(mode + '\n' + '\n'.join(mod_rows) + '\n')
+            html = os.path.join(report_dir, stem + '.html')
+            cmd = [self.__go, '-C', module_dir, 'tool', 'cover',
+                   '-html=' + os.path.abspath(sub), '-o', os.path.abspath(html)]
+            console.debug(' '.join(cmd))
+            if subprocess.call(cmd, shell=False, env=env) != 0:
+                console.warning('Failed to generate the Go coverage report for '
+                                'module `%s`' % module_dir)
 
 
 class PyCoverageReporter:
