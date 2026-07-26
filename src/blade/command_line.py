@@ -469,6 +469,12 @@ class CommandLineParser:
     def _add_common_arguments(self, *parsers):
         for parser in parsers:
             parser.add_argument(
+                '-D', '--define', dest='define', action='append',
+                metavar='NAME=VALUE', default=[],
+                help='Override a BLADE_ROOT-declared build variable '
+                     '(blade.set_variable); repeatable. Read in BUILD with '
+                     'blade.get_variable(NAME).')
+            parser.add_argument(
                 '--profiling', dest='profiling', action='store_true',
                 help='Blade performance profiling, for blade developing')
             parser.add_argument(

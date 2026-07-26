@@ -52,6 +52,11 @@ These attributes are only available during BUILD file loading. Accessing them du
 These attributes are only callable during `BLADE_ROOT` config parsing. Calling them from a BUILD file will abort with an error:
 
 - `getenv(name, default=None)` function: Read an environment variable. See [`blade.getenv`](#bladegetenv) below.
+- `set_variable(name, value, override=False)` function: Declare a build variable that BUILD files can read. See [Build Variables](#build-variables) below.
+
+### Both-phase Functions
+
+- `get_variable(name, default=...)` function: Read a build variable declared with `set_variable`. Available in **both** `BLADE_ROOT` and BUILD files. See [Build Variables](#build-variables) below.
 
 ---
 
@@ -118,15 +123,64 @@ cc_toolchain_config(
 
 Then a CI workflow's `CC=gcc-10 CXX=g++-10 ./blade build ...` selects the right toolchain. Any string-valued config field can be sourced this way.
 
-**Why config-only?** Restricting env access to the global config layer keeps all env dependencies in one auditable file (BLADE_ROOT) and lets BUILD files stay hermetic -- the same source tree produces the same artifacts at the same target regardless of env. If a BUILD-phase rule needs the env-derived value (e.g. `foreign_cc_library` passing CC/CXX to a Makefile), read it from the resolved toolchain or config instead:
+**Why config-only? Why can't BUILD files (and `.bld` extensions) read the environment at all?** Two reasons, both about keeping builds reproducible:
+
+1. **Auditability.** If any BUILD file could call `getenv`, the set of environment variables that influence the build would be scattered across the whole tree and effectively unknowable. Confining env access to `BLADE_ROOT` keeps every env dependency in one file you can read top-to-bottom.
+2. **Hermeticity + correct incrementality.** A BUILD file that silently branches on `$SOMEVAR` produces a different build graph for different developers, and -- worse -- a change to that env var would **not** invalidate the cached per-target build, because the env value never enters the build fingerprint. You would get stale artifacts with no rebuild.
+
+So BUILD files never read the environment directly. To let an env-derived value influence a BUILD file, **fold it into a build variable** in `BLADE_ROOT` and read that variable in BUILD:
 
 ```python
-# BUILD or *.bld file
-cc = blade.cc_toolchain.tool('cc')   # already folded from env at config time
-cxx = blade.cc_toolchain.tool('cxx')
+# BLADE_ROOT (config phase): read the env once, publish it as a named variable
+blade.set_variable('use_jemalloc', blade.getenv('USE_JEMALLOC', '0'))
+
+# any BUILD or *.bld file: read the variable -- never the env
+deps = [':core']
+if blade.get_variable('use_jemalloc') == '1':
+    deps.append('//thirdparty/jemalloc:jemalloc')
 ```
 
-**Limitation:** `blade.getenv()` returns the env value at the moment `BLADE_ROOT` loads. Changing the env between two runs of the same workspace does not by itself invalidate per-target build caches -- if you rely on env-driven config for incremental correctness, list the variable names in `global_config.test_related_envs` or otherwise include them in your configuration fingerprint.
+This keeps the env dependency explicit (one `getenv` in `BLADE_ROOT`) **and** correct for incremental builds: the resolved variable is part of the configuration fingerprint, so a change to `$USE_JEMALLOC` (or a `--define use_jemalloc=1` override) regenerates the affected targets. See [Build Variables](#build-variables). For toolchain fields specifically, you can also read the resolved value from `blade.cc_toolchain.tool('cc')`, which is already env-folded at config time.
+
+### Build Variables
+
+> **Phase:** `set_variable` is `BLADE_ROOT` config only; `get_variable` works in both `BLADE_ROOT` and BUILD/`.bld`.
+
+Build variables are named values that `BLADE_ROOT` publishes and BUILD files read. They are the sanctioned bridge from the environment -- or from any config-time computation -- into otherwise-hermetic BUILD files (which [cannot read the environment](#bladegetenv)).
+
+```python
+def set_variable(name: str, value, override: bool = False) -> None   # BLADE_ROOT only
+def get_variable(name: str, default = ...)                           # both phases
+```
+
+```python
+# BLADE_ROOT: declare variables (from env, host info, or plain constants)
+blade.set_variable('use_jemalloc', blade.getenv('USE_JEMALLOC', '0'))
+blade.set_variable('max_shards', 8)
+
+# any BUILD / *.bld: read them
+if blade.get_variable('use_jemalloc') == '1':
+    deps.append('//thirdparty/jemalloc:jemalloc')
+n = blade.get_variable('max_shards')
+```
+
+**Semantics**
+
+- **`set_variable` is config-phase only.** BUILD files declare nothing; they only read. Calling it from a BUILD file aborts.
+- **Reading an undeclared variable is an error** unless you pass a `default`. A typo'd or never-declared name fails loudly instead of silently yielding `None`. Pass `default` to make a variable optional: `blade.get_variable('opt', 'off')`.
+- **Re-declaring a name is an error** unless `override=True`. An accidental double-set (e.g. across an included config file) is caught rather than silently taking the last value. Use `override=True` for intentional layering (a base config sets a default; a machine-specific include overrides it).
+- **Values can be any type** (`str`, `int`, `list`, ...), not just strings.
+- **The resolved variables are part of the configuration fingerprint.** Changing a value -- via `set_variable`, the env feeding it, or a `--define` override -- regenerates the affected per-target builds. This is what makes env-driven configuration incrementally correct.
+
+**Command-line override: `--define`**
+
+`blade build|test|run -D NAME=VALUE` (repeatable) overrides a declared variable from the command line -- handy for CI to pin a value or for a local experiment without editing `BLADE_ROOT`:
+
+```bash
+blade build --define use_jemalloc=1 //...
+```
+
+`--define` may only override a variable that `BLADE_ROOT` already declared with `set_variable` (overriding an undeclared name is an error), so the variable namespace stays defined solely by `BLADE_ROOT`. `--define` values are strings; if the declared variable is non-string, the override is taken verbatim as a string, so use `--define` for string/scalar variables.
 
 ### `blade.cc_toolchain` Object
 

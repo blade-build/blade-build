@@ -28,6 +28,10 @@ _MAVEN_SNAPSHOT_UPDATE_POLICY_VALUES = ['always', 'daily', 'interval', 'never']
 
 _config_globals = {}
 
+# Sentinel marking "no default given" to get_variable, so reading an undeclared
+# variable errors while an explicit default=None is honored.
+_UNSET = object()
+
 
 def config_rule(func):
     """Decorator used to register functions accessible in the configuration file"""
@@ -615,6 +619,8 @@ class BladeConfig:
         self.current_file_name = ''  # For error reporting
         self.__md5 = hashlib.md5()
         self.config = {}  # User-provided config values, keyed by section name
+        self._variables = {}  # BLADE_ROOT-declared build variables: name -> value
+        self._defines = {}    # command-line `--define name=value` overrides (str)
 
     def info(self, msg):
         console.info(f'{source_location(self.current_file_name)}: info: {msg}', prefix=False)
@@ -644,9 +650,63 @@ class BladeConfig:
         finally:
             self.current_file_name = ''
 
+    def set_variable(self, name, value, override=False):
+        """Declare a build variable (BLADE_ROOT config phase). Re-declaring a
+        name without override=True is an error, so an accidental double-set
+        across included config files is caught rather than silently last-wins."""
+        if name in self._variables and not override:
+            self.error('variable "%s" is already set; pass override=True to '
+                       'redefine it' % name)
+            return
+        self._variables[name] = value
+
+    def get_variable(self, name, default=_UNSET):
+        """Read a build variable (any phase). A command-line --define wins over
+        the declared value. Reading an undeclared variable without a default is
+        an error -- a typo'd or undeclared name fails loudly instead of silently
+        yielding None."""
+        if name in self._defines:
+            return self._defines[name]
+        if name in self._variables:
+            return self._variables[name]
+        if default is _UNSET:
+            self.error('variable "%s" is not declared; declare it in BLADE_ROOT '
+                       'with blade.set_variable("%s", ...)' % (name, name))
+            return None
+        return default
+
+    def apply_defines(self, defines):
+        """Record command-line `--define name=value` overrides (values are
+        strings). Validation that each overrides a declared variable happens in
+        validate_defines(), after BLADE_ROOT has run."""
+        for d in defines or []:
+            name, sep, value = d.partition('=')
+            if not sep or not name:
+                self.error('--define expects name=value, got "%s"' % d)
+                continue
+            self._defines[name] = value
+
+    def validate_defines(self):
+        """Error on any --define that doesn't override a declared variable, so
+        the variable namespace stays defined solely by BLADE_ROOT."""
+        for name in self._defines:
+            if name not in self._variables:
+                self.error('--define %s=... overrides an undeclared variable; '
+                           'declare it in BLADE_ROOT with blade.set_variable'
+                           '("%s", ...)' % (name, name))
+
     def digest(self):
-        """Hex md5 degest of all loaded config files"""
-        return self.__md5.hexdigest()
+        """Hex md5 digest of all loaded config files plus the resolved build
+        variables. Folding the effective variable values in (not just the config
+        file text) is what makes an env- or --define-derived value change
+        invalidate the cached per-target ninja: BLADE_ROOT's text is unchanged
+        when only $CC or --define flips, but the resolved value here is not."""
+        m = self.__md5.copy()
+        effective = dict(self._variables)
+        effective.update(self._defines)
+        for name in sorted(effective):
+            m.update(('\x00%s=%r' % (name, effective[name])).encode('utf-8', 'replace'))
+        return m.hexdigest()
 
     def update_config(self, section_name, append, user_config):
         """update config section by name."""
@@ -863,6 +923,26 @@ def digest():
     """Hex md5 digest of all loaded config files"""
     # Used in fingerprint entropy
     return _blade_config.digest()
+
+
+def set_variable(name, value, override=False):
+    """Declare a build variable (BLADE_ROOT config phase)."""
+    _blade_config.set_variable(name, value, override)
+
+
+def get_variable(name, default=_UNSET):
+    """Read a build variable (any phase)."""
+    return _blade_config.get_variable(name, default)
+
+
+def apply_defines(defines):
+    """Record command-line --define name=value overrides."""
+    _blade_config.apply_defines(defines)
+
+
+def validate_defines():
+    """Error on a --define that overrides no declared variable."""
+    _blade_config.validate_defines()
 
 
 def dump(output_file_name):

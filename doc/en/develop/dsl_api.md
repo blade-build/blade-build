@@ -67,11 +67,22 @@ BUILD load. It exposes:
 - **Config-phase-only handles**:
   - `blade.getenv(name, default=None)` — read an environment variable
     from `BLADE_ROOT`. The only sanctioned env-access channel; calling it
-    from a BUILD file raises a `console.fatal` pointing at the resolved
-    toolchain (`blade.cc_toolchain.tool('cc')`) or `blade.config` as the
-    BUILD-phase equivalent. Keeping env reads at the config layer puts all
-    env dependencies in one auditable file and lets BUILD files stay
-    hermetic.
+    from a BUILD file raises a `console.fatal` pointing at build variables
+    (`blade.set_variable`/`get_variable`) or the resolved toolchain
+    (`blade.cc_toolchain.tool('cc')`) as the BUILD-phase equivalents.
+    Keeping env reads at the config layer puts all env dependencies in one
+    auditable file and lets BUILD files stay hermetic.
+  - `blade.set_variable(name, value, override=False)` — declare a build
+    variable. This is the sanctioned bridge from the environment (via
+    `getenv`) or any config-time computation into BUILD files: BLADE_ROOT
+    sets, BUILD reads. Re-declaring without `override` errors. The resolved
+    variables are folded into `config.digest()`, so a value change (env- or
+    `--define`-driven) invalidates the per-target fingerprint — this is
+    what makes env-driven config incrementally correct, unlike a raw env
+    read. `blade.get_variable(name, default=...)` reads them and is
+    available in **both** phases; an undeclared read without a default
+    errors. A command-line `--define name=value` overrides a declared
+    variable (only declared ones; validated after BLADE_ROOT runs).
 
 A subset of these attributes are marked `_BUILD_ONLY_ATTRS`: accessing
 them from inside `BLADE_ROOT` (config phase) raises a clear error pointing

@@ -247,12 +247,52 @@ class _BladeModule(types.ModuleType):
             console.fatal(
                 'blade.getenv() is only available during BLADE_ROOT config '
                 'phase. To use env-derived values in BUILD files, fold them '
-                'into config at the BLADE_ROOT level (e.g. via '
-                'cc_toolchain_config(cc=blade.getenv(...))) and read the '
-                'resolved value from blade.cc_toolchain or blade.config in '
-                'BUILD.'
+                'into a build variable at the BLADE_ROOT level '
+                '(blade.set_variable(name, blade.getenv(...))) and read it in '
+                'BUILD with blade.get_variable(name). See also '
+                'cc_toolchain_config for toolchain fields.'
             )
         return os.environ.get(name, default)
+
+    def set_variable(self, name: str, value, override: bool = False) -> None:
+        """Declare a build variable. **BLADE_ROOT (config phase) only.**
+
+        This is the sanctioned bridge from the environment (or any config-time
+        computation) into BUILD files, which are otherwise hermetic and cannot
+        read the environment. BLADE_ROOT resolves env-driven values once and
+        publishes them as named variables::
+
+            # BLADE_ROOT
+            blade.set_variable('use_jemalloc', blade.getenv('USE_JEMALLOC', '0'))
+
+            # any BUILD
+            deps = [':core']
+            if blade.get_variable('use_jemalloc') == '1':
+                deps.append('//thirdparty/jemalloc:jemalloc')
+
+        Re-declaring an existing name is an error unless ``override=True`` -- an
+        accidental double-set (e.g. across an included config file) fails loudly
+        rather than silently taking the last value. The resolved variables are
+        part of the build fingerprint, so a value change (including one driven
+        by ``$ENV`` or ``--define``) correctly invalidates cached builds.
+        """
+        if not self._config_phase:
+            console.fatal(
+                'blade.set_variable() is only available during BLADE_ROOT '
+                'config phase; BUILD files read variables with '
+                'blade.get_variable().'
+            )
+        config.set_variable(name, value, override)
+
+    def get_variable(self, name: str, default=config._UNSET):
+        """Read a build variable declared with ``set_variable``. **Any phase.**
+
+        A command-line ``--define name=value`` overrides the declared value.
+        Reading a name that was never declared, without a ``default``, is an
+        error, so a typo or an undeclared variable fails loudly instead of
+        silently yielding ``None``. Pass ``default`` to make a variable optional.
+        """
+        return config.get_variable(name, default)
 
 
 def _safe_blade_module(config_phase: bool = True):

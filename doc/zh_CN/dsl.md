@@ -53,6 +53,11 @@
 以下属性仅在 `BLADE_ROOT` 配置阶段可调用，在 BUILD 文件中调用会报错：
 
 - `getenv(name, default=None)` 函数：读取环境变量。详见下文 [`blade.getenv`](#bladegetenv)。
+- `set_variable(name, value, override=False)` 函数：声明一个可供 BUILD 文件读取的构建变量。详见下文 [构建变量](#构建变量)。
+
+### 两个阶段均可用的函数
+
+- `get_variable(name, default=...)` 函数：读取由 `set_variable` 声明的构建变量。在 `BLADE_ROOT` 与 BUILD 文件中**均**可用。详见下文 [构建变量](#构建变量)。
 
 ---
 
@@ -119,15 +124,64 @@ cc_toolchain_config(
 
 之后 CI 工作流的 `CC=gcc-10 CXX=g++-10 ./blade build ...` 即可选中对应版本。任何接受字符串的配置字段都可以这样写。
 
-**为什么只在配置阶段？** 把 env 访问收敛到全局配置层，所有 env 依赖都集中在一个可审计的文件（BLADE_ROOT）里，BUILD 文件保持 hermetic——相同源码在相同 target 下产物不随 env 变化。如果 BUILD 阶段需要 env 衍生的值（比如 `foreign_cc_library` 要把 CC/CXX 传给 Makefile），从已解析的 toolchain 或 config 读：
+**为什么只在配置阶段？为什么 BUILD 文件（和 `.bld` 扩展）根本不能读环境变量？** 两个原因,都是为了构建可复现:
+
+1. **可审计。** 如果任意 BUILD 文件都能 `getenv`，影响构建的环境变量就散落在整棵树里、无从知晓。把 env 访问限制在 `BLADE_ROOT`,所有 env 依赖都集中在一个可从头读到尾的文件里。
+2. **hermetic + 增量正确。** 一个悄悄按 `$SOMEVAR` 分支的 BUILD 文件,对不同开发者会产出不同的构建图;更糟的是,改这个 env 变量**不会**让缓存的 per-target 构建失效——因为 env 值从未进入构建指纹。你会拿到过期产物却不重建。
+
+所以 BUILD 文件永不直接读环境变量。要让 env 衍生的值影响 BUILD,**在 `BLADE_ROOT` 里把它折进一个构建变量**,再在 BUILD 里读这个变量:
 
 ```python
-# BUILD 或 *.bld 文件
-cc = blade.cc_toolchain.tool('cc')   # 配置阶段已经吸收了 env
-cxx = blade.cc_toolchain.tool('cxx')
+# BLADE_ROOT（配置阶段）：读一次 env，发布成命名变量
+blade.set_variable('use_jemalloc', blade.getenv('USE_JEMALLOC', '0'))
+
+# 任意 BUILD 或 *.bld 文件：读变量——绝不读 env
+deps = [':core']
+if blade.get_variable('use_jemalloc') == '1':
+    deps.append('//thirdparty/jemalloc:jemalloc')
 ```
 
-**限制：** `blade.getenv()` 返回的是加载 `BLADE_ROOT` 那一刻的 env 值。两次 run 之间改变 env 本身不会触发增量缓存失效——若依赖 env 驱动的配置做增量正确性判定，需要把相关变量名加到 `global_config.test_related_envs`，或以其它方式纳入配置指纹。
+这样 env 依赖既显式（`BLADE_ROOT` 里一次 `getenv`）**又**增量正确:解析后的变量是配置指纹的一部分,所以 `$USE_JEMALLOC` 变化（或 `--define use_jemalloc=1` 覆盖）会重新生成受影响的 target。详见 [构建变量](#构建变量)。对于 toolchain 字段,也可以直接从 `blade.cc_toolchain.tool('cc')` 读已在配置阶段吸收 env 的值。
+
+### 构建变量
+
+> **可用阶段：** `set_variable` 仅 `BLADE_ROOT` 配置阶段；`get_variable` 在 `BLADE_ROOT` 与 BUILD/`.bld` 中均可用。
+
+构建变量是由 `BLADE_ROOT` 发布、BUILD 文件读取的命名值。它是从环境变量（或任意配置期计算）通向 hermetic BUILD 文件的**唯一受控桥梁**——BUILD 文件本身[不能读环境变量](#bladegetenv)。
+
+```python
+def set_variable(name: str, value, override: bool = False) -> None   # 仅 BLADE_ROOT
+def get_variable(name: str, default = ...)                           # 两个阶段
+```
+
+```python
+# BLADE_ROOT：声明变量（来自 env、host 信息，或纯常量）
+blade.set_variable('use_jemalloc', blade.getenv('USE_JEMALLOC', '0'))
+blade.set_variable('max_shards', 8)
+
+# 任意 BUILD / *.bld：读取
+if blade.get_variable('use_jemalloc') == '1':
+    deps.append('//thirdparty/jemalloc:jemalloc')
+n = blade.get_variable('max_shards')
+```
+
+**语义**
+
+- **`set_variable` 仅配置阶段可用。** BUILD 文件只读不声明,在 BUILD 里调用会报错终止。
+- **读未声明的变量会报错**,除非传了 `default`。拼错或从未声明的名字会**响亮地失败**,而不是悄悄返回 `None`。用 `default` 让变量可选:`blade.get_variable('opt', 'off')`。
+- **重复声明同名会报错**,除非 `override=True`。跨 `include` 的意外重设会被抓住,而不是静默取最后一次的值。有意分层时用 `override=True`（基础配置给默认值,机器特定的 include 覆盖）。
+- **值可以是任意类型**(`str`、`int`、`list` ...),不限于字符串。
+- **解析后的变量是配置指纹的一部分。** 值变化（无论来自 `set_variable`、喂它的 env、还是 `--define` 覆盖）都会重新生成受影响的 per-target 构建。这正是 env 驱动配置能保证增量正确的原因。
+
+**命令行覆盖:`--define`**
+
+`blade build|test|run -D NAME=VALUE`(可重复)从命令行覆盖一个已声明的变量——方便 CI 固定某个值,或本地临时实验而不改 `BLADE_ROOT`:
+
+```bash
+blade build --define use_jemalloc=1 //...
+```
+
+`--define` **只能**覆盖 `BLADE_ROOT` 已用 `set_variable` 声明过的变量（覆盖未声明的名字会报错),因此变量命名空间始终只由 `BLADE_ROOT` 定义。`--define` 的值是字符串;若被覆盖的变量原本是非字符串类型,覆盖值按字符串原样生效,因此 `--define` 适用于字符串/标量变量。
 
 ### `blade.cc_toolchain` 对象
 

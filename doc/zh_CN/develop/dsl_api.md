@@ -59,9 +59,17 @@ BUILD 文件是一段在严格受控命名空间里跑的 Python 脚本。命名
 - **仅配置期可用的句柄**：
   - `blade.getenv(name, default=None)` —— 在 `BLADE_ROOT` 中读取环境变量。
     全 blade 唯一被授权的 env 访问入口；BUILD 文件调用会以 `console.fatal`
-    终止并指向 BUILD 期等价物（`blade.cc_toolchain.tool('cc')` 或
-    `blade.config`）。把 env 读取收敛到配置层，所有 env 依赖集中在一个
-    可审计文件里，BUILD 文件保持 hermetic。
+    终止并指向 BUILD 期等价物（构建变量 `blade.set_variable`/`get_variable`，
+    或 `blade.cc_toolchain.tool('cc')`）。把 env 读取收敛到配置层，所有 env
+    依赖集中在一个可审计文件里，BUILD 文件保持 hermetic。
+  - `blade.set_variable(name, value, override=False)` —— 声明构建变量。这是
+    从环境变量（经 `getenv`）或任意配置期计算通向 BUILD 文件的受控桥梁：
+    BLADE_ROOT 设,BUILD 读。不带 `override` 的重复声明报错。解析后的变量折进
+    `config.digest()`,因此值变化（env 或 `--define` 驱动）会让 per-target 指纹
+    失效——这正是 env 驱动配置能增量正确、而裸 env 读取做不到的原因。
+    `blade.get_variable(name, default=...)` 读取,两个阶段均可用,读未声明且无
+    default 报错。命令行 `--define name=value` 覆盖已声明的变量（仅已声明的,
+    在 BLADE_ROOT 运行后校验）。
 
 其中一部分属性被标为 `_BUILD_ONLY_ATTRS`：在 `BLADE_ROOT`（配置阶段）里
 读它们会触发清晰报错，提示"此时工具链还不存在，若想延后求值请传一个

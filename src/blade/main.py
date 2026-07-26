@@ -34,7 +34,12 @@ def load_config(options, root_dir):
     """Load the configuration file and parse."""
     # Init global build attributes
     build_attributes.initialize(options)
+    # `--define` overrides must be in effect before BLADE_ROOT runs (so a
+    # get_variable() in config sees them); the declared-variable check runs
+    # after, once BLADE_ROOT has had a chance to set_variable().
+    config.apply_defines(getattr(options, 'define', None))
     config.load_files(root_dir, options.load_local_config)
+    config.validate_defines()
 
 
 def setup_console(options):
