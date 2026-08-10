@@ -157,11 +157,11 @@ This has grown an active contributor community, with many Pull Requests from ins
 
 Even if you don't have the time or energy to contribute, stars are warmly welcome.
 
-<a href="https://www.star-history.com/?repos=blade-build%2Fblade-build&type=date&legend=top-left">
+<a href="https://star-history.dera.page/#blade-build/blade-build&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=blade-build/blade-build&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=blade-build/blade-build&type=date&legend=top-left" />
  </picture>
 </a>
 

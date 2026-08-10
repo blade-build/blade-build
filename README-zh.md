@@ -157,11 +157,11 @@ Blade 由此形成了活跃的贡献者社区，收到来自公司内外的众�
 
 即使您没有时间和精力贡献，也热烈欢迎 star。
 
-<a href="https://www.star-history.com/?repos=blade-build%2Fblade-build&type=date&legend=top-left">
+<a href="https://star-history.dera.page/#blade-build/blade-build&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=blade-build/blade-build&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=blade-build/blade-build&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=blade-build/blade-build&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=blade-build/blade-build&type=date&legend=top-left" />
  </picture>
 </a>
 
